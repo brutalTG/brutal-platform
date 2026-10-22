@@ -4,6 +4,7 @@ import { fmt } from '@/lib/utils';
 import { nodeStatuses, statusOf } from '@/lib/status';
 import { Badge, Card, EmptyState, ErrorNotice, PageHeader, RowLink, Table, TD, TH, THead, TR } from '@/components/ui/primitives';
 import { FilterBar, Pagination, SearchInput, SelectFilter } from '@/components/ui/filters';
+import { InviteButton } from '@/components/forms/invite';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Nodos' };
@@ -28,6 +29,7 @@ export default async function NodosPage({ searchParams }: { searchParams: Promis
       <PageHeader
         title="Nodos"
         description="Lo único permanente de BRUTAL. Cada nodo suma lo que hace en todas las webapps."
+        actions={<InviteButton />}
       />
       {error ? <ErrorNotice message={explain(error)!} /> : (
         <Card>
@@ -37,7 +39,9 @@ export default async function NodosPage({ searchParams }: { searchParams: Promis
             <SelectFilter name="provincia" label="Provincia" defaultValue={sp.provincia} options={provinces} />
           </FilterBar>
           {(data ?? []).length === 0 ? (
-            <EmptyState icon={<Users />} title="Ningún nodo coincide" description="Probá con otros filtros o borrá la búsqueda." />
+            (sp.q || sp.estado || sp.provincia)
+              ? <EmptyState icon={<Users />} title="Ningún nodo coincide" description="Probá con otros filtros o borrá la búsqueda." />
+              : <EmptyState icon={<Users />} title="Todavía no hay nodos" description="Invitá a los primeros testers con su WhatsApp. Cuando le escriban al bot, les llega el link al juego." action={<InviteButton />} />
           ) : (
             <>
               <Table>

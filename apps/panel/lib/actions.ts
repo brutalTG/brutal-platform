@@ -28,3 +28,21 @@ export async function resolveWithdrawal(id: string, decision: 'approved' | 'reje
   revalidatePath('/recompensas');
   return { ok: true, message: decision === 'approved' ? 'Retiro aprobado' : 'Retiro rechazado' };
 }
+
+/** Texto de un mensaje del bot. Las variables entre llaves se completan al mandarlo. */
+export async function saveTemplate(form: FormData): Promise<Result & { fields?: Record<string, string> }> {
+  const key = String(form.get('key') ?? '');
+  const body = String(form.get('body') ?? '').trim();
+  const { data: prev } = await from('messaging', 'templates').select('body').eq('key', key).maybeSingle();
+  if (!prev) return { ok: false, error: 'No encontré ese mensaje.' };
+  if (body.length < 3 || body.length > 1000) return { ok: false, error: 'Revisá el texto.', fields: { body: 'Entre 3 y 1000 caracteres.' } };
+  // Las variables que usa el sistema no se pueden perder.
+  const needed = [...String((prev as { body: string }).body).matchAll(/\{(\w+)\}/g)].map((m) => m[0]);
+  const missing = needed.filter((v) => !body.includes(v));
+  if (missing.length) return { ok: false, error: 'Faltan variables.', fields: { body: `Tiene que incluir ${missing.join(', ')}.` } };
+  const { error } = await from('messaging', 'templates').update({ body }).eq('key', key);
+  if (error) return { ok: false, error: explain(error)! };
+  await audit('editó un mensaje del bot', 'template', key);
+  revalidatePath('/mensajes');
+  return { ok: true, message: 'Mensaje guardado' };
+}

@@ -63,6 +63,16 @@ const maps: Record<string, Record<string, Entry>> = {
     paused: { label: 'Pausada', tone: 'warning' },
     retired: { label: 'Retirada', tone: 'neutral' },
   },
+  item: {
+    calibration: { label: 'Calibración', tone: 'neutral' },
+    obvious_lie: { label: 'Mentira de control', tone: 'warning' },
+    fun: { label: 'Diversión', tone: 'info' },
+    signal: { label: 'Señal', tone: 'accent' },
+  },
+  verdict: {
+    caught: { label: 'Te agarró', tone: 'danger' },
+    escaped: { label: 'Zafó', tone: 'success' },
+  },
   actor: {
     claude: { label: 'Claude', tone: 'accent' },
     admin: { label: 'Equipo', tone: 'info' },

@@ -170,3 +170,28 @@ export function Meter({ value, max = 100, tone = 'neutral' }: { value: number; m
     </div>
   );
 }
+
+// ---------- Pestañas (navegación por URL) ----------
+export function Tabs({ items, active }: { items: { href: string; label: string; key: string; count?: number }[]; active: string }) {
+  return (
+    <nav aria-label="Secciones" className="mb-5 flex gap-1 overflow-x-auto border-b border-border">
+      {items.map((t) => {
+        const on = t.key === active;
+        return (
+          <Link
+            key={t.key}
+            href={t.href}
+            aria-current={on ? 'page' : undefined}
+            className={cn(
+              '-mb-px flex h-9 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 text-base transition-colors',
+              on ? 'border-fg font-medium text-fg' : 'border-transparent text-fg-3 hover:text-fg',
+            )}
+          >
+            {t.label}
+            {t.count !== undefined && <span className="tabular rounded-sm bg-sunken px-1 text-xs text-fg-2">{t.count}</span>}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}

@@ -107,10 +107,10 @@ const publicItem = (i: Item) => ({
 
 async function loadSession(sessionId: string) {
   const s = await must(from('pressure', 'sessions')
-    .select('id, pseudonym_id, experiment_id, status, replay, started_at, content_version')
+    .select('id, pseudonym_id, experiment_id, status, replay, started_at, content_version, outcome')
     .eq('id', sessionId).maybeSingle(), 'partida') as any;
   if (!s) throw new HttpError(404, 'session_not_found');
-  return s as { id: string; pseudonym_id: string; experiment_id: string; status: string; replay: boolean; started_at: string; content_version: number };
+  return s as { id: string; pseudonym_id: string; experiment_id: string; status: string; replay: boolean; started_at: string; content_version: number; outcome: Record<string, unknown> | null };
 }
 
 async function sessionEvents(sessionId: string) {
@@ -275,7 +275,7 @@ export async function finish(sessionId: string) {
   const { error: upErr } = await from('pressure', 'sessions').update({
     status: 'completed', ended_at: endedAt, duration_s: Math.round((Date.parse(endedAt) - Date.parse(s.started_at)) / 1000),
     lies: o.lies, caught: o.caught, verdict: o.verdict, tickets: o.tickets.total,
-    outcome: { picks: picks.map((p) => ({ item_id: p.id, position: p.position, score: Number(p.score.toFixed(3)), reason: p.reason })), tickets: o.tickets, weights },
+    outcome: { ...(s.outcome ?? {}), picks: picks.map((p) => ({ item_id: p.id, position: p.position, score: Number(p.score.toFixed(3)), reason: p.reason })), tickets: o.tickets, weights },
   }).eq('id', s.id).eq('status', 'started');
   if (upErr) throw new Error(`cerrar partida: ${upErr.message}`);
 
