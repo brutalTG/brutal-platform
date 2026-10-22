@@ -21,7 +21,7 @@ const KIND_OPTIONS = {
   calibration: [{ value: 'calibration', label: 'Verdad obligatoria (línea de base)' }, { value: 'obvious_lie', label: 'Mentira de control' }],
 };
 const ANSWERS = [
-  { value: 'choice', label: 'Dilema: A o B' }, { value: 'yes_no', label: 'Sí o no' }, { value: 'agree', label: 'De acuerdo o no' },
+  { value: 'choice', label: 'Dilema: elige entre dos (hablando)' }, { value: 'yes_no', label: 'Sí o no' }, { value: 'agree', label: 'De acuerdo o no' },
   { value: 'number', label: 'Un número' }, { value: 'open', label: 'Libre' },
 ];
 
@@ -58,11 +58,11 @@ export function ItemDialog({ experimentId, section, item, subtheses, trigger }: 
           </Field>
           {choice && (
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Opción A" hint="Como se lee en pantalla. Corta." error={err.option_a}>
-                <Input name="option_a" defaultValue={item?.option_a ?? ''} maxLength={80} placeholder="Lo denunciás" />
+              <Field label="Opción A" hint="No se muestra: la máquina la usa para entender qué eligió. Escribila como la diría el jugador." error={err.option_a}>
+                <Input name="option_a" defaultValue={item?.option_a ?? ''} maxLength={80} placeholder="Lo denuncio" />
               </Field>
               <Field label="Opción B" error={err.option_b}>
-                <Input name="option_b" defaultValue={item?.option_b ?? ''} maxLength={80} placeholder="Lo cubrís" />
+                <Input name="option_b" defaultValue={item?.option_b ?? ''} maxLength={80} placeholder="Lo cubro" />
               </Field>
             </div>
           )}

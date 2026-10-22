@@ -296,15 +296,7 @@ export function Game({ code }: { code: string }) {
           {(phase === 'play' || phase === 'accuse') && (
             <>
               {current && step.mode !== 'machine' && phase === 'play' && hud.label.startsWith('PREGUNTA') && (
-                <>
-                  <p className="question">{current.screen_text}</p>
-                  {current.options && (
-                    <div className="options" aria-label="Opciones">
-                      <span><i>A</i>{current.options[0]}</span>
-                      <span><i>B</i>{current.options[1]}</span>
-                    </div>
-                  )}
-                </>
+                <p className={`question ${current.answer_type === 'choice' ? 'long' : ''}`}>{current.screen_text}</p>
               )}
               {!(current?.options && step.mode !== 'machine' && phase === 'play') && <p className="subtitle" aria-live="polite">{subtitle}</p>}
               {step.mode === 'decide' && (
