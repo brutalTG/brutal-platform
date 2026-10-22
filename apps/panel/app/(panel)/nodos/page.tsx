@@ -16,7 +16,9 @@ export default async function NodosPage({ searchParams }: { searchParams: Promis
   const sp = await searchParams;
   const page = Math.max(1, Number(sp.pagina ?? 1) || 1);
   let q = from('core', 'node_overview').select('*', { count: 'exact' });
+  // Los archivados solo aparecen si se piden.
   if (sp.estado) q = q.eq('status', sp.estado);
+  else q = q.neq('status', 'archived');
   if (sp.provincia) q = q.eq('province', sp.provincia);
   if (sp.q) {
     const term = sp.q.replace(/[%,()]/g, '');
