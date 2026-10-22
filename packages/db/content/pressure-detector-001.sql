@@ -42,6 +42,7 @@ select 'detector-001', 'La máquina', 'Detector', 1, 'voice_game', 'testing', 42
       'game_start', 'Empezamos. Antes de cada respuesta, marcá en secreto si vas a mentir. Yo no veo tu pantalla.',
       'reactions', jsonb_build_array('Anotado.', 'Mmm.', 'El papel se movió.', 'Seguí.', 'Eso lo voy a revisar.', 'Interesante.', 'Ajá.', 'Bien.', 'Qué rápido contestaste.', 'Eso tardó.'),
       'unclear', 'No te entendí. ¿Sí o no?',
+      'not_heard', 'No te escuché. Hablá más fuerte.',
       'accusation', 'Terminamos. Me mentiste en la {a}, en la {b} y en la {c}.',
       'win', 'No te agarré ninguna. Me ganaste. Esta vez.',
       'lose', 'Te agarré.')
