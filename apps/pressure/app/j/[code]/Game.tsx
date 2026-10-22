@@ -112,10 +112,11 @@ export function Game({ code }: { code: string }) {
     await machine.current!.say(text, (v) => poly.current?.setLevel(v * 0.5));
   }
 
-  async function hear(maxMs: number) {
+  // Respuesta corta (sí/no): corta al segundo de silencio. Si está contando algo, espera más.
+  async function hear(maxMs: number, endSilenceMs = 1000) {
     await ear.current!.resume();
     setStep({ mode: 'listen' });
-    const r = await ear.current!.listen({ maxMs, noSpeechMs: 9000, onLevel: (v) => poly.current?.setLevel(v) });
+    const r = await ear.current!.listen({ maxMs, noSpeechMs: 9000, endSilenceMs, onLevel: (v) => poly.current?.setLevel(v) });
     setStep({ mode: 'wait' });
     return r;
   }
@@ -138,8 +139,9 @@ export function Game({ code }: { code: string }) {
     for (const c of g.calibration) {
       setHud((h) => ({ ...h, label: c.kind === 'obvious_lie' ? 'MENTIRA DE CONTROL' : 'CALIBRANDO' }));
       await say(c.prompt);
-      let heard = await hear(12000);
-      if (heard.silent && lines.not_heard) { await say(lines.not_heard); heard = await hear(12000); }
+      const calPause = c.answer_type === 'open' ? 1600 : 1000;
+      let heard = await hear(15000, calPause);
+      if (heard.silent && lines.not_heard) { await say(lines.not_heard); heard = await hear(15000, calPause); }
       pending.push(api.current!.answer({ item_id: c.id, stage: 'main', attempt: 1, features: feats(heard, null) }, heard.audio));
       if (c.kind === 'obvious_lie') poly.current?.jolt(0.9);
     }
@@ -166,8 +168,9 @@ export function Game({ code }: { code: string }) {
       commits.push(committed);
       setHud((h) => ({ ...h, liesLeft: g.rules.lies - commits.filter((c) => c === 'lie').length }));
 
-      let heard = await hear(14000);
-      if (heard.silent && lines.not_heard) { await say(lines.not_heard); heard = await hear(14000); }
+      const mainPause = item.answer_type === 'open' ? 1800 : 1100;
+      let heard = await hear(20000, mainPause);
+      if (heard.silent && lines.not_heard) { await say(lines.not_heard); heard = await hear(20000, mainPause); }
       const first = api.current!.answer({ item_id: item.id, stage: 'main', attempt: 1, committed, features: feats(heard, decisionMs) }, heard.audio);
       pending.push(first);
 
@@ -189,7 +192,8 @@ export function Game({ code }: { code: string }) {
       }
       if (ask && item.follow_up) {
         await say(item.follow_up);
-        const f = await hear(20000);
+        // La repregunta es donde cuentan: hasta 45 segundos y se banca pausas de casi 2 segundos.
+        const f = await hear(45000, 1900);
         pending.push(api.current!.answer({ item_id: item.id, stage: 'follow', attempt: 1, features: feats(f, null) }, f.audio));
       }
       if (!s.replay) {

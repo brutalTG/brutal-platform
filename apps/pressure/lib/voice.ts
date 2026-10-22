@@ -128,7 +128,7 @@ export class Listener {
   async resume() { if (this.ctx?.state === 'suspended') await this.ctx.resume(); }
 
   /** Escucha una respuesta: espera que hable, mide y corta tras un silencio. */
-  listen(opts: { maxMs: number; noSpeechMs: number; onLevel?: (v: number) => void }): Promise<Heard> {
+  listen(opts: { maxMs: number; noSpeechMs: number; endSilenceMs?: number; onLevel?: (v: number) => void }): Promise<Heard> {
     return new Promise((resolve) => {
       const mime = pickMime();
       const chunks: Blob[] = [];
@@ -139,7 +139,7 @@ export class Listener {
         rec.start(250);
       } catch { rec = null; }
 
-      const vad = new Vad(thresholdFrom(this.noise));
+      const vad = new Vad(thresholdFrom(this.noise), { onsetMs: 120, pauseMs: 400, endSilenceMs: opts.endSilenceMs ?? 1000 });
       const start = performance.now();
       const buf = new Float32Array(this.analyser.fftSize);
       const pitches: number[] = [];
