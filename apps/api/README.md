@@ -1,5 +1,16 @@
 # api
 
-API central en `api.brutal.lat`. Única pieza que escribe en `core`, `economy` y `messaging`.
+API central (`api.brutal.lat`, test: `test-api.brutal.lat`). Única pieza que escribe en `core`, `economy` y `messaging`.
 
-Origen: `server/` de `brutal-production` (rama `agent/panel-test-access`), Hono. Se porta a Vercel. El limpiador de memoria del limitador de pedidos se reemplaza por el firewall de Vercel o un límite guardado en la base.
+| Ruta | Qué hace |
+| --- | --- |
+| `POST /whatsapp/webhook` | Mensajes de WATI. Responde solo a invitados (nodos cargados). |
+| `POST /pressure/start` | Abre una partida desde el link personal. Devuelve el token y el guion. |
+| `POST /pressure/answer` | Una respuesta hablada: compromiso verdad/mentira, audio, rasgos de la voz. |
+| `POST /pressure/tts` | Voz de la máquina. Solo frases del guion de esa partida. Con caché. |
+| `POST /pressure/finish` | Acusación, resultado, tickets, aviso por WhatsApp. |
+| `POST /pressure/abandon` | Partida cortada. |
+| `POST /internal/simulate` | Solo test: el panel simula un mensaje entrante. |
+| `GET /health` | Qué variables faltan, sin mostrar valores. |
+
+Variables: ver `docs/entornos.md`.
