@@ -95,3 +95,23 @@ test('cuenta muletillas', () => {
   assert.equal(countFillers('Eh, este, o sea, sí'), 3);
   assert.equal(countFillers('Sí'), 0);
 });
+
+import { accusationText, claimFor, joinClaims, shouldFollowUp } from './game.ts';
+
+test('la máquina acusa con lo que dijo el jugador', () => {
+  const it = { position: 5, claim_yes: 'que stalkeaste a un ex', claim_no: 'que no stalkeaste a ningún ex' };
+  assert.equal(claimFor('no', it), 'que no stalkeaste a ningún ex');
+  assert.equal(claimFor('agree', it), 'que stalkeaste a un ex');
+  assert.equal(claimFor('unclear', it), 'lo que contestaste en la 5');
+  assert.equal(joinClaims(['a', 'b', 'c']), 'a, b y c');
+  assert.equal(accusationText('Mentiste cuando dijiste {claims}.', [{ position: 1, claim: 'x' }, { position: 2, claim: 'y' }]), 'Mentiste cuando dijiste x y y.');
+  assert.equal(accusationText('En la {a}, la {b} y la {c}.', [{ position: 1, claim: '' }, { position: 4, claim: '' }, { position: 9, claim: '' }]), 'En la 1, la 4 y la 9.');
+});
+
+test('la repregunta respeta lo que contestó', () => {
+  assert.equal(shouldFollowUp('yes', 'disagree'), false);
+  assert.equal(shouldFollowUp('yes', 'agree'), true);
+  assert.equal(shouldFollowUp('no', 'no'), true);
+  assert.equal(shouldFollowUp('always', undefined), true);
+  assert.equal(shouldFollowUp('yes', undefined), false);
+});

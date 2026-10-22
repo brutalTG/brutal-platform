@@ -13,7 +13,8 @@ type Step =
   | { mode: 'wait' };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const pick = <T,>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)];
+const shouldFollowUp = (when: string, stated: string | undefined) =>
+  when === 'always' || (when === 'yes' ? stated === 'yes' || stated === 'agree' : stated === 'no' || stated === 'disagree');
 
 export function Game({ code }: { code: string }) {
   const poly = useRef<PolygraphHandle>(null);
@@ -113,14 +114,13 @@ export function Game({ code }: { code: string }) {
 
   async function run(s: Start) {
     const g: GameDef = s.game;
-    const lines = g.lines as Record<string, string> & { reactions: string[] };
-    const reactions = Array.isArray(g.lines.reactions) ? (g.lines.reactions as string[]) : ['Anotado.'];
+    const lines = g.lines as Record<string, string>;
     const pending: Promise<unknown>[] = [];
 
     // Precarga del resto del guion en segundo plano.
     machine.current!.prefetch([
-      lines.calibration_end, lines.game_start, lines.unclear, lines.not_heard ?? '', ...reactions,
-      ...g.items.flatMap((i) => [`Pregunta ${i.position}.`, i.prompt, ...(i.follow_up ? [i.follow_up] : [])]),
+      lines.calibration_end, lines.game_start, lines.unclear, lines.not_heard ?? '',
+      ...g.items.flatMap((i) => [i.prompt, ...(i.follow_up ? [i.follow_up] : [])]),
     ].filter(Boolean));
 
     await say(lines.intro);
@@ -143,7 +143,6 @@ export function Game({ code }: { code: string }) {
     for (const item of g.items) {
       const n = item.position;
       setHud((h) => ({ ...h, label: `PREGUNTA ${n}`, n }));
-      await say(`Pregunta ${n}.`);
       await say(item.prompt);
 
       // Marca secreta: verdad o mentira. El presupuesto obliga al final.
@@ -164,19 +163,23 @@ export function Game({ code }: { code: string }) {
       const first = api.current!.answer({ item_id: item.id, stage: 'main', attempt: 1, committed, features: feats(heard, decisionMs) }, heard.audio);
       pending.push(first);
 
-      // La máquina reacciona mientras transcribe. Si tardó en arrancar, el papel salta.
+      // Si tardó en arrancar o se frenó, el papel salta. Sin comentario: pasa directo a la siguiente.
       if ((heard.onset_ms ?? 0) > 1400 || heard.pauses > 1) poly.current?.jolt(0.55); else poly.current?.jolt(0.15);
-      await say(pick(reactions));
 
-      if (item.answer_type === 'yes_no' || item.answer_type === 'agree') {
-        const r = await first.catch(() => null);
-        if (r && r.parsed === 'unclear' && r.stt_ok) {
+      // Solo se espera la transcripción cuando la repregunta depende de lo que contestó.
+      let ask = Boolean(item.follow_up);
+      if (item.follow_up && item.follow_up_when !== 'always') {
+        let r = await first.catch(() => null);
+        if (r && r.parsed === 'unclear' && r.stt_ok && lines.unclear) {
           await say(lines.unclear);
           const again = await hear(10000);
-          pending.push(api.current!.answer({ item_id: item.id, stage: 'main', attempt: 2, features: feats(again, null) }, again.audio));
+          const retry = api.current!.answer({ item_id: item.id, stage: 'main', attempt: 2, features: feats(again, null) }, again.audio);
+          pending.push(retry);
+          r = await retry.catch(() => null);
         }
+        ask = shouldFollowUp(item.follow_up_when, r?.parsed);
       }
-      if (item.follow_up) {
+      if (ask && item.follow_up) {
         await say(item.follow_up);
         const f = await hear(20000);
         pending.push(api.current!.answer({ item_id: item.id, stage: 'follow', attempt: 1, features: feats(f, null) }, f.audio));
@@ -200,10 +203,10 @@ export function Game({ code }: { code: string }) {
     ear.current?.close();
     setResult(f);
     setPhase('accuse');
-    machine.current!.prefetch([f.lines.accusation, ...f.picks.map((p) => p.reason), f.lines.verdict]);
+    machine.current!.prefetch([f.lines.accusation, f.lines.verdict]);
     poly.current?.setSpeed(1);
+    poly.current?.jolt(0.9);
     await say(f.lines.accusation);
-    for (const p of f.picks) { poly.current?.jolt(0.85); await say(p.reason); }
     poly.current?.setFrozen(true);
     setStamp(f.verdict);
     try { navigator.vibrate?.(f.verdict === 'caught' ? [200] : [40, 40, 40]); } catch { /* */ }
@@ -219,8 +222,8 @@ export function Game({ code }: { code: string }) {
   async function share() {
     if (!result) return;
     const text = result.verdict === 'escaped'
-      ? `Le mentí 3 veces a la máquina y no me agarró ninguna. ¿Vos podés? PRESSURE · BRUTAL`
-      : `La máquina me agarró ${result.caught} de ${result.lies} mentiras. ¿Vos le podés mentir? PRESSURE · BRUTAL`;
+      ? `${result.lines.title}. Le mentí ${result.lies} veces a una máquina y no me agarró ninguna. ¿Vos podés? PRESSURE · BRUTAL`
+      : `${result.lines.title}. Me agarró ${result.caught} de ${result.lies} mentiras. ¿Vos le podés mentir? PRESSURE · BRUTAL`;
     try {
       if (navigator.share) await navigator.share({ text });
       else { await navigator.clipboard.writeText(text); setSubtitle('Copiado. Pegalo donde quieras.'); }
@@ -315,33 +318,31 @@ export function Game({ code }: { code: string }) {
       )}
 
       {phase === 'result' && result && g && (
-        <section className="ficha" aria-label="Resultado">
-          <div className="card">
-            <div className="head"><span>PRESSURE · {session?.alias}</span><span>{g.name.toUpperCase()}</span></div>
-            <div className={`verdict ${result.verdict === 'escaped' ? 'ok' : ''}`}>{result.verdict === 'escaped' ? 'ZAFASTE' : 'TE AGARRÓ'}</div>
-            <p className="score">{result.verdict === 'escaped' ? 'No te encontró ninguna mentira.' : `Te encontró ${result.caught} de ${result.lies} mentiras.`}</p>
-            <ol className="items">
-              {g.items.map((i) => {
-                const lie = result.your_lies.includes(i.position);
-                const accused = result.picks.some((p) => p.position === i.position);
-                return (
-                  <li key={i.id} className={`${lie ? 'lie' : ''} ${accused ? 'accused' : ''}`}>
-                    <i>{i.position}</i>
-                    <span>{i.screen_text}</span>
-                    <em>{lie && accused ? 'TE AGARRÓ' : lie ? 'ZAFASTE' : accused ? 'FALSA ALARMA' : ''}</em>
-                  </li>
-                );
-              })}
-            </ol>
-            <div className="data">
-              {result.replay ? (
-                <div><b>Tickets</b><span>Revancha: sin premio.</span></div>
-              ) : (
-                <div><b>Tickets</b><span>+{result.tickets.progress} por llegar al final{result.tickets.win ? ` · +${result.tickets.win} por ganarle` : ''}</span></div>
-              )}
-              {result.ranking.position && <div><b>Ranking</b><span>#{result.ranking.position} de {result.ranking.players} en la temporada</span></div>}
-              <div><b>Por qué</b><span>{result.picks[0]?.reason}</span></div>
-            </div>
+        <section className={`result ${result.verdict === 'escaped' ? 'won' : 'lost'}`} aria-label="Resultado">
+          <p className="kicker">PRESSURE · {session?.alias}</p>
+          <h1 className="headline">{result.lines.title}</h1>
+          <p className="sub">
+            {result.verdict === 'escaped'
+              ? `Le mentiste ${result.lies} veces a una máquina y no te agarró ninguna.`
+              : `La máquina encontró ${result.caught} de tus ${result.lies} mentiras.`}
+          </p>
+          <ul className="lies-list" aria-label="Tus mentiras">
+            {result.your_lies.map((pos) => {
+              const item = g.items.find((i) => i.position === pos);
+              const got = result.picks.some((p) => p.position === pos);
+              return (
+                <li key={pos} className={got ? 'got' : 'passed'}>
+                  <span>{item?.screen_text}</span>
+                  <b>{got ? 'Te agarró' : 'Zafaste'}</b>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="prize">
+            {result.replay
+              ? <span>Revancha: sin premio.</span>
+              : <span><b>+{result.tickets.total}</b> Golden Tickets</span>}
+            {result.ranking.position && <span>#{result.ranking.position} de {result.ranking.players}</span>}
           </div>
           <div className="actions">
             <button onClick={share}>Compartir</button>

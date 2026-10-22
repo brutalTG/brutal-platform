@@ -219,3 +219,31 @@ export function countFillers(transcript: string) {
   const t = ` ${normalize(transcript)} `;
   return FILLERS.reduce((n, f) => n + (t.split(` ${f} `).length - 1), 0);
 }
+
+// ---------- La acusación con las palabras del jugador ----------
+
+/** Lo que "dijo" el jugador en una pregunta, para acusarlo: "que stalkeaste a un ex". */
+export function claimFor(stated: string | undefined, item: { position: number; claim_yes: string | null; claim_no: string | null }) {
+  if ((stated === 'yes' || stated === 'agree') && item.claim_yes) return item.claim_yes;
+  if ((stated === 'no' || stated === 'disagree') && item.claim_no) return item.claim_no;
+  return `lo que contestaste en la ${item.position}`;
+}
+
+/** "a", "a y b", "a, b y c". */
+export function joinClaims(claims: string[]) {
+  if (claims.length <= 1) return claims[0] ?? '';
+  return `${claims.slice(0, -1).join(', ')} y ${claims.at(-1)}`;
+}
+
+/** Arma la frase de la acusación. Soporta el formato nuevo ({claims}) y el viejo ({a}, {b}, {c}). */
+export function accusationText(template: string, picks: { position: number; claim: string }[]) {
+  if (template.includes('{claims}')) return template.replace('{claims}', joinClaims(picks.map((p) => p.claim)));
+  return template.replace('{a}', String(picks[0]?.position ?? '')).replace('{b}', String(picks[1]?.position ?? '')).replace('{c}', String(picks[2]?.position ?? ''));
+}
+
+/** ¿Se hace la repregunta? Solo si coincide con lo que respondió. */
+export function shouldFollowUp(when: 'always' | 'yes' | 'no', stated: string | undefined) {
+  if (when === 'always') return true;
+  if (when === 'yes') return stated === 'yes' || stated === 'agree';
+  return stated === 'no' || stated === 'disagree';
+}

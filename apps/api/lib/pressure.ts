@@ -6,7 +6,7 @@ import { sha256, signToken } from './crypto';
 import { HttpError } from './http';
 import { stt, wordFeatures } from './elevenlabs';
 import {
-  accuse, countFillers, DEFAULT_WEIGHTS, lieBudget, outcome, parseAnswer, reasonText, truthOf,
+  accuse, accusationText, claimFor, countFillers, DEFAULT_WEIGHTS, lieBudget, outcome, parseAnswer, reasonText, truthOf,
   type AnswerType, type Features, type ItemResult, type Weights,
 } from './game';
 import { notifyResult } from './messaging';
@@ -14,6 +14,7 @@ import { notifyResult } from './messaging';
 type Item = {
   id: string; section: 'calibration' | 'game'; position: number; kind: string; prompt: string;
   screen_text: string | null; answer_type: AnswerType; follow_up: string | null; subthesis_id: string | null;
+  follow_up_when: 'always' | 'yes' | 'no'; claim_yes: string | null; claim_no: string | null;
 };
 type Definition = {
   pitch: string[];
@@ -31,7 +32,7 @@ export async function loadExperiment(by: { slug?: string; id?: string }) {
   const exp = await must(q.maybeSingle(), 'experimento') as Experiment | null;
   if (!exp) throw new HttpError(404, 'experiment_not_found');
   const items = await must(from('pressure', 'items')
-    .select('id, section, position, kind, prompt, screen_text, answer_type, follow_up, subthesis_id')
+    .select('id, section, position, kind, prompt, screen_text, answer_type, follow_up, follow_up_when, claim_yes, claim_no, subthesis_id')
     .eq('experiment_id', exp.id).eq('enabled', true).order('section').order('position'), 'preguntas') as Item[];
   const calibration = items.filter((i) => i.section === 'calibration').sort((a, b) => a.position - b.position);
   const game = items.filter((i) => i.section === 'game').sort((a, b) => a.position - b.position);
@@ -102,7 +103,7 @@ export async function startFromCode(code: string, device: Record<string, unknown
 
 const publicItem = (i: Item) => ({
   id: i.id, position: i.position, kind: i.kind === 'signal' ? 'question' : i.kind === 'fun' ? 'question' : i.kind,
-  prompt: i.prompt, screen_text: i.screen_text ?? i.prompt, answer_type: i.answer_type, follow_up: i.follow_up,
+  prompt: i.prompt, screen_text: i.screen_text ?? i.prompt, answer_type: i.answer_type, follow_up: i.follow_up, follow_up_when: i.follow_up_when,
 });
 
 async function loadSession(sessionId: string) {
@@ -295,19 +296,27 @@ export async function finish(sessionId: string) {
   }
 
   const lines = d.lines as Record<string, string>;
-  const accusationLine = String(lines.accusation ?? 'Me mentiste en la {a}, en la {b} y en la {c}.')
-    .replace('{a}', String(picks[0]?.position ?? '')).replace('{b}', String(picks[1]?.position ?? '')).replace('{c}', String(picks[2]?.position ?? ''));
+  const claimed = picks.map((p) => {
+    const item = game.find((g) => g.id === p.id)!;
+    return { ...p, claim: claimFor(last(p.id)?.parsed, item) };
+  });
+  const accusationLine = accusationText(String(lines.accusation ?? 'Mentiste cuando dijiste {claims}.'), claimed);
+  const escaped = o.verdict === 'escaped';
 
   const payload = {
     verdict: o.verdict,
     caught: o.caught,
     lies: o.lies,
-    picks: picks.map((p) => ({ item_id: p.id, position: p.position, reason: reasonText(p) })),
+    picks: claimed.map((p) => ({ item_id: p.id, position: p.position, claim: p.claim, reason: reasonText(p) })),
     your_lies: results.filter((r) => r.committed === 'lie').map((r) => r.position),
     tickets: o.tickets,
     replay: s.replay,
     ranking: { position, players },
-    lines: { accusation: accusationLine, verdict: o.verdict === 'escaped' ? lines.win : lines.lose },
+    lines: {
+      accusation: accusationLine,
+      verdict: escaped ? lines.win : lines.lose,
+      title: escaped ? (lines.result_escaped ?? 'SOS UN GRAN MENTIROSO') : (lines.result_caught ?? 'NO TE DA PARA MENTIRLE A UNA IA'),
+    },
   };
   await addEvent(s.id, s.started_at, 'finished', payload, `finished:${s.id}`);
 

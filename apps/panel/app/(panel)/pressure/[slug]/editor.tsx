@@ -12,6 +12,7 @@ import { moveItem, saveItem, saveSettings, setExperimentStatus, toggleItem } fro
 export type Item = {
   id: string; section: 'calibration' | 'game'; position: number; kind: string; prompt: string; screen_text: string | null;
   answer_type: string; follow_up: string | null; subthesis_id: string | null; source_note: string | null; enabled: boolean;
+  follow_up_when: string; claim_yes: string | null; claim_no: string | null;
 };
 export type Subthesis = { id: string; code: string; statement: string };
 
@@ -57,9 +58,26 @@ export function ItemDialog({ experimentId, section, item, subtheses, trigger }: 
             <Input name="screen_text" defaultValue={item?.screen_text ?? ''} maxLength={200} />
           </Field>
           {section === 'game' && (
-            <Field label="Repregunta" hint="Opcional. La máquina la hace después de la respuesta, con la misma verdad o mentira." error={err.follow_up}>
-              <Input name="follow_up" defaultValue={item?.follow_up ?? ''} maxLength={300} placeholder="¿Por qué?" />
-            </Field>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <Field label="Repregunta" hint="Opcional. Va con la misma verdad o mentira." error={err.follow_up} className="sm:col-span-2">
+                <Input name="follow_up" defaultValue={item?.follow_up ?? ''} maxLength={300} placeholder="¿Por qué?" />
+              </Field>
+              <Field label="Cuándo la hace" error={err.follow_up_when}>
+                <Select name="follow_up_when" defaultValue={item?.follow_up_when ?? 'always'} options={[
+                  { value: 'always', label: 'Siempre' }, { value: 'yes', label: 'Si dijo sí / de acuerdo' }, { value: 'no', label: 'Si dijo no / en desacuerdo' },
+                ]} />
+              </Field>
+            </div>
+          )}
+          {section === 'game' && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Si dijo sí, dijo…" hint='Para la acusación: "Mentiste cuando dijiste…"' error={err.claim_yes}>
+                <Input name="claim_yes" defaultValue={item?.claim_yes ?? ''} maxLength={120} placeholder="que stalkeaste a un ex" />
+              </Field>
+              <Field label="Si dijo no, dijo…" error={err.claim_no}>
+                <Input name="claim_no" defaultValue={item?.claim_no ?? ''} maxLength={120} placeholder="que no stalkeaste a ningún ex" />
+              </Field>
+            </div>
           )}
           {kind === 'signal' && (
             <Field label="Sub-tesis que mide" error={err.subthesis_id}>
@@ -131,7 +149,6 @@ export function SettingsForm({ experimentId, def }: { experimentId: string; def:
   const toast = useToast();
   const router = useRouter();
   const l = def.lines as Record<string, string>;
-  const reactions = Array.isArray(def.lines.reactions) ? (def.lines.reactions as string[]).join('\n') : '';
 
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -176,7 +193,7 @@ export function SettingsForm({ experimentId, def }: { experimentId: string; def:
           <Input name="pitch3" defaultValue={def.pitch?.[2] ?? ''} aria-label="Frase 3" />
         </>
       ))}
-      {section('Voz', 'ID de la voz en ElevenLabs. Si la principal falla, usa la de respaldo.', (
+      {section('Voz', 'ID de la voz en ElevenLabs (Voices → elegís una → ⋯ → Copy voice ID). Si la principal falla, usa la de respaldo.', (
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Voz principal" error={errors.voice_id}><Input name="voice_id" defaultValue={def.voice.voice_id} className="font-mono" /></Field>
           <Field label="Voz de respaldo"><Input name="fallback_voice_id" defaultValue={def.voice.fallback_voice_id ?? ''} className="font-mono" /></Field>
@@ -194,15 +211,16 @@ export function SettingsForm({ experimentId, def }: { experimentId: string; def:
             <Field label="Si no entendió"><Input name="unclear" defaultValue={l.unclear} /></Field>
             <Field label="Si no escuchó"><Input name="not_heard" defaultValue={l.not_heard} /></Field>
           </div>
-          <Field label="Reacciones" hint="Una por línea. Dice una al azar después de cada respuesta." error={errors.reactions}>
-            <Textarea name="reactions" defaultValue={reactions} className="min-h-[140px]" />
-          </Field>
-          <Field label="Acusación" hint="{a}, {b} y {c} se reemplazan por los números de pregunta." error={errors.accusation}>
+          <Field label="Acusación" hint="{claims} se reemplaza por lo que dijo en las que acusa: “que stalkeaste a un ex y que…”." error={errors.accusation}>
             <Input name="accusation" defaultValue={l.accusation} />
           </Field>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Si gana el jugador"><Input name="win" defaultValue={l.win} /></Field>
             <Field label="Si gana la máquina"><Input name="lose" defaultValue={l.lose} /></Field>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Pantalla final si gana el jugador"><Input name="result_escaped" defaultValue={l.result_escaped ?? 'SOS UN GRAN MENTIROSO'} /></Field>
+            <Field label="Pantalla final si gana la máquina"><Input name="result_caught" defaultValue={l.result_caught ?? 'NO TE DA PARA MENTIRLE A UNA IA'} /></Field>
           </div>
         </>
       ))}

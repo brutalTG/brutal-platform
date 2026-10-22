@@ -2,7 +2,7 @@
 
 const API = (process.env.NEXT_PUBLIC_API_URL ?? 'https://test-api.brutal.lat').replace(/\/+$/, '');
 
-export type GameItem = { id: string; position: number; kind: string; prompt: string; screen_text: string; answer_type: 'yes_no' | 'agree' | 'number' | 'open'; follow_up: string | null };
+export type GameItem = { id: string; position: number; kind: string; prompt: string; screen_text: string; answer_type: 'yes_no' | 'agree' | 'number' | 'open'; follow_up: string | null; follow_up_when: 'always' | 'yes' | 'no' };
 export type Game = {
   name: string;
   pitch: string[];
@@ -15,12 +15,12 @@ export type Game = {
 export type Start = { token: string; session_id: string; alias: string; replay: boolean; game: Game };
 export type Finish = {
   verdict: 'caught' | 'escaped'; caught: number; lies: number;
-  picks: { item_id: string; position: number; reason: string }[];
+  picks: { item_id: string; position: number; claim: string; reason: string }[];
   your_lies: number[];
   tickets: { progress: number; win: number; total: number };
   replay: boolean;
   ranking: { position: number | null; players: number | null };
-  lines: { accusation: string; verdict: string };
+  lines: { accusation: string; verdict: string; title: string };
 };
 
 export class ApiError extends Error {

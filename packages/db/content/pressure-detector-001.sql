@@ -97,4 +97,30 @@ insert into messaging.templates (key, purpose, provider_name, category, body, st
   ('opt_out', 'Confirmación de baja', 'session', 'utility', 'Listo, no te escribimos más. Si querés volver, mandá JUGAR.', 'approved')
 on conflict (key) do update set body = excluded.body, purpose = excluded.purpose;
 
+-- v2: repreguntas condicionales, frases para la acusación y pantalla final.
+update pressure.items i set claim_yes = x.cy, claim_no = x.cn, follow_up_when = x.fw
+from (values
+  (1, 'que lloraste con la final', 'que no lloraste con la final', 'always'),
+  (2, 'que el 2008 de Cristiano le gana a cualquier Messi', 'que ningún Cristiano le gana a Messi', 'always'),
+  (3, 'que preferís ganar menos y que nadie te mande', 'que preferís ganar más aunque te manden', 'yes'),
+  (4, 'que acamparías una semana por tu artista', 'que no acamparías ni loco', 'always'),
+  (5, 'que stalkeaste a un ex', 'que no stalkeaste a ningún ex', 'always'),
+  (6, 'que aceptarías planta permanente aunque te aburras', 'que no aceptarías planta permanente', 'always'),
+  (7, 'que hay que prohibir el celular en el aula', 'que no hay que prohibir el celular en el aula', 'always'),
+  (8, 'que entregaste algo hecho por una IA como tuyo', 'que nunca entregaste algo hecho por una IA', 'always'),
+  (9, 'que te controlen el horario es una falta de respeto', 'que bancás que te controlen el horario', 'yes'),
+  (10, 'que le mentiste a tu vieja sobre dónde estabas', 'que no le mentiste a tu vieja', 'always')
+) as x(pos, cy, cn, fw)
+where i.section = 'game' and i.position = x.pos and i.claim_yes is null
+  and i.experiment_id = (select id from pressure.experiments where slug = 'detector-001');
+
+update pressure.experiments set definition = definition
+  || jsonb_build_object('lines', (definition->'lines') - 'reactions' || jsonb_build_object(
+       'accusation', 'Mentiste cuando dijiste {claims}.',
+       'win', 'No era ninguna. Me ganaste.',
+       'lose', 'Te agarré.',
+       'result_escaped', 'SOS UN GRAN MENTIROSO',
+       'result_caught', 'NO TE DA PARA MENTIRLE A UNA IA'))
+where slug = 'detector-001' and not (definition->'lines' ? 'result_caught');
+
 commit;

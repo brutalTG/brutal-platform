@@ -35,7 +35,7 @@ export class Vad {
   private inPause: number | null = null;
   private threshold: number;
   private opts: { onsetMs: number; pauseMs: number; endSilenceMs: number };
-  constructor(threshold: number, opts = { onsetMs: 120, pauseMs: 400, endSilenceMs: 1400 }) {
+  constructor(threshold: number, opts = { onsetMs: 120, pauseMs: 400, endSilenceMs: 1000 }) {
     this.threshold = threshold;
     this.opts = opts;
   }

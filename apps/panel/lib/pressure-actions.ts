@@ -28,6 +28,9 @@ export async function saveItem(form: FormData): Promise<FormResult> {
   const follow_up = str(form, 'follow_up') || null;
   const subthesis_id = str(form, 'subthesis_id') || null;
   const source_note = str(form, 'source_note') || null;
+  const follow_up_when = str(form, 'follow_up_when') || 'always';
+  const claim_yes = str(form, 'claim_yes') || null;
+  const claim_no = str(form, 'claim_no') || null;
 
   const fields: Record<string, string> = {};
   if (!(section in KINDS)) fields.section = 'Elegí una sección.';
@@ -37,10 +40,14 @@ export async function saveItem(form: FormData): Promise<FormResult> {
   if (screen_text && screen_text.length > 200) fields.screen_text = 'Máximo 200 caracteres.';
   if (!ANSWER_TYPES.includes(answer_type)) fields.answer_type = 'Elegí cómo se responde.';
   if (follow_up && follow_up.length < 3) fields.follow_up = 'Muy corta.';
+  if (!['always', 'yes', 'no'].includes(follow_up_when)) fields.follow_up_when = 'Elegí cuándo.';
+  if (follow_up_when !== 'always' && !['yes_no', 'agree'].includes(answer_type)) fields.follow_up_when = 'Solo se puede condicionar en preguntas de sí/no o de acuerdo.';
+  if (claim_yes && claim_yes.length > 120) fields.claim_yes = 'Máximo 120 caracteres.';
+  if (claim_no && claim_no.length > 120) fields.claim_no = 'Máximo 120 caracteres.';
   if (kind === 'signal' && !subthesis_id) fields.subthesis_id = 'Una pregunta de señal tiene que apuntar a una sub-tesis.';
   if (Object.keys(fields).length) return { ok: false, error: 'Revisá los campos marcados.', fields };
 
-  const row = { section, kind, prompt, screen_text, answer_type, follow_up, subthesis_id: kind === 'signal' ? subthesis_id : null, source_note };
+  const row = { section, kind, prompt, screen_text, answer_type, follow_up, follow_up_when, claim_yes, claim_no, subthesis_id: kind === 'signal' ? subthesis_id : null, source_note };
   if (id) {
     const { error } = await from('pressure', 'items').update(row).eq('id', id);
     if (error) return { ok: false, error: explain(error)! };
@@ -100,9 +107,7 @@ export async function saveSettings(form: FormData): Promise<FormResult> {
   if (!(winBonus >= 0 && winBonus <= 5000)) fields.win_bonus = 'Entre 0 y 5000.';
   const voiceId = str(form, 'voice_id');
   if (!/^[A-Za-z0-9]{12,40}$/.test(voiceId)) fields.voice_id = 'Pegá el ID de la voz de ElevenLabs.';
-  const reactions = str(form, 'reactions').split('\n').map((x) => x.trim()).filter(Boolean);
-  if (reactions.length < 3) fields.reactions = 'Al menos 3 reacciones, una por línea.';
-  if (!str(form, 'accusation').includes('{a}')) fields.accusation = 'Tiene que incluir {a}, {b} y {c}: ahí van los números.';
+  if (!str(form, 'accusation').includes('{claims}')) fields.accusation = 'Tiene que incluir {claims}: ahí va lo que dijo.';
   if (Object.keys(fields).length) return { ok: false, error: 'Revisá los campos marcados.', fields };
 
   const prev = (exp as { definition: Record<string, any> }).definition;
@@ -116,7 +121,8 @@ export async function saveSettings(form: FormData): Promise<FormResult> {
       ...prev.lines,
       intro: str(form, 'intro'), calibration_start: str(form, 'calibration_start'), calibration_end: str(form, 'calibration_end'),
       game_start: str(form, 'game_start'), unclear: str(form, 'unclear'), not_heard: str(form, 'not_heard'),
-      accusation: str(form, 'accusation'), win: str(form, 'win'), lose: str(form, 'lose'), reactions,
+      accusation: str(form, 'accusation'), win: str(form, 'win'), lose: str(form, 'lose'),
+      result_escaped: str(form, 'result_escaped'), result_caught: str(form, 'result_caught'),
     },
   };
   const { error } = await from('pressure', 'experiments').update({ definition }).eq('id', id);
