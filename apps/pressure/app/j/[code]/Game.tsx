@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Polygraph, type PolygraphHandle } from '@/components/Polygraph';
-import { ApiError, client, start, type Finish, type Game as GameDef, type GameItem, type Start } from '@/lib/api';
+import { Rich } from '@/components/Rich';
+import { ApiError, client, intro as fetchIntro, start, type Finish, type Intro, type Game as GameDef, type GameItem, type Start } from '@/lib/api';
 import { Listener, Machine } from '@/lib/voice';
 
 type Phase = 'entry' | 'loading' | 'consent' | 'play' | 'accuse' | 'result' | 'error';
@@ -28,6 +29,13 @@ export function Game({ code }: { code: string }) {
   const [hud, setHud] = useState({ label: 'CALIBRANDO', n: 0, total: 10, tickets: 0, liesLeft: 3 });
   const [result, setResult] = useState<Finish | null>(null);
   const [stamp, setStamp] = useState<'caught' | 'escaped' | null>(null);
+  const [intro, setIntro] = useState<Intro | null>(null);
+
+  // Los textos de entrada vienen del panel. Si el link no sirve, se avisa antes de tocar "Entrar".
+  useEffect(() => {
+    fetchIntro(code).then(setIntro).catch((e) => fail(e));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code]);
 
   const machine = useRef<Machine | null>(null);
   const ear = useRef<Listener | null>(null);
@@ -258,11 +266,10 @@ export function Game({ code }: { code: string }) {
           {phase === 'entry' && (
             <>
               <div className="copy">
-                <p>Una máquina te va a hacer 10 preguntas. En 3 tenés que mentirle. Vos elegís cuáles.</p>
-                <p>Si no te agarra ninguna, <b>ganás.</b></p>
+                {intro ? intro.pitch.map((line, i) => <Rich key={i} text={line} />) : <p>Prendiendo la máquina…</p>}
               </div>
-              <button className="enter" onClick={enter}>Entrar</button>
-              <p className="note">Es anónimo. No te vamos a pedir tu nombre.</p>
+              <button className="enter" onClick={enter} disabled={!intro}>Entrar</button>
+              {intro && <p className="note">{intro.screens.entry_note}</p>}
             </>
           )}
 
@@ -272,12 +279,13 @@ export function Game({ code }: { code: string }) {
             <>
               {session?.replay && <p className="banner">Ya cobraste tus tickets. Esta es una revancha: se juega igual, sin premio.</p>}
               <div className="copy small">
-                <p><b>Es con voz.</b> La máquina pregunta en voz alta y vos contestás hablando. Ponete auriculares o andá a un lugar tranquilo.</p>
-                <p>Lo que decís se pasa a texto para el juego y para investigación anónima. El audio no lo guardamos.</p>
-                {!session?.replay && <p>Llegar al final: hasta <b>{g?.rewards.max} Golden Tickets</b>. Ganarle a la máquina: <b>+{g?.rewards.win_bonus}</b>.</p>}
+                {g && <Rich
+                  text={session?.replay ? g.screens.consent.split(/\n\s*\n/).filter((p) => !p.includes('{max}') && !p.includes('{bonus}')).join('\n\n') : g.screens.consent}
+                  vars={{ max: g.rewards.max, bonus: g.rewards.win_bonus }}
+                />}
               </div>
               <button className="enter" onClick={begin}>Activar micrófono</button>
-              <p className="note">Dura unos 4 minutos.</p>
+              {g && <p className="note">{g.screens.consent_note}</p>}
             </>
           )}
 

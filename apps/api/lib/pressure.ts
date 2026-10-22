@@ -50,6 +50,27 @@ async function addEvent(sessionId: string, startedAt: string, type: string, payl
   }
 }
 
+const DEFAULT_SCREENS = {
+  entry_note: 'Es anónimo. No te vamos a pedir tu nombre.',
+  consent: '*Es con voz.* La máquina pregunta en voz alta y vos contestás hablando. Ponete auriculares o andá a un lugar tranquilo.\n\nLo que decís se pasa a texto para el juego y para investigación anónima. El audio no lo guardamos.\n\nLlegar al final: hasta *{max} Golden Tickets*. Ganarle a la máquina: *+{bonus}*.',
+  consent_note: 'Dura unos 3 minutos.',
+};
+export type Screens = typeof DEFAULT_SCREENS;
+export const screensOf = (d: { screens?: Partial<Screens> }) => ({ ...DEFAULT_SCREENS, ...(d.screens ?? {}) });
+
+/** Textos de las pantallas de entrada. Valida el link sin gastarlo. */
+export async function introFromCode(code: string) {
+  if (!/^[a-z2-9]{16,40}$/.test(code)) throw new HttpError(400, 'invalid_link', 'El link no es válido.');
+  const link = await must(from('core', 'access_links').select('target_id, uses, max_uses, expires_at, revoked_at')
+    .eq('code_hash', await sha256(code)).eq('app_slug', 'pressure').maybeSingle(), 'link') as any;
+  if (!link || link.revoked_at) throw new HttpError(404, 'invalid_link', 'El link no es válido. Pedí uno nuevo por WhatsApp.');
+  if (Date.parse(link.expires_at) < Date.now()) throw new HttpError(410, 'expired_link', 'El link venció. Mandá cualquier mensaje por WhatsApp y te llega otro.');
+  if (link.uses >= link.max_uses) throw new HttpError(410, 'used_link', 'Este link ya se usó. Pedí otro por WhatsApp.');
+  const exp = await must(from('pressure', 'experiments').select('definition, status').eq('slug', link.target_id).single(), 'experimento') as any;
+  if (!['testing', 'live'].includes(exp.status)) throw new HttpError(409, 'not_open', 'La máquina está apagada por ahora.');
+  return { pitch: exp.definition.pitch ?? [], screens: screensOf(exp.definition), rewards: exp.definition.rewards };
+}
+
 /** Abre una partida desde el link personal. */
 export async function startFromCode(code: string, device: Record<string, unknown>) {
   if (!/^[a-z2-9]{16,40}$/.test(code)) throw new HttpError(400, 'invalid_link', 'El link no es válido.');
@@ -94,7 +115,7 @@ export async function startFromCode(code: string, device: Record<string, unknown
     alias: publicAlias(ps.pseudonym_id),
     replay: paidDone,
     game: {
-      name: exp.name, pitch: d.pitch, rules: d.rules, rewards: d.rewards, lines: d.lines,
+      name: exp.name, pitch: d.pitch, screens: screensOf(d as any), rules: d.rules, rewards: d.rewards, lines: d.lines,
       calibration: calibration.map(publicItem),
       items: game.map(publicItem),
     },

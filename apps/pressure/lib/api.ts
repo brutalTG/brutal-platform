@@ -6,12 +6,15 @@ export type GameItem = { id: string; position: number; kind: string; prompt: str
 export type Game = {
   name: string;
   pitch: string[];
+  screens: Screens;
   rules: { lies: number; win_max_caught: number };
   rewards: { per_answer: number; max: number; win_bonus: number };
   lines: Record<string, string | string[]>;
   calibration: GameItem[];
   items: GameItem[];
 };
+export type Screens = { entry_note: string; consent: string; consent_note: string };
+export type Intro = { pitch: string[]; screens: Screens; rewards: { per_answer: number; max: number; win_bonus: number } };
 export type Start = { token: string; session_id: string; alias: string; replay: boolean; game: Game };
 export type Finish = {
   verdict: 'caught' | 'escaped'; caught: number; lies: number;
@@ -31,6 +34,10 @@ async function parse<T>(res: Response): Promise<T> {
   if (res.ok) return res.json() as Promise<T>;
   const body = await res.json().catch(() => ({}));
   throw new ApiError(body.error ?? 'error', body.message ?? 'Algo falló. Probá de nuevo.', res.status);
+}
+
+export async function intro(code: string): Promise<Intro> {
+  return parse(await fetch(`${API}/pressure/intro`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) }));
 }
 
 export async function start(code: string): Promise<Start> {

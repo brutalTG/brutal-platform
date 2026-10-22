@@ -137,7 +137,7 @@ export function StatusControl({ id, status }: { id: string; status: string }) {
 }
 
 type Def = {
-  pitch?: string[]; rules: { lies: number; win_max_caught: number }; rewards: { per_answer: number; max: number; win_bonus: number };
+  pitch?: string[]; screens?: { entry_note?: string; consent?: string; consent_note?: string }; rules: { lies: number; win_max_caught: number }; rewards: { per_answer: number; max: number; win_bonus: number };
   voice: { voice_id: string; fallback_voice_id?: string }; lines: Record<string, string | string[]>;
 };
 
@@ -186,11 +186,20 @@ export function SettingsForm({ experimentId, def }: { experimentId: string; def:
           <Field label="Extra si gana" error={errors.win_bonus}><Input name="win_bonus" type="number" min={0} defaultValue={def.rewards.win_bonus} /></Field>
         </div>
       ))}
-      {section('El desafío en 3 frases', 'Lo que se lee al entrar.', (
+      {section('Pantallas de inicio', 'Lo primero que lee el invitado, antes de jugar. *Así* va en negrita.', (
         <>
-          <Input name="pitch1" defaultValue={def.pitch?.[0] ?? ''} aria-label="Frase 1" />
-          <Input name="pitch2" defaultValue={def.pitch?.[1] ?? ''} aria-label="Frase 2" />
-          <Input name="pitch3" defaultValue={def.pitch?.[2] ?? ''} aria-label="Frase 3" />
+          <Field label="Pantalla de entrada" hint="Una frase por línea. Ideal: tres." error={errors.pitch1}>
+            <div className="grid gap-2">
+              <Input name="pitch1" defaultValue={def.pitch?.[0] ?? ''} aria-label="Frase 1" />
+              <Input name="pitch2" defaultValue={def.pitch?.[1] ?? ''} aria-label="Frase 2" />
+              <Input name="pitch3" defaultValue={def.pitch?.[2] ?? ''} aria-label="Frase 3" />
+            </div>
+          </Field>
+          <Field label="Nota debajo de Entrar"><Input name="entry_note" defaultValue={def.screens?.entry_note ?? 'Es anónimo. No te vamos a pedir tu nombre.'} /></Field>
+          <Field label="Pantalla del micrófono" hint="Una línea en blanco separa párrafos. {max} y {bonus} se reemplazan por los tickets; en las revanchas ese párrafo no se muestra." error={errors.consent}>
+            <Textarea name="consent" className="min-h-[150px]" defaultValue={def.screens?.consent ?? ''} />
+          </Field>
+          <Field label="Nota debajo de Activar micrófono"><Input name="consent_note" defaultValue={def.screens?.consent_note ?? 'Dura unos 3 minutos.'} /></Field>
         </>
       ))}
       {section('Voz', 'ID de la voz en ElevenLabs (Voices → elegís una → ⋯ → Copy voice ID). Si la principal falla, usa la de respaldo.', (

@@ -108,12 +108,20 @@ export async function saveSettings(form: FormData): Promise<FormResult> {
   const voiceId = str(form, 'voice_id');
   if (!/^[A-Za-z0-9]{12,40}$/.test(voiceId)) fields.voice_id = 'Pegá el ID de la voz de ElevenLabs.';
   if (!str(form, 'accusation').includes('{claims}')) fields.accusation = 'Tiene que incluir {claims}: ahí va lo que dijo.';
+  if ([str(form, 'pitch1'), str(form, 'pitch2'), str(form, 'pitch3')].filter(Boolean).length === 0) fields.pitch1 = 'Al menos una frase.';
+  if (String(form.get('consent') ?? '').trim().length < 20) fields.consent = 'Explicá que es con voz y qué pasa con lo que dice.';
   if (Object.keys(fields).length) return { ok: false, error: 'Revisá los campos marcados.', fields };
 
   const prev = (exp as { definition: Record<string, any> }).definition;
   const definition = {
     ...prev,
     pitch: [str(form, 'pitch1'), str(form, 'pitch2'), str(form, 'pitch3')].filter(Boolean),
+    screens: {
+      ...(prev.screens ?? {}),
+      entry_note: str(form, 'entry_note'),
+      consent: String(form.get('consent') ?? '').replace(/\r/g, '').trim(),
+      consent_note: str(form, 'consent_note'),
+    },
     rules: { ...prev.rules, lies, win_max_caught: winMax },
     rewards: { per_answer: perAnswer, max, win_bonus: winBonus },
     voice: { ...prev.voice, voice_id: voiceId, fallback_voice_id: str(form, 'fallback_voice_id') || prev.voice?.fallback_voice_id },
