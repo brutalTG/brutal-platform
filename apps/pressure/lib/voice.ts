@@ -32,10 +32,10 @@ export class Machine {
   }
 
   prefetch(texts: string[]) {
-    // De a tres a la vez, en orden, para que lo primero esté listo primero.
+    // De a dos a la vez, en orden, para que lo primero esté listo primero.
     const queue = [...new Set(texts)];
     const worker = async () => { while (queue.length) await this.url(queue.shift()!); };
-    return Promise.all([worker(), worker(), worker()]);
+    return Promise.all([worker(), worker()]);
   }
 
   private url(text: string) {

@@ -51,11 +51,19 @@ export async function tts(text: string, voice: { voice_id: string; fallback_voic
   } catch { /* si el almacenamiento falla, se genera igual */ }
 
   let r = await synth(text, voice.voice_id, model);
+  // ElevenLabs limita cuántas voces genera a la vez: si está ocupado, se espera y se reintenta.
+  for (let i = 0; i < 3 && !r.ok && (r.status === 429 || r.status >= 500); i++) {
+    await new Promise((res) => setTimeout(res, 600 * (i + 1)));
+    r = await synth(text, voice.voice_id, model);
+  }
   if (!r.ok && voice.fallback_voice_id && [400, 401, 403, 404, 422].includes(r.status)) {
     console.warn('tts: voz principal falló, uso la de respaldo', r.status, r.detail);
     r = await synth(text, voice.fallback_voice_id, model);
   }
-  if (!r.ok) throw new HttpError(502, 'tts_failed', `ElevenLabs respondió ${r.status}`);
+  if (!r.ok) {
+    console.error('tts falló', r.status, r.detail);
+    throw new HttpError(502, 'tts_failed', `ElevenLabs respondió ${r.status}`);
+  }
   try {
     await db().storage.from(BUCKET).upload(path, r.audio, { contentType: 'audio/mpeg', upsert: true });
   } catch { /* guardar es opcional */ }
