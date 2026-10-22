@@ -9,7 +9,7 @@ const str = (f: FormData, k: string) => String(f.get(k) ?? '').trim();
 const int = (f: FormData, k: string) => Number.parseInt(str(f, k), 10);
 
 const KINDS = { calibration: ['calibration', 'obvious_lie'], game: ['fun', 'signal'] } as const;
-const ANSWER_TYPES = ['yes_no', 'agree', 'number', 'open'];
+const ANSWER_TYPES = ['choice', 'yes_no', 'agree', 'number', 'open'];
 
 async function experimentSlug(id: string) {
   const { data } = await from('pressure', 'experiments').select('slug').eq('id', id).single();
@@ -31,6 +31,8 @@ export async function saveItem(form: FormData): Promise<FormResult> {
   const follow_up_when = str(form, 'follow_up_when') || 'always';
   const claim_yes = str(form, 'claim_yes') || null;
   const claim_no = str(form, 'claim_no') || null;
+  const option_a = str(form, 'option_a') || null;
+  const option_b = str(form, 'option_b') || null;
 
   const fields: Record<string, string> = {};
   if (!(section in KINDS)) fields.section = 'Elegí una sección.';
@@ -41,13 +43,16 @@ export async function saveItem(form: FormData): Promise<FormResult> {
   if (!ANSWER_TYPES.includes(answer_type)) fields.answer_type = 'Elegí cómo se responde.';
   if (follow_up && follow_up.length < 3) fields.follow_up = 'Muy corta.';
   if (!['always', 'yes', 'no'].includes(follow_up_when)) fields.follow_up_when = 'Elegí cuándo.';
-  if (follow_up_when !== 'always' && !['yes_no', 'agree'].includes(answer_type)) fields.follow_up_when = 'Solo se puede condicionar en preguntas de sí/no o de acuerdo.';
+  if (answer_type === 'choice' && !option_a) fields.option_a = 'Un dilema necesita las dos opciones.';
+  if (answer_type === 'choice' && !option_b) fields.option_b = 'Un dilema necesita las dos opciones.';
+  if (follow_up_when !== 'always' && !['yes_no', 'agree', 'choice'].includes(answer_type)) fields.follow_up_when = 'Solo se puede condicionar en preguntas de sí/no o de acuerdo.';
   if (claim_yes && claim_yes.length > 120) fields.claim_yes = 'Máximo 120 caracteres.';
   if (claim_no && claim_no.length > 120) fields.claim_no = 'Máximo 120 caracteres.';
   if (kind === 'signal' && !subthesis_id) fields.subthesis_id = 'Una pregunta de señal tiene que apuntar a una sub-tesis.';
   if (Object.keys(fields).length) return { ok: false, error: 'Revisá los campos marcados.', fields };
 
-  const row = { section, kind, prompt, screen_text, answer_type, follow_up, follow_up_when, claim_yes, claim_no, subthesis_id: kind === 'signal' ? subthesis_id : null, source_note };
+  const row = { section, kind, prompt, screen_text, answer_type, follow_up, follow_up_when, claim_yes, claim_no,
+    option_a: answer_type === 'choice' ? option_a : null, option_b: answer_type === 'choice' ? option_b : null, subthesis_id: kind === 'signal' ? subthesis_id : null, source_note };
   if (id) {
     const { error } = await from('pressure', 'items').update(row).eq('id', id);
     if (error) return { ok: false, error: explain(error)! };

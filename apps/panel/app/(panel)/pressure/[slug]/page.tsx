@@ -166,6 +166,7 @@ function ItemTable({ title, description, items, experimentId, section, subtheses
                   <TD className={cn('py-2.5 align-top', !i.enabled && 'opacity-50')}>
                     <div className="max-w-xl text-base text-fg">{i.screen_text ?? i.prompt}</div>
                     {i.screen_text && <div className="mt-0.5 max-w-xl text-sm text-fg-3">“{i.prompt}”</div>}
+                    {i.option_a && <div className="mt-1 text-sm text-fg-2">A · {i.option_a} &nbsp;/&nbsp; B · {i.option_b}</div>}
                     {i.follow_up && <div className="mt-1 text-sm text-fg-2">↳ Repregunta: {i.follow_up}</div>}
                     {i.source_note && <div className="mt-1 text-xs text-fg-3">Fuente: {i.source_note}</div>}
                     {!i.enabled && <div className="mt-1 text-xs font-medium text-warning">Apagada: no sale en partidas nuevas</div>}
@@ -185,4 +186,4 @@ function ItemTable({ title, description, items, experimentId, section, subtheses
   );
 }
 
-const ANSWER: Record<string, string> = { yes_no: 'Sí / no', agree: 'De acuerdo / no', number: 'Número', open: 'Libre' };
+const ANSWER: Record<string, string> = { choice: 'Dilema A / B', yes_no: 'Sí / no', agree: 'De acuerdo / no', number: 'Número', open: 'Libre' };

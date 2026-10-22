@@ -115,3 +115,20 @@ test('la repregunta respeta lo que contestó', () => {
   assert.equal(shouldFollowUp('always', undefined), true);
   assert.equal(shouldFollowUp('yes', undefined), false);
 });
+
+import { parseChoice } from './game.ts';
+
+test('entiende cuál de las dos opciones eligió', () => {
+  const a = 'Lo denunciás', b = 'Lo cubrís';
+  assert.equal(parseChoice('Lo denuncio, obvio', a, b).kind, 'a');
+  assert.equal(parseChoice('Y... lo cubro', a, b).kind, 'b');
+  assert.equal(parseChoice('La segunda', a, b).kind, 'b');
+  assert.equal(parseChoice('lo primero', a, b).kind, 'a');
+  assert.equal(parseChoice('no sé, ninguna', a, b).kind, 'unclear');
+  const x = 'Sueldo fijo con jefe encima', y = 'El triple sin saber si cobrás';
+  assert.equal(parseChoice('el triple, ni lo dudo', x, y).kind, 'b');
+  assert.equal(parseChoice('prefiero el sueldo fijo', x, y).kind, 'a');
+  assert.equal(truthOf('a', 'lie'), 'b');
+  assert.equal(claimFor('b', { position: 2, claim_yes: 'que lo denunciás', claim_no: 'que lo cubrís' }), 'que lo cubrís');
+  assert.equal(shouldFollowUp('yes', 'a'), true);
+});

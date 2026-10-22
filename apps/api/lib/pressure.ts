@@ -15,6 +15,7 @@ type Item = {
   id: string; section: 'calibration' | 'game'; position: number; kind: string; prompt: string;
   screen_text: string | null; answer_type: AnswerType; follow_up: string | null; subthesis_id: string | null;
   follow_up_when: 'always' | 'yes' | 'no'; claim_yes: string | null; claim_no: string | null;
+  option_a: string | null; option_b: string | null;
 };
 type Definition = {
   pitch: string[];
@@ -32,7 +33,7 @@ export async function loadExperiment(by: { slug?: string; id?: string }) {
   const exp = await must(q.maybeSingle(), 'experimento') as Experiment | null;
   if (!exp) throw new HttpError(404, 'experiment_not_found');
   const items = await must(from('pressure', 'items')
-    .select('id, section, position, kind, prompt, screen_text, answer_type, follow_up, follow_up_when, claim_yes, claim_no, subthesis_id')
+    .select('id, section, position, kind, prompt, screen_text, answer_type, follow_up, follow_up_when, claim_yes, claim_no, option_a, option_b, subthesis_id')
     .eq('experiment_id', exp.id).eq('enabled', true).order('section').order('position'), 'preguntas') as Item[];
   const calibration = items.filter((i) => i.section === 'calibration').sort((a, b) => a.position - b.position);
   const game = items.filter((i) => i.section === 'game').sort((a, b) => a.position - b.position);
@@ -125,6 +126,7 @@ export async function startFromCode(code: string, device: Record<string, unknown
 const publicItem = (i: Item) => ({
   id: i.id, position: i.position, kind: i.kind === 'signal' ? 'question' : i.kind === 'fun' ? 'question' : i.kind,
   prompt: i.prompt, screen_text: i.screen_text ?? i.prompt, answer_type: i.answer_type, follow_up: i.follow_up, follow_up_when: i.follow_up_when,
+  options: i.answer_type === 'choice' ? [i.option_a, i.option_b] : null,
 });
 
 async function loadSession(sessionId: string) {
@@ -193,7 +195,7 @@ export async function recordAnswer(sessionId: string, input: AnswerInput) {
   }
   const wf = wordFeatures(words);
   const type: AnswerType = input.stage === 'follow' ? 'open' : item.answer_type;
-  const parsed = parseAnswer(type, transcript);
+  const parsed = parseAnswer(type, transcript, item.option_a && item.option_b ? { a: item.option_a, b: item.option_b } : undefined);
   const features: Features & Record<string, unknown> = {
     ...sanitize(input.features),
     fillers: countFillers(transcript),

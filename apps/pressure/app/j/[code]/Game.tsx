@@ -15,7 +15,7 @@ type Step =
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const shouldFollowUp = (when: string, stated: string | undefined) =>
-  when === 'always' || (when === 'yes' ? stated === 'yes' || stated === 'agree' : stated === 'no' || stated === 'disagree');
+  when === 'always' || (when === 'yes' ? ['yes', 'agree', 'a'].includes(stated ?? '') : ['no', 'disagree', 'b'].includes(stated ?? ''));
 
 export function Game({ code }: { code: string }) {
   const poly = useRef<PolygraphHandle>(null);
@@ -128,7 +128,7 @@ export function Game({ code }: { code: string }) {
 
     // Precarga del resto del guion en segundo plano.
     machine.current!.prefetch([
-      lines.calibration_end, lines.game_start, lines.unclear, lines.not_heard ?? '',
+      lines.calibration_end, lines.game_start, lines.unclear, lines.unclear_choice ?? '', lines.not_heard ?? '',
       ...g.items.flatMap((i) => [i.prompt, ...(i.follow_up ? [i.follow_up] : [])]),
     ].filter(Boolean));
 
@@ -168,7 +168,7 @@ export function Game({ code }: { code: string }) {
       commits.push(committed);
       setHud((h) => ({ ...h, liesLeft: g.rules.lies - commits.filter((c) => c === 'lie').length }));
 
-      const mainPause = item.answer_type === 'open' ? 1800 : 1100;
+      const mainPause = item.answer_type === 'open' ? 1800 : item.answer_type === 'choice' ? 1400 : 1100;
       let heard = await hear(20000, mainPause);
       if (heard.silent && lines.not_heard) { await say(lines.not_heard); heard = await hear(20000, mainPause); }
       const first = api.current!.answer({ item_id: item.id, stage: 'main', attempt: 1, committed, features: feats(heard, decisionMs) }, heard.audio);
@@ -182,7 +182,7 @@ export function Game({ code }: { code: string }) {
       if (item.follow_up && item.follow_up_when !== 'always') {
         let r = await first.catch(() => null);
         if (r && r.parsed === 'unclear' && r.stt_ok && lines.unclear) {
-          await say(lines.unclear);
+          await say(item.answer_type === 'choice' ? (lines.unclear_choice || lines.unclear) : lines.unclear);
           const again = await hear(10000);
           const retry = api.current!.answer({ item_id: item.id, stage: 'main', attempt: 2, features: feats(again, null) }, again.audio);
           pending.push(retry);
@@ -296,9 +296,17 @@ export function Game({ code }: { code: string }) {
           {(phase === 'play' || phase === 'accuse') && (
             <>
               {current && step.mode !== 'machine' && phase === 'play' && hud.label.startsWith('PREGUNTA') && (
-                <p className="question">{current.screen_text}</p>
+                <>
+                  <p className="question">{current.screen_text}</p>
+                  {current.options && (
+                    <div className="options" aria-label="Opciones">
+                      <span><i>A</i>{current.options[0]}</span>
+                      <span><i>B</i>{current.options[1]}</span>
+                    </div>
+                  )}
+                </>
               )}
-              <p className="subtitle" aria-live="polite">{subtitle}</p>
+              {!(current?.options && step.mode !== 'machine' && phase === 'play') && <p className="subtitle" aria-live="polite">{subtitle}</p>}
               {step.mode === 'decide' && (
                 <div className="decide">
                   <p className="hint">Marcalo en secreto. La máquina no ve tu pantalla.</p>

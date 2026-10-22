@@ -1,8 +1,8 @@
 // Reglas del detector. Funciones puras: no tocan la base ni la red, así se prueban solas.
 
-export type AnswerType = 'yes_no' | 'agree' | 'number' | 'open';
+export type AnswerType = 'yes_no' | 'agree' | 'number' | 'open' | 'choice';
 export type Parsed =
-  | { kind: 'yes' | 'no' | 'agree' | 'disagree'; text: string }
+  | { kind: 'yes' | 'no' | 'agree' | 'disagree' | 'a' | 'b'; text: string }
   | { kind: 'number'; value: number; text: string }
   | { kind: 'open'; text: string }
   | { kind: 'unclear'; text: string };
@@ -58,7 +58,34 @@ export function parseNumber(text: string): number | null {
   return null;
 }
 
-export function parseAnswer(type: AnswerType, transcript: string): Parsed {
+// Dilema: "la primera", "la segunda" o palabras de la opción. Se comparan raíces de 4 letras
+// para que "denuncio" cuente como "lo denunciás".
+const ORD_A = ['la primera', 'el primero', 'lo primero', 'primera', 'primero', 'la uno', 'la a', 'opcion a'];
+const ORD_B = ['la segunda', 'el segundo', 'lo segundo', 'segunda', 'segundo', 'la dos', 'la b', 'opcion b'];
+const STOP = new Set(['para', 'pero', 'aunque', 'nunca', 'todo', 'todos', 'sobre', 'desde', 'hasta', 'como', 'donde', 'cuando', 'porque', 'sin', 'con', 'que', 'una', 'uno', 'los', 'las', 'del', 'por', 'tus', 'sus', 'mas']);
+function stems(label: string) {
+  return normalize(label).split(' ').filter((w) => w.length >= 4 && !STOP.has(w)).map((w) => w.slice(0, 4));
+}
+function firstHit(t: string, label: string, ordinals: string[]) {
+  let at = Infinity;
+  for (const o of ordinals) { const m = new RegExp(`(^| )${o}( |$)`).exec(t); if (m) at = Math.min(at, m.index); }
+  const words = t.split(' ');
+  let pos = 0;
+  const st = stems(label);
+  for (const w of words) { if (w.length >= 4 && st.includes(w.slice(0, 4))) { at = Math.min(at, pos); break; } pos += w.length + 1; }
+  return at;
+}
+export function parseChoice(transcript: string, a: string, b: string): Parsed {
+  const text = transcript.trim();
+  const t = normalize(text);
+  if (!t) return { kind: 'unclear', text };
+  const ha = firstHit(t, a, ORD_A), hb = firstHit(t, b, ORD_B);
+  if (ha === Infinity && hb === Infinity) return { kind: 'unclear', text };
+  return { kind: ha <= hb ? 'a' : 'b', text };
+}
+
+export function parseAnswer(type: AnswerType, transcript: string, options?: { a: string; b: string }): Parsed {
+  if (type === 'choice' && options) return parseChoice(transcript, options.a, options.b);
   const text = transcript.trim();
   const t = normalize(text);
   if (!t) return { kind: 'unclear', text };
@@ -79,7 +106,7 @@ export function parseAnswer(type: AnswerType, transcript: string): Parsed {
 
 // Si mintió en una respuesta binaria, la verdad es la opuesta.
 export function truthOf(stated: Parsed['kind'], committed: 'truth' | 'lie'): string | null {
-  const opposite: Record<string, string> = { yes: 'no', no: 'yes', agree: 'disagree', disagree: 'agree' };
+  const opposite: Record<string, string> = { yes: 'no', no: 'yes', agree: 'disagree', disagree: 'agree', a: 'b', b: 'a' };
   if (!(stated in opposite)) return null;
   return committed === 'lie' ? opposite[stated] : stated;
 }
@@ -224,8 +251,8 @@ export function countFillers(transcript: string) {
 
 /** Lo que "dijo" el jugador en una pregunta, para acusarlo: "que stalkeaste a un ex". */
 export function claimFor(stated: string | undefined, item: { position: number; claim_yes: string | null; claim_no: string | null }) {
-  if ((stated === 'yes' || stated === 'agree') && item.claim_yes) return item.claim_yes;
-  if ((stated === 'no' || stated === 'disagree') && item.claim_no) return item.claim_no;
+  if ((stated === 'yes' || stated === 'agree' || stated === 'a') && item.claim_yes) return item.claim_yes;
+  if ((stated === 'no' || stated === 'disagree' || stated === 'b') && item.claim_no) return item.claim_no;
   return `lo que contestaste en la ${item.position}`;
 }
 
@@ -244,6 +271,6 @@ export function accusationText(template: string, picks: { position: number; clai
 /** ¿Se hace la repregunta? Solo si coincide con lo que respondió. */
 export function shouldFollowUp(when: 'always' | 'yes' | 'no', stated: string | undefined) {
   if (when === 'always') return true;
-  if (when === 'yes') return stated === 'yes' || stated === 'agree';
-  return stated === 'no' || stated === 'disagree';
+  if (when === 'yes') return stated === 'yes' || stated === 'agree' || stated === 'a';
+  return stated === 'no' || stated === 'disagree' || stated === 'b';
 }

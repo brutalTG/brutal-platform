@@ -12,7 +12,7 @@ import { moveItem, saveItem, saveSettings, setExperimentStatus, toggleItem } fro
 export type Item = {
   id: string; section: 'calibration' | 'game'; position: number; kind: string; prompt: string; screen_text: string | null;
   answer_type: string; follow_up: string | null; subthesis_id: string | null; source_note: string | null; enabled: boolean;
-  follow_up_when: string; claim_yes: string | null; claim_no: string | null;
+  follow_up_when: string; claim_yes: string | null; claim_no: string | null; option_a: string | null; option_b: string | null;
 };
 export type Subthesis = { id: string; code: string; statement: string };
 
@@ -21,7 +21,7 @@ const KIND_OPTIONS = {
   calibration: [{ value: 'calibration', label: 'Verdad obligatoria (línea de base)' }, { value: 'obvious_lie', label: 'Mentira de control' }],
 };
 const ANSWERS = [
-  { value: 'yes_no', label: 'Sí o no' }, { value: 'agree', label: 'De acuerdo o no' },
+  { value: 'choice', label: 'Dilema: A o B' }, { value: 'yes_no', label: 'Sí o no' }, { value: 'agree', label: 'De acuerdo o no' },
   { value: 'number', label: 'Un número' }, { value: 'open', label: 'Libre' },
 ];
 
@@ -29,6 +29,8 @@ export function ItemDialog({ experimentId, section, item, subtheses, trigger }: 
   experimentId: string; section: 'calibration' | 'game'; item?: Item; subtheses: Subthesis[]; trigger: React.ReactNode;
 }) {
   const [kind, setKind] = React.useState(item?.kind ?? (section === 'game' ? 'fun' : 'calibration'));
+  const [atype, setAtype] = React.useState(item?.answer_type ?? (section === 'game' ? 'choice' : 'open'));
+  const choice = atype === 'choice';
   return (
     <FormDialog
       wide
@@ -48,12 +50,22 @@ export function ItemDialog({ experimentId, section, item, subtheses, trigger }: 
               <Select name="kind" value={kind} onChange={(e) => setKind(e.target.value)} options={KIND_OPTIONS[section]} />
             </Field>
             <Field label="Cómo se responde" error={err.answer_type}>
-              <Select name="answer_type" defaultValue={item?.answer_type ?? (section === 'game' ? 'yes_no' : 'open')} options={ANSWERS} />
+              <Select name="answer_type" value={atype} onChange={(e) => setAtype(e.target.value)} options={ANSWERS} />
             </Field>
           </div>
           <Field label="Lo que dice la máquina" hint="Se lee en voz alta. Escribí los números en palabras si importa cómo suenan." error={err.prompt}>
             <Textarea name="prompt" defaultValue={item?.prompt} maxLength={400} required />
           </Field>
+          {choice && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Opción A" hint="Como se lee en pantalla. Corta." error={err.option_a}>
+                <Input name="option_a" defaultValue={item?.option_a ?? ''} maxLength={80} placeholder="Lo denunciás" />
+              </Field>
+              <Field label="Opción B" error={err.option_b}>
+                <Input name="option_b" defaultValue={item?.option_b ?? ''} maxLength={80} placeholder="Lo cubrís" />
+              </Field>
+            </div>
+          )}
           <Field label="Texto en pantalla" hint="Versión corta para leer. Si queda vacío, se muestra lo que dice la máquina." error={err.screen_text}>
             <Input name="screen_text" defaultValue={item?.screen_text ?? ''} maxLength={200} />
           </Field>
@@ -64,17 +76,19 @@ export function ItemDialog({ experimentId, section, item, subtheses, trigger }: 
               </Field>
               <Field label="Cuándo la hace" error={err.follow_up_when}>
                 <Select name="follow_up_when" defaultValue={item?.follow_up_when ?? 'always'} options={[
-                  { value: 'always', label: 'Siempre' }, { value: 'yes', label: 'Si dijo sí / de acuerdo' }, { value: 'no', label: 'Si dijo no / en desacuerdo' },
+                  { value: 'always', label: 'Siempre' },
+                  { value: 'yes', label: choice ? 'Si eligió A' : 'Si dijo sí / de acuerdo' },
+                  { value: 'no', label: choice ? 'Si eligió B' : 'Si dijo no / en desacuerdo' },
                 ]} />
               </Field>
             </div>
           )}
           {section === 'game' && (
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Si dijo sí, dijo…" hint='Para la acusación: "Mentiste cuando dijiste…"' error={err.claim_yes}>
+              <Field label={choice ? 'Si eligió A, dijo…' : 'Si dijo sí, dijo…'} hint='Para la acusación: "Mentiste cuando dijiste…"' error={err.claim_yes}>
                 <Input name="claim_yes" defaultValue={item?.claim_yes ?? ''} maxLength={120} placeholder="que stalkeaste a un ex" />
               </Field>
-              <Field label="Si dijo no, dijo…" error={err.claim_no}>
+              <Field label={choice ? 'Si eligió B, dijo…' : 'Si dijo no, dijo…'} error={err.claim_no}>
                 <Input name="claim_no" defaultValue={item?.claim_no ?? ''} maxLength={120} placeholder="que no stalkeaste a ningún ex" />
               </Field>
             </div>
