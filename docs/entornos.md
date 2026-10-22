@@ -24,6 +24,12 @@ Las URLs `*.vercel.app` quedan detrás del login de Vercel; solo los dominios `b
 | App | Proyecto test | Dominio test | Proyecto producción |
 | --- | --- | --- | --- |
 | panel | `brutal-panel-test` | `test-panel.brutal.lat` | pendiente |
+| api | `brutal-api-test` | `test-api.brutal.lat` | pendiente |
+| pressure | `brutal-pressure-test` | `test-pressure.brutal.lat` | pendiente |
+
+Los proyectos de test tienen como rama de producción `main` en Vercel, así que un push a `test` arma una vista previa
+que no toca el dominio. Para publicar en el dominio de test, Claude crea un despliegue de producción de la rama `test`
+(o se cambia en Vercel → Settings → Git → Production Branch → `test`).
 
 ### Variables del panel
 
@@ -42,3 +48,25 @@ El plan gratuito es para uso no comercial. Antes de abrir a usuarios reales hay 
 ## Variables por app
 
 Se completan a medida que cada app se porta. Los valores nunca van en este repo.
+
+### Variables del API
+
+| Variable | Qué es | Quién la carga |
+| --- | --- | --- |
+| `BRUTAL_ENV`, `SUPABASE_URL`, `PRESSURE_ORIGIN` | Entorno, base y dónde vive el juego | Claude |
+| `API_SESSION_SECRET` | Firma de los tokens de partida | Claude |
+| `INTERNAL_API_SECRET` | Canal panel → API (el mismo valor en el panel) | Claude |
+| `WATI_WEBHOOK_SECRET` | Va en la URL del webhook que se configura en WATI | Claude |
+| `WHATSAPP_MODE` | `mock` (simulado) o `wati` (real) | Claude, con OK de Nacho |
+| `SUPABASE_SERVICE_ROLE_KEY` | Clave secreta de la base | Nacho |
+| `ELEVENLABS_API_KEY` | Voz y transcripción | Nacho |
+| `WATI_API_ENDPOINT`, `WATI_API_TOKEN`, `WATI_CHANNEL_NUMBER` | WhatsApp | Nacho |
+
+### Variables del juego (pressure)
+
+`NEXT_PUBLIC_API_URL`. No tiene claves.
+
+### Limpiar test
+
+`packages/db/scripts/test-wipe-synthetic.sql`: borra los datos simulados y deja el contenido real del detector.
+Se niega a correr si encuentra números que no son de prueba.
