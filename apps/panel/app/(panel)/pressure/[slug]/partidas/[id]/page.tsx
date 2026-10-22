@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { from, explain } from '@/lib/db';
+import { db, from, explain } from '@/lib/db';
 import { fmt, cn } from '@/lib/utils';
 import { statusOf } from '@/lib/status';
 import { publicAlias } from '@/lib/alias';
@@ -29,6 +29,15 @@ export default async function PartidaPage({ params }: { params: Promise<{ slug: 
   const commit = (itemId: string) => events.find((e) => e.type === 'commit' && e.payload.item_id === itemId)?.payload.committed as string | undefined;
   const lastAnswer = (itemId: string, stage: string) => answers.filter((a) => a.payload.item_id === itemId && a.payload.stage === stage).at(-1)?.payload;
 
+  // Audios: links firmados que vencen en una hora. Nunca públicos.
+  const paths = answers.map((a) => a.payload.audio_path).filter((p): p is string => typeof p === 'string');
+  const audio = new Map<string, string>();
+  if (paths.length) {
+    const { data } = await db().storage.from('pressure-audio').createSignedUrls(paths, 3600);
+    for (const d of data ?? []) if (d.signedUrl && d.path) audio.set(d.path, d.signedUrl);
+  }
+  const player = (path?: string) => (path && audio.get(path) ? <audio controls preload="none" src={audio.get(path)} className="mt-1.5 h-8 w-full max-w-xs" /> : null);
+
   const st = statusOf('session', s.status), v = statusOf('verdict', s.verdict);
   const ordered = [...items.filter((i) => i.section === 'calibration').sort((a, b) => a.position - b.position), ...items.filter((i) => i.section === 'game').sort((a, b) => a.position - b.position)]
     .filter((i) => answers.some((a) => a.payload.item_id === i.id));
@@ -49,7 +58,7 @@ export default async function PartidaPage({ params }: { params: Promise<{ slug: 
       </div>
 
       <Card>
-        <CardHeader title="Pregunta por pregunta" description="Lo que marcó en secreto, lo que dijo y cómo sonó. En rojo, donde acusó la máquina." />
+        <CardHeader title="Pregunta por pregunta" description="Lo que marcó en secreto, lo que dijo y cómo sonó, con su audio. En rojo, donde acusó la máquina." />
         <Table>
           <THead><tr><TH className="w-10">#</TH><TH>Pregunta y respuesta</TH><TH>Marcó</TH><TH>Dijo</TH><TH align="right">Dudó</TH><TH align="right">Arrancó</TH><TH align="right">Habló</TH><TH align="right">Pausas</TH><TH>Máquina</TH></tr></THead>
           <tbody>
@@ -64,7 +73,9 @@ export default async function PartidaPage({ params }: { params: Promise<{ slug: 
                   <TD className="py-2.5 align-top">
                     <div className="max-w-md text-sm text-fg-3">{i.screen_text ?? i.prompt}</div>
                     <div className="mt-0.5 max-w-md text-base text-fg">{main?.transcript ? `“${main.transcript}”` : <span className="text-fg-3">Sin transcripción</span>}</div>
+                    {player(main?.audio_path)}
                     {follow && <div className="mt-1 max-w-md text-sm text-fg-2">↳ {i.follow_up} <span className="text-fg">“{follow.transcript || '—'}”</span></div>}
+                    {follow && player(follow.audio_path)}
                     {main?.stt_error && <div className="mt-1 text-xs text-warning">No se pudo transcribir: {main.stt_error}</div>}
                   </TD>
                   <TD className="align-top pt-2.5">{c === 'lie' ? <Badge tone="danger">Mentira</Badge> : <Badge tone="neutral">Verdad</Badge>}</TD>

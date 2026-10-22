@@ -128,7 +128,7 @@ update pressure.experiments set definition = definition || jsonb_build_object(
   'pitch', jsonb_build_array('Una máquina te va a hacer 10 preguntas.', 'En 3 tenés que mentirle. Vos elegís cuáles.', 'Si no te agarra ninguna, *ganás*.'),
   'screens', jsonb_build_object(
     'entry_note', 'Es anónimo. No te vamos a pedir tu nombre.',
-    'consent', E'*Es con voz.* La máquina pregunta en voz alta y vos contestás hablando. Ponete auriculares o andá a un lugar tranquilo.\n\nLo que decís se pasa a texto para el juego y para investigación anónima. El audio no lo guardamos.\n\nLlegar al final: hasta *{max} Golden Tickets*. Ganarle a la máquina: *+{bonus}*.',
+    'consent', E'*Es con voz.* La máquina pregunta en voz alta y vos contestás hablando. Ponete auriculares o andá a un lugar tranquilo.\n\nTus respuestas quedan grabadas, sin tu nombre.\n\nLlegar al final: hasta *{max} Golden Tickets*. Ganarle a la máquina: *+{bonus}*.',
     'consent_note', 'Dura unos 3 minutos.'))
 where slug = 'detector-001' and not (definition ? 'screens');
 

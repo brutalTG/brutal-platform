@@ -1,7 +1,7 @@
 import 'server-only';
 import { createHash } from 'node:crypto';
 import { env } from './env';
-import { from, must } from './db';
+import { db, from, must } from './db';
 import { sha256, signToken } from './crypto';
 import { HttpError } from './http';
 import { stt, wordFeatures } from './elevenlabs';
@@ -53,7 +53,7 @@ async function addEvent(sessionId: string, startedAt: string, type: string, payl
 
 const DEFAULT_SCREENS = {
   entry_note: 'Es anónimo. No te vamos a pedir tu nombre.',
-  consent: '*Es con voz.* La máquina pregunta en voz alta y vos contestás hablando. Ponete auriculares o andá a un lugar tranquilo.\n\nLo que decís se pasa a texto para el juego y para investigación anónima. El audio no lo guardamos.\n\nLlegar al final: hasta *{max} Golden Tickets*. Ganarle a la máquina: *+{bonus}*.',
+  consent: '*Es con voz.* La máquina pregunta en voz alta y vos contestás hablando. Ponete auriculares o andá a un lugar tranquilo.\n\nTus respuestas quedan grabadas, sin tu nombre.\n\nLlegar al final: hasta *{max} Golden Tickets*. Ganarle a la máquina: *+{bonus}*.',
   consent_note: 'Dura unos 3 minutos.',
 };
 export type Screens = typeof DEFAULT_SCREENS;
@@ -70,6 +70,31 @@ export async function introFromCode(code: string) {
   const exp = await must(from('pressure', 'experiments').select('definition, status').eq('slug', link.target_id).single(), 'experimento') as any;
   if (!['testing', 'live'].includes(exp.status)) throw new HttpError(409, 'not_open', 'La máquina está apagada por ahora.');
   return { pitch: exp.definition.pitch ?? [], screens: screensOf(exp.definition), rewards: exp.definition.rewards };
+}
+
+// ---------- Audios ----------
+const AUDIO_BUCKET = 'pressure-audio';
+let audioBucketReady = false;
+
+/** Guarda una respuesta hablada en el depósito privado. Devuelve la ruta, o null si no pudo. */
+async function saveAudio(sessionId: string, name: string, audio: Blob, mime: string) {
+  try {
+    const st = db().storage;
+    if (!audioBucketReady) {
+      const { data } = await st.getBucket(AUDIO_BUCKET);
+      if (!data) await st.createBucket(AUDIO_BUCKET, { public: false, fileSizeLimit: 8_000_000 });
+      audioBucketReady = true;
+    }
+    const path = `${sessionId}/${name}`;
+    const { error } = await st.from(AUDIO_BUCKET).upload(path, audio, { contentType: mime || 'audio/webm', upsert: true });
+    if (error) { console.error('audio', error.message); return null; }
+    // Una fila por partida: dónde están sus audios y hasta cuándo se guardan (12 meses).
+    await from('pressure', 'recordings').upsert({ session_id: sessionId, audio_path: `${AUDIO_BUCKET}/${sessionId}/` }, { onConflict: 'session_id', ignoreDuplicates: true });
+    return path;
+  } catch (e) {
+    console.error('audio', e);
+    return null;
+  }
 }
 
 /** Abre una partida desde el link personal. */
@@ -185,13 +210,17 @@ export async function recordAnswer(sessionId: string, input: AnswerInput) {
   let transcript = '';
   let words: Awaited<ReturnType<typeof stt>>['words'] = [];
   let sttError: string | null = null;
+  let audioPath: string | null = null;
   if (input.audio && input.audio.size > 800) {
+    const ext = input.mime.includes('mp4') ? 'm4a' : input.mime.includes('ogg') ? 'ogg' : 'webm';
+    // El audio se guarda en paralelo a la transcripción: si guardar falla, el juego sigue.
+    const saving = saveAudio(s.id, `${item.section}-${item.position}-${input.stage}-${input.attempt}.${ext}`, input.audio, input.mime);
     try {
-      const ext = input.mime.includes('mp4') ? 'm4a' : input.mime.includes('ogg') ? 'ogg' : 'webm';
       ({ text: transcript, words } = await stt(input.audio, `answer.${ext}`));
     } catch (e) {
       sttError = e instanceof Error ? e.message : 'stt';
     }
+    audioPath = await saving;
   }
   const wf = wordFeatures(words);
   const type: AnswerType = input.stage === 'follow' ? 'open' : item.answer_type;
@@ -206,7 +235,7 @@ export async function recordAnswer(sessionId: string, input: AnswerInput) {
 
   await addEvent(s.id, s.started_at, 'answer', {
     item_id: item.id, position: item.position, section: item.section, stage: input.stage, attempt: input.attempt,
-    committed, transcript, parsed: parsed.kind, value: 'value' in parsed ? parsed.value : null, features, stt_error: sttError,
+    committed, transcript, parsed: parsed.kind, value: 'value' in parsed ? parsed.value : null, features, stt_error: sttError, audio_path: audioPath,
   }, `answer:${s.id}:${item.id}:${input.stage}:${input.attempt}`);
 
   // Observación: lo dicho, si era verdad o mentira, y la verdad que se deduce.
@@ -224,7 +253,7 @@ export async function recordAnswer(sessionId: string, input: AnswerInput) {
     latency_ms: typeof features.onset_ms === 'number' ? Math.round(features.onset_ms) : null,
     observed_at: new Date().toISOString(), session_id: s.id, position: item.position,
     study_id: item.subthesis_id ? exp.study_id : null, subthesis_id: item.subthesis_id,
-    context: { features, replay: s.replay, stage: input.stage },
+    context: { features, replay: s.replay, stage: input.stage, audio_path: audioPath },
     quality: committed === 'lie' && !isCalibration ? 'declared_lie' : 'valid',
     quality_note: committed === 'lie' ? 'Mentira declarada por el jugador antes de responder' : null,
     idempotency_key: `pressure:${s.id}:${item.id}:${input.stage}:${input.attempt}`,
