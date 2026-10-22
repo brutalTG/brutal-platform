@@ -30,7 +30,7 @@ async function node(db, phone, birth) {
 test('todas las migraciones corren desde cero', async () => {
   const db = await freshDb();
   const { rows } = await db.query(`select count(*)::int as n from pg_tables where schemaname in ('core','signal','profile','economy','messaging','drops','pressure')`);
-  assert.equal(rows[0].n, 33);
+  assert.equal(rows[0].n, 34);
   const v = await db.query(`select count(*)::int as n from core.ops_kpis`);
   assert.equal(v.rows[0].n, 1);
   const rls = await db.query(`select count(*)::int as n from pg_tables where schemaname in ('core','signal','profile','economy','messaging','drops','pressure') and not rowsecurity`);
@@ -87,4 +87,30 @@ test('una sola temporada activa', async () => {
   const db = await freshDb();
   await db.query(`insert into economy.seasons (slug, name, starts_at, ends_at, status) values ('s1','S1', now(), now() + interval '30 days', 'active')`);
   await assert.rejects(db.query(`insert into economy.seasons (slug, name, starts_at, ends_at, status) values ('s2','S2', now(), now() + interval '30 days', 'active')`));
+});
+
+test('cambiar el contenido del detector sube la versión', async () => {
+  const db = await freshDb();
+  const { rows } = await db.query(`insert into pressure.experiments (slug, name) values ('detector-test', 'Detector') returning id, content_version`);
+  const exp = rows[0];
+  await db.query(`insert into pressure.items (experiment_id, section, kind, prompt, answer_type) values ($1, 'game', 'fun', '¿Lloraste con la final?', 'yes_no')`, [exp.id]);
+  const after = await db.query(`select content_version from pressure.experiments where id = $1`, [exp.id]);
+  assert.equal(after.rows[0].content_version, exp.content_version + 1);
+  await assert.rejects(db.query(
+    `insert into pressure.items (experiment_id, section, kind, prompt, answer_type) values ($1, 'game', 'calibration', 'Edad', 'number')`, [exp.id]));
+});
+
+test('una sola partida con premio por nodo; las revanchas no cobran', async () => {
+  const db = await freshDb();
+  const id = await node(db, '+5491100000009', adultBirth);
+  const p = (await db.query(`select pseudonym_id from core.node_pseudonyms where node_id = $1`, [id])).rows[0].pseudonym_id;
+  const exp = (await db.query(`insert into pressure.experiments (slug, name) values ('detector-test', 'Detector') returning id`)).rows[0].id;
+  // Una sola partida con premio. Si se corta y vuelve a empezar, la vieja pasa a revancha.
+  const first = (await db.query(`insert into pressure.sessions (pseudonym_id, experiment_id) values ($1, $2) returning id`, [p, exp])).rows[0].id;
+  await assert.rejects(db.query(`insert into pressure.sessions (pseudonym_id, experiment_id) values ($1, $2)`, [p, exp]));
+  await db.query(`update pressure.sessions set replay = true, status = 'interrupted' where id = $1`, [first]);
+  await db.query(`insert into pressure.sessions (pseudonym_id, experiment_id) values ($1, $2)`, [p, exp]);
+  await db.query(`insert into pressure.sessions (pseudonym_id, experiment_id, replay) values ($1, $2, true)`, [p, exp]);
+  const alias = (await db.query(`select core.public_alias($1) as a`, [p])).rows[0].a;
+  assert.match(alias, /^NODO-[0-9A-F]{4}$/);
 });
