@@ -275,6 +275,7 @@ export function Game({ code }: { code: string }) {
     if (lieAt.current !== null) return;
     lieAt.current = performance.now();
     setLieOn(true);
+    setHud((h) => ({ ...h, liesLeft: Math.max(0, h.liesLeft - 1) }));
     try { navigator.vibrate?.(25); } catch { /* */ }
   }
 
