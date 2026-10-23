@@ -42,8 +42,8 @@ button { font: inherit; }
 .enter:focus-visible, .choice:focus-visible, .done:focus-visible, .actions button:focus-visible { outline: 2px solid #fff; outline-offset: 4px; }
 .note { margin: 0; font-size: 12px; line-height: 1.45; color: var(--muted); max-width: 34ch; }
 
-.question { margin: 0; font-family: var(--display), Impact, sans-serif; font-size: clamp(24px, 7vw, 32px); line-height: 1.05; text-transform: uppercase; color: #fff; max-width: 22ch; text-wrap: balance; }
-.subtitle { margin: 0; min-height: 2.8em; font-size: 16px; line-height: 1.4; color: var(--soft); max-width: 34ch; text-wrap: balance; }
+.question { margin: 0; font-family: var(--display), Impact, sans-serif; font-size: clamp(32px, 10vw, 46px); line-height: 1; text-transform: uppercase; color: #fff; max-width: 22ch; text-wrap: balance; }
+.subtitle { margin: 0; min-height: 2.8em; font-size: 20px; line-height: 1.4; color: var(--soft); max-width: 34ch; text-wrap: balance; }
 
 .decide { display: flex; flex-direction: column; gap: 10px; width: 100%; align-items: center; }
 .hint { margin: 0; font-size: 12px; color: var(--muted); max-width: 34ch; }
@@ -113,7 +113,7 @@ button { font: inherit; }
 .options i { font-style: normal; font-family: var(--display), Impact, sans-serif; color: var(--red); font-size: 16px; }
 
 /* Dilema: el enunciado completo, con las dos opciones adentro. Se contesta hablando. */
-.question.long { font-size: clamp(20px, 5.6vw, 25px); line-height: 1.12; max-width: 28ch; }
+.question.long { font-size: clamp(25px, 7.6vw, 34px); line-height: 1.06; max-width: 24ch; }
 
 /* ---------- MENTIR: un solo botón ---------- */
 .choice.lie.big { flex: none; width: min(100%, 300px); min-height: 60px; }
@@ -166,3 +166,7 @@ button { font: inherit; }
 .stand:disabled { opacity: .3; }
 .hilo-end { margin: 0; font-family: var(--display), Impact, sans-serif; font-size: clamp(34px, 10vw, 48px); line-height: 1; color: #e0b94a; animation: pop .4s ease both; }
 .hilo-end.bad { color: var(--red); }
+
+/* Jugando: el texto ocupa la mitad de abajo, el polígrafo queda arriba y más chico. */
+.panel.play { min-height: 56dvh; justify-content: center; gap: 18px; }
+.panel.play .question { max-width: 100%; }

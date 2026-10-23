@@ -60,13 +60,28 @@ export function Rafaga({ items, seconds, onDone }: { items: RafagaItem[]; second
   }
 
   // Cada disparador tiene su tiempo. Si no toca, se va.
+  // Un video tiene lo que dura (hasta 8 segundos) más el tiempo normal para tocar.
+  const [limit, setLimit] = useState(seconds);
+  function arm(ms: number) {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => advance(null), ms);
+    setLimit(ms / 1000);
+  }
   useEffect(() => {
     if (phase !== 'play') return;
     shownAt.current = performance.now();
-    timer.current = setTimeout(() => advance(null), seconds * 1000);
+    arm(seconds * 1000);
     return () => { if (timer.current) clearTimeout(timer.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, idx]);
+
+  function onVideoReady(v: HTMLVideoElement) {
+    const d = Number.isFinite(v.duration) ? Math.min(8, v.duration) : 0;
+    if (d > 0 && !lock.current) arm(Math.max(0, d * 1000 - (performance.now() - shownAt.current)) + seconds * 1000);
+    // Con sonido si el navegador deja; si no, mudo.
+    v.muted = false;
+    v.play().catch(() => { v.muted = true; v.play().catch(() => {}); });
+  }
 
   if (phase === 'count') {
     return (
@@ -83,11 +98,11 @@ export function Rafaga({ items, seconds, onDone }: { items: RafagaItem[]; second
   if (!it) return null;
   return (
     <div className={`rafaga ${blink ? 'blink' : ''}`}>
-      <div className="rafaga-bar" key={`bar-${idx}`} style={{ animationDuration: `${seconds}s` }} />
+      <div className="rafaga-bar" key={`bar-${idx}-${limit}`} style={{ animationDuration: `${limit}s` }} />
       <p className="rafaga-step">{idx + 1}/{items.length}</p>
       <div className="rafaga-stage">
         {it.media_url && (isVideo(it.media_url)
-          ? <video className="rafaga-media" src={it.media_url} autoPlay muted playsInline loop />
+          ? <video className="rafaga-media" src={it.media_url} autoPlay muted playsInline onLoadedMetadata={(e) => onVideoReady(e.currentTarget)} />
           // eslint-disable-next-line @next/next/no-img-element
           : <img className="rafaga-media" src={it.media_url} alt="" />)}
         <p className={`rafaga-text ${it.media_url ? 'over' : ''}`}>{it.screen_text}</p>

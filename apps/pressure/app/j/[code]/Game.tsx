@@ -320,7 +320,7 @@ export function Game({ code }: { code: string }) {
       {stamp && phase !== 'result' && <div className={`stamp ${stamp === 'escaped' ? 'ok' : ''}`}>{stamp === 'escaped' ? 'ZAFASTE' : 'TE AGARRÓ'}</div>}
 
       {phase !== 'result' && (
-        <div className="panel" ref={panel}>
+        <div className={`panel ${phase === 'play' || phase === 'accuse' ? 'play' : ''}`} ref={panel}>
           {phase === 'entry' && (
             <>
               <div className="copy">

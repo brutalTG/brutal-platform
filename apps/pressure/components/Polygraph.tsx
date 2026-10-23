@@ -91,7 +91,8 @@ export const Polygraph = forwardRef<PolygraphHandle, { panelHeight: number; onTa
         W = box.clientWidth; H = box.clientHeight;
         cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
         const cover = Math.max(W / IW, H / IH);
-        const fit = (H - panelH.current - 6) / 1585;
+        // El polígrafo nunca pasa de 42% de la pantalla: el texto manda.
+        const fit = Math.min(H - panelH.current - 6, H * 0.42) / 1585;
         S = Math.max(0.12, Math.min(cover, fit));
         OX = W / 2 - PAPER_CX * S;
         if (IW * S >= W) OX = Math.min(0, Math.max(W - IW * S, OX));
