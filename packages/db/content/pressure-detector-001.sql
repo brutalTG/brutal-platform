@@ -132,4 +132,17 @@ update pressure.experiments set definition = definition || jsonb_build_object(
     'consent_note', 'Dura unos 3 minutos.'))
 where slug = 'detector-001' and not (definition ? 'screens');
 
+-- v3: etapas (ráfaga, vuelta por voz, mayor o menor) y frases nuevas. El contenido de la ráfaga se carga desde el panel.
+update pressure.experiments set definition = definition
+ || jsonb_build_object('stages', jsonb_build_object('rafaga', true, 'hilo', true, 'vuelta', true),
+                       'rafaga', jsonb_build_object('seconds', 3),
+                       'hilo', jsonb_build_object('multipliers', jsonb_build_array(1.5, 2, 3, 5, 10)))
+ || jsonb_build_object('lines', (definition->'lines') || jsonb_build_object(
+      'game_start', 'Empezamos. Cuando me vayas a mentir, tocá MENTIR. Yo no veo tu pantalla.',
+      'rafaga_start', 'Ráfaga. No pienses. Tocá.',
+      'hilo_start', 'Pausa. Mayor o menor. Cada acierto multiplica tus tickets. Si errás, perdés el multiplicador. Plantate cuando quieras.',
+      'hilo_end', 'Seguimos.',
+      'vuelta_start', 'Volvamos a la ráfaga. Ahora contestame con la voz. Acá también podés mentir.'))
+where slug = 'detector-001' and not (definition ? 'stages');
+
 commit;
