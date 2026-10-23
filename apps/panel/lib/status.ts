@@ -68,6 +68,8 @@ const maps: Record<string, Record<string, Entry>> = {
     obvious_lie: { label: 'Mentira de control', tone: 'warning' },
     fun: { label: 'Diversión', tone: 'info' },
     signal: { label: 'Señal', tone: 'accent' },
+    flash: { label: 'Reacción', tone: 'info' },
+    trap: { label: 'Trampa', tone: 'warning' },
   },
   verdict: {
     caught: { label: 'Te agarró', tone: 'danger' },

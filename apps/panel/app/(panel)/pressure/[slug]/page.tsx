@@ -8,7 +8,7 @@ import {
   Badge, Card, CardHeader, EmptyState, ErrorNotice, Meter, PageHeader, RowLink, Stat, Table, Tabs, TD, TH, THead, TR,
 } from '@/components/ui/primitives';
 import { publicAlias as alias } from '@/lib/alias';
-import { AddItemButton, ItemActions, SettingsForm, StatusControl, type Item, type Subthesis } from './editor';
+import { AddItemButton, ItemActions, SettingsForm, StatusControl, type Item, type Section, type Subthesis } from './editor';
 
 export const dynamic = 'force-dynamic';
 
@@ -76,6 +76,8 @@ export default async function JuegoPage({ params, searchParams }: { params: Prom
         <div className="flex flex-col gap-6">
           <ItemTable title="Calibración" description="Antes del juego. Verdades obligatorias y una mentira de control: así la máquina aprende cómo suena cada uno."
             items={items.filter((i) => i.section === 'calibration')} experimentId={e.id} section="calibration" subtheses={subtheses} />
+          <ItemTable title="Ráfaga" description={`Después de calibrar. ${def.rafaga?.seconds ?? 3} segundos por card, se contesta tocando un emoji. Las marcadas “vuelve por voz” se repiten al final, hablando y con permiso para mentir.${def.stages?.rafaga ? '' : ' Apagada en Ajustes → Etapas.'}`}
+            items={items.filter((i) => i.section === 'rafaga')} experimentId={e.id} section="rafaga" subtheses={subtheses} />
           <ItemTable title="Preguntas del juego" description={`En ${def.rules.lies} de estas el jugador miente. Ideal: 8 de diversión por cada 2 de señal.`}
             items={items.filter((i) => i.section === 'game')} experimentId={e.id} section="game" subtheses={subtheses} />
         </div>
@@ -140,7 +142,7 @@ export default async function JuegoPage({ params, searchParams }: { params: Prom
 
 
 function ItemTable({ title, description, items, experimentId, section, subtheses }: {
-  title: string; description: string; items: Item[]; experimentId: string; section: 'calibration' | 'game'; subtheses: Subthesis[];
+  title: string; description: string; items: Item[]; experimentId: string; section: Section; subtheses: Subthesis[];
 }) {
   const code = (id: string | null) => subtheses.find((s) => s.id === id)?.code;
   const active = items.filter((i) => i.enabled);
@@ -164,15 +166,31 @@ function ItemTable({ title, description, items, experimentId, section, subtheses
                 <TR key={i.id}>
                   <TD className={cn('tabular align-top pt-3', !i.enabled && 'text-fg-3')}>{i.position}</TD>
                   <TD className={cn('py-2.5 align-top', !i.enabled && 'opacity-50')}>
-                    <div className="max-w-xl text-base text-fg">{i.screen_text ?? i.prompt}</div>
-                    {i.screen_text && <div className="mt-0.5 max-w-xl text-sm text-fg-3">“{i.prompt}”</div>}
+                    {section === 'rafaga' ? (
+                      <div className="flex items-center gap-3">
+                        {i.media_url && (/\.(mp4|webm|mov|m4v)($|\?)/i.test(i.media_url)
+                          ? <video src={i.media_url} className="size-12 rounded object-cover" muted playsInline />
+                          // eslint-disable-next-line @next/next/no-img-element
+                          : <img src={i.media_url} alt="" className="size-12 rounded object-cover" />)}
+                        <div>
+                          <div className="max-w-xl text-base font-medium text-fg">{i.screen_text}</div>
+                          <div className="mt-0.5 text-lg">{i.emoji_a} <span className="text-sm text-fg-3">o</span> {i.emoji_b}{i.kind === 'trap' && <span className="ml-2 text-sm text-fg-3">correcto: {i.correct === 'a' ? i.emoji_a : i.emoji_b}</span>}</div>
+                          {i.echo && <div className="mt-0.5 text-sm text-fg-2">↻ Vuelve por voz: “{i.prompt}”</div>}
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="max-w-xl text-base text-fg">{i.screen_text ?? i.prompt}</div>
+                        {i.screen_text && <div className="mt-0.5 max-w-xl text-sm text-fg-3">“{i.prompt}”</div>}
+                      </>
+                    )}
                     {i.option_a && <div className="mt-1 text-sm text-fg-2">A · {i.option_a} &nbsp;/&nbsp; B · {i.option_b}</div>}
                     {i.follow_up && <div className="mt-1 text-sm text-fg-2">↳ Repregunta: {i.follow_up}</div>}
                     {i.source_note && <div className="mt-1 text-xs text-fg-3">Fuente: {i.source_note}</div>}
                     {!i.enabled && <div className="mt-1 text-xs font-medium text-warning">Apagada: no sale en partidas nuevas</div>}
                   </TD>
                   <TD className="align-top pt-2.5"><Badge tone={k.tone}>{k.label}</Badge>{code(i.subthesis_id) && <span className="ml-1.5 font-mono text-xs text-fg-3">{code(i.subthesis_id)}</span>}</TD>
-                  <TD muted className="align-top pt-3 text-sm">{ANSWER[i.answer_type] ?? i.answer_type}</TD>
+                  <TD muted className="align-top pt-3 text-sm">{section === 'rafaga' ? (i.echo ? `Toque + ${ANSWER[i.answer_type]?.toLowerCase()}` : 'Toque') : ANSWER[i.answer_type] ?? i.answer_type}</TD>
                   <TD className="align-top pt-1.5">
                     <ItemActions item={i} first={idx === 0} last={idx === items.length - 1} experimentId={experimentId} subtheses={subtheses} />
                   </TD>

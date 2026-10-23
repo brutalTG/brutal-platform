@@ -120,6 +120,7 @@ export type Features = {
   pauses?: number | null; // silencios de más de 400 ms en el medio
   fillers?: number | null; // "eh", "este", "o sea"...
   pitch_mean?: number | null; // tono medio en Hz
+  lie_press_ms?: number | null; // cuándo tocó MENTIR desde que empezó a escuchar (no entra en la acusación)
 };
 
 export type ItemResult = { id: string; position: number; committed: 'truth' | 'lie'; features: Features };
@@ -273,4 +274,24 @@ export function shouldFollowUp(when: 'always' | 'yes' | 'no', stated: string | u
   if (when === 'always') return true;
   if (when === 'yes') return stated === 'yes' || stated === 'agree' || stated === 'a';
   return stated === 'no' || stated === 'disagree' || stated === 'b';
+}
+
+// ---------- Mayor o menor ----------
+export const DEFAULT_LADDER = [1.5, 2, 3, 5, 10];
+
+/** Carta del 1 (as) al 13 (rey). */
+export function drawCard(rand: () => number = Math.random) {
+  return 1 + Math.floor(rand() * 13);
+}
+
+/** El empate cuenta como acierto. */
+export function hiloOk(current: number, next: number, guess: 'higher' | 'lower') {
+  return guess === 'higher' ? next >= current : next <= current;
+}
+
+/** Multiplica los tickets de la partida. */
+export function applyMultiplier(t: { progress: number; win: number; total: number }, m: number) {
+  const k = Number.isFinite(m) && m > 0 ? m : 1;
+  const progress = Math.round(t.progress * k), win = Math.round(t.win * k);
+  return { progress, win, total: progress + win, multiplier: k };
 }

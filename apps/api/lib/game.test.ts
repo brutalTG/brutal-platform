@@ -132,3 +132,13 @@ test('entiende cuál de las dos opciones eligió', () => {
   assert.equal(claimFor('b', { position: 2, claim_yes: 'que lo denunciás', claim_no: 'que lo cubrís' }), 'que lo cubrís');
   assert.equal(shouldFollowUp('yes', 'a'), true);
 });
+
+test('mayor o menor: empate es acierto y el multiplicador redondea', async () => {
+  const { hiloOk, applyMultiplier, drawCard } = await import('./game.ts');
+  assert.equal(hiloOk(7, 9, 'higher'), true);
+  assert.equal(hiloOk(7, 7, 'lower'), true);
+  assert.equal(hiloOk(7, 3, 'higher'), false);
+  assert.deepEqual(applyMultiplier({ progress: 450, win: 200, total: 650 }, 1.5), { progress: 675, win: 300, total: 975, multiplier: 1.5 });
+  assert.equal(applyMultiplier({ progress: 100, win: 0, total: 100 }, NaN).total, 100);
+  for (let i = 0; i < 200; i++) { const c = drawCard(); assert.ok(c >= 1 && c <= 13); }
+});

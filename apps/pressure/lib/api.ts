@@ -12,7 +12,15 @@ export type Game = {
   lines: Record<string, string | string[]>;
   calibration: GameItem[];
   items: GameItem[];
+  stages: { rafaga: boolean; hilo: boolean; vuelta: boolean };
+  rafaga: RafagaItem[];
+  rafaga_seconds: number;
+  vuelta: (GameItem & { media_url: string | null; emoji_a: string | null; emoji_b: string | null })[];
+  hilo: { ladder: number[] };
 };
+export type RafagaItem = { id: string; position: number; kind: 'flash' | 'trap'; screen_text: string; media_url: string | null; emoji_a: string; emoji_b: string };
+export type Tap = { item_id: string; choice: 'a' | 'b' | null; latency_ms: number | null };
+export type HiloView = { card: number; next?: number; ok?: boolean; step: number; multiplier: number; ladder: number[]; done: boolean; busted?: boolean };
 export type Screens = { entry_note: string; consent: string; consent_note: string };
 export type Intro = { pitch: string[]; screens: Screens; rewards: { per_answer: number; max: number; win_bonus: number } };
 export type Start = { token: string; session_id: string; alias: string; replay: boolean; game: Game };
@@ -20,7 +28,9 @@ export type Finish = {
   verdict: 'caught' | 'escaped'; caught: number; lies: number;
   picks: { item_id: string; position: number; claim: string; reason: string }[];
   your_lies: number[];
-  tickets: { progress: number; win: number; total: number };
+  lies_detail?: { item_id: string; text: string; got: boolean }[];
+  multiplier?: number;
+  tickets: { progress: number; win: number; total: number; multiplier?: number };
   replay: boolean;
   ranking: { position: number | null; players: number | null };
   lines: { accusation: string; verdict: string; title: string };
@@ -43,6 +53,20 @@ export async function intro(code: string): Promise<Intro> {
 export async function start(code: string): Promise<Start> {
   const device = { ua: navigator.userAgent.slice(0, 120), w: String(screen.width), h: String(screen.height), lang: navigator.language };
   return parse(await fetch(`${API}/pressure/start`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, device }) }));
+}
+
+async function retry<T>(call: () => Promise<Response>): Promise<T> {
+  let last: unknown;
+  for (let i = 0; i < 3; i++) {
+    try {
+      return await parse<T>(await call());
+    } catch (e) {
+      last = e;
+      if (e instanceof ApiError && e.status < 500) throw e;
+      await new Promise((r) => setTimeout(r, 700 * (i + 1)));
+    }
+  }
+  throw last;
 }
 
 export function client(token: string) {
@@ -82,6 +106,12 @@ export function client(token: string) {
         }
       }
       throw last;
+    },
+    async taps(taps: Tap[]): Promise<{ ok: boolean }> {
+      return retry(() => fetch(`${API}/pressure/taps`, { method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' }, body: JSON.stringify({ taps }) }));
+    },
+    async hilo(action: 'start' | 'higher' | 'lower' | 'stand', step?: number): Promise<HiloView> {
+      return retry(() => fetch(`${API}/pressure/hilo`, { method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' }, body: JSON.stringify({ action, step }) }));
     },
     abandon(reason: string) {
       fetch(`${API}/pressure/abandon`, { method: 'POST', keepalive: true, headers: { ...auth, 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }) }).catch(() => {});

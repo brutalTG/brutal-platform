@@ -3,15 +3,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Polygraph, type PolygraphHandle } from '@/components/Polygraph';
 import { Rich } from '@/components/Rich';
-import { ApiError, client, intro as fetchIntro, start, type Finish, type Intro, type Game as GameDef, type GameItem, type Start } from '@/lib/api';
+import { Rafaga } from '@/components/Rafaga';
+import { Hilo } from '@/components/Hilo';
+import { ApiError, client, intro as fetchIntro, start, type Finish, type Intro, type Game as GameDef, type GameItem, type Start, type Tap } from '@/lib/api';
 import { Listener, Machine } from '@/lib/voice';
 
 type Phase = 'entry' | 'loading' | 'consent' | 'play' | 'accuse' | 'result' | 'error';
 type Step =
   | { mode: 'machine' }
-  | { mode: 'decide'; mustLie: boolean; mustTell: boolean }
-  | { mode: 'listen' }
-  | { mode: 'wait' };
+  | { mode: 'listen'; lie?: { left: number; forced: boolean; banned: boolean } }
+  | { mode: 'wait' }
+  | { mode: 'rafaga' }
+  | { mode: 'hilo' };
+type Shown = GameItem & { media_url?: string | null };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const shouldFollowUp = (when: string, stated: string | undefined) =>
@@ -26,7 +30,9 @@ export function Game({ code }: { code: string }) {
   const [session, setSession] = useState<Start | null>(null);
   const [step, setStep] = useState<Step>({ mode: 'machine' });
   const [subtitle, setSubtitle] = useState('');
-  const [hud, setHud] = useState({ label: 'CALIBRANDO', n: 0, total: 10, tickets: 0, liesLeft: 3 });
+  const [hud, setHud] = useState({ label: 'CALIBRANDO', n: 0, total: 10, tickets: 0, liesLeft: 3, multiplier: 1 });
+  const [current, setCurrent] = useState<Shown | null>(null);
+  const [lieOn, setLieOn] = useState(false);
   const [result, setResult] = useState<Finish | null>(null);
   const [stamp, setStamp] = useState<'caught' | 'escaped' | null>(null);
   const [intro, setIntro] = useState<Intro | null>(null);
@@ -39,7 +45,8 @@ export function Game({ code }: { code: string }) {
 
   const machine = useRef<Machine | null>(null);
   const ear = useRef<Listener | null>(null);
-  const decision = useRef<((v: 'truth' | 'lie') => void) | null>(null);
+  const lieAt = useRef<number | null>(null);
+  const overlay = useRef<((v: unknown) => void) | null>(null);
   const api = useRef<ReturnType<typeof client> | null>(null);
   const playing = useRef(false);
 
@@ -113,9 +120,9 @@ export function Game({ code }: { code: string }) {
   }
 
   // Respuesta corta (sí/no): corta al segundo de silencio. Si está contando algo, espera más.
-  async function hear(maxMs: number, endSilenceMs = 1000) {
+  async function hear(maxMs: number, endSilenceMs = 1000, lie?: { left: number; forced: boolean; banned: boolean }) {
     await ear.current!.resume();
-    setStep({ mode: 'listen' });
+    setStep({ mode: 'listen', lie });
     const r = await ear.current!.listen({ maxMs, noSpeechMs: 9000, endSilenceMs, onLevel: (v) => poly.current?.setLevel(v) });
     setStep({ mode: 'wait' });
     return r;
@@ -129,7 +136,8 @@ export function Game({ code }: { code: string }) {
     // Precarga del resto del guion en segundo plano.
     machine.current!.prefetch([
       lines.calibration_end, lines.game_start, lines.unclear, lines.unclear_choice ?? '', lines.not_heard ?? '',
-      ...g.items.flatMap((i) => [i.prompt, ...(i.follow_up ? [i.follow_up] : [])]),
+      lines.rafaga_start ?? '', lines.hilo_start ?? '', lines.hilo_end ?? '', lines.vuelta_start ?? '',
+      ...[...g.items, ...(g.stages?.vuelta ? g.vuelta : [])].flatMap((i) => [i.prompt, ...(i.follow_up ? [i.follow_up] : [])]),
     ].filter(Boolean));
 
     await say(lines.intro);
@@ -146,32 +154,59 @@ export function Game({ code }: { code: string }) {
       if (c.kind === 'obvious_lie') poly.current?.jolt(0.9);
     }
     await say(lines.calibration_end);
+
+    // Ráfaga al tacto: sin voz, sin mentiras. Lo primero que les sale.
+    if (g.stages?.rafaga && g.rafaga.length > 0) {
+      setHud((h) => ({ ...h, label: 'RÁFAGA' }));
+      await say(lines.rafaga_start || 'Ráfaga. No pienses. Tocá.');
+      const taps = await overlayStep<Tap[]>({ mode: 'rafaga' });
+      pending.push(api.current!.taps(taps));
+    }
+
     await say(lines.game_start);
 
-    const commits: ('truth' | 'lie')[] = [];
-    let tickets = 0;
-    for (const item of g.items) {
+    const voiced: Shown[] = [...g.items, ...(g.stages?.vuelta ? g.vuelta : [])];
+    const hiloAfter = g.stages?.hilo ? Math.ceil(g.items.length / 2) : -1;
+    let lies = 0, answered = 0, tickets = 0, multiplier = 1;
+
+    for (let k = 0; k < voiced.length; k++) {
+      const item = voiced[k];
+      if (k === hiloAfter) {
+        setHud((h) => ({ ...h, label: 'MAYOR O MENOR' }));
+        setCurrent(null);
+        await say(lines.hilo_start || 'Mayor o menor.');
+        multiplier = await overlayStep<number>({ mode: 'hilo' });
+        setHud((h) => ({ ...h, multiplier }));
+        if (lines.hilo_end) await say(lines.hilo_end);
+      }
+      if (k === g.items.length && lines.vuelta_start) {
+        setCurrent(null);
+        setHud((h) => ({ ...h, label: 'LA VUELTA' }));
+        await say(lines.vuelta_start);
+      }
       const n = item.position;
-      setHud((h) => ({ ...h, label: `PREGUNTA ${n}`, n }));
+      setHud((h) => ({ ...h, label: k >= g.items.length ? `VUELTA ${k - g.items.length + 1}` : `PREGUNTA ${n}`, n }));
+      setCurrent(item);
       await say(item.prompt);
 
-      // Marca secreta: verdad o mentira. El presupuesto obliga al final.
-      const used = commits.filter((c) => c === 'lie').length;
-      const left = g.rules.lies - used, remaining = g.items.length - commits.length;
-      const shownAt = performance.now();
-      const committed = await new Promise<'truth' | 'lie'>((resolve) => {
-        decision.current = resolve;
-        setStep({ mode: 'decide', mustLie: left > 0 && left >= remaining, mustTell: left <= 0 });
-      });
-      decision.current = null;
-      const decisionMs = Math.round(performance.now() - shownAt);
-      commits.push(committed);
-      setHud((h) => ({ ...h, liesLeft: g.rules.lies - commits.filter((c) => c === 'lie').length }));
-
+      // Un solo botón: MENTIR. Si no lo toca, es verdad. El presupuesto obliga al final.
+      const left = g.rules.lies - lies, remaining = voiced.length - answered;
+      const forced = left > 0 && left >= remaining, banned = left <= 0;
+      lieAt.current = forced ? 0 : null;
+      setLieOn(forced);
+      const listenStarted = performance.now();
       const mainPause = item.answer_type === 'open' ? 1800 : item.answer_type === 'choice' ? 1400 : 1100;
-      let heard = await hear(20000, mainPause);
-      if (heard.silent && lines.not_heard) { await say(lines.not_heard); heard = await hear(20000, mainPause); }
-      const first = api.current!.answer({ item_id: item.id, stage: 'main', attempt: 1, committed, features: feats(heard, decisionMs) }, heard.audio);
+      let heard = await hear(20000, mainPause, { left, forced, banned });
+      if (heard.silent && lines.not_heard) { await say(lines.not_heard); heard = await hear(20000, mainPause, { left, forced, banned }); }
+      const committed: 'truth' | 'lie' = lieAt.current !== null ? 'lie' : 'truth';
+      const lieMs = lieAt.current && lieAt.current > 0 ? Math.round(lieAt.current - listenStarted) : null;
+      lieAt.current = null;
+      setLieOn(false);
+      if (committed === 'lie') lies++;
+      answered++;
+      setHud((h) => ({ ...h, liesLeft: g.rules.lies - lies }));
+
+      const first = api.current!.answer({ item_id: item.id, stage: 'main', attempt: 1, committed, features: { ...feats(heard, null), lie_press_ms: lieMs } }, heard.audio);
       pending.push(first);
 
       // Si tardó en arrancar o se frenó, el papel salta. Sin comentario: pasa directo a la siguiente.
@@ -201,6 +236,7 @@ export function Game({ code }: { code: string }) {
         setHud((h) => ({ ...h, tickets }));
       }
     }
+    setCurrent(null);
 
     // Todas las respuestas tienen que estar guardadas antes de acusar.
     setStep({ mode: 'wait' });
@@ -227,6 +263,21 @@ export function Game({ code }: { code: string }) {
     setPhase('result');
   }
 
+  // Pantallas que tapan el polígrafo (ráfaga, mayor o menor): el guion espera a que terminen.
+  function overlayStep<T>(st: Step): Promise<T> {
+    return new Promise<T>((resolve) => {
+      overlay.current = (v) => { overlay.current = null; resolve(v as T); };
+      setStep(st);
+    });
+  }
+
+  function markLie() {
+    if (lieAt.current !== null) return;
+    lieAt.current = performance.now();
+    setLieOn(true);
+    try { navigator.vibrate?.(25); } catch { /* */ }
+  }
+
   function feats(h: { onset_ms: number | null; speech_ms: number; pauses: number; pitch_mean: number | null }, decisionMs: number | null) {
     return { decision_ms: decisionMs, onset_ms: h.onset_ms, speech_ms: h.speech_ms, pauses: h.pauses, pitch_mean: h.pitch_mean };
   }
@@ -244,7 +295,6 @@ export function Game({ code }: { code: string }) {
 
   // ---------- pantallas ----------
   const g = session?.game;
-  const current: GameItem | undefined = g?.items.find((i) => i.position === hud.n);
 
   return (
     <main className="app">
@@ -255,13 +305,16 @@ export function Game({ code }: { code: string }) {
         <div className="hud" aria-live="off">
           <span>{session?.alias} · {hud.label}</span>
           <span className="hud-right">
-            {!session?.replay && <b className="tix">{hud.tickets} <small>tickets</small></b>}
+            {!session?.replay && <b className="tix">{hud.tickets}{hud.multiplier > 1 && <em> x{String(hud.multiplier).replace('.', ',')}</em>} <small>tickets</small></b>}
             <span className="lies" aria-label={`Te quedan ${hud.liesLeft} mentiras`}>
               {Array.from({ length: g?.rules.lies ?? 3 }, (_, i) => <i key={i} className={i < hud.liesLeft ? 'on' : ''} />)}
             </span>
           </span>
         </div>
       )}
+
+      {step.mode === 'rafaga' && g && <Rafaga items={g.rafaga} seconds={g.rafaga_seconds || 3} onDone={(t) => overlay.current?.(t)} />}
+      {step.mode === 'hilo' && api.current && <Hilo play={(a, st) => api.current!.hilo(a, st)} onDone={(m) => overlay.current?.(m)} />}
 
       {stamp && phase !== 'result' && <div className={`stamp ${stamp === 'escaped' ? 'ok' : ''}`}>{stamp === 'escaped' ? 'ZAFASTE' : 'TE AGARRÓ'}</div>}
 
@@ -295,25 +348,28 @@ export function Game({ code }: { code: string }) {
 
           {(phase === 'play' || phase === 'accuse') && (
             <>
-              {current && step.mode !== 'machine' && phase === 'play' && hud.label.startsWith('PREGUNTA') && (
-                <p className={`question ${current.answer_type === 'choice' ? 'long' : ''}`}>{current.screen_text}</p>
+              {current && step.mode !== 'machine' && phase === 'play' && (
+                <>
+                  {current.media_url && (/\.(mp4|webm|mov|m4v)($|\?)/i.test(current.media_url)
+                    ? <video className="thumb" src={current.media_url} autoPlay muted playsInline loop />
+                    // eslint-disable-next-line @next/next/no-img-element
+                    : <img className="thumb" src={current.media_url} alt="" />)}
+                  <p className={`question ${current.answer_type === 'choice' ? 'long' : ''}`}>{current.screen_text}</p>
+                </>
               )}
-              {!(current?.options && step.mode !== 'machine' && phase === 'play') && <p className="subtitle" aria-live="polite">{subtitle}</p>}
-              {step.mode === 'decide' && (
-                <div className="decide">
-                  <p className="hint">Marcalo en secreto. La máquina no ve tu pantalla.</p>
-                  <div className="row">
-                    <button className="choice" disabled={step.mustLie} onClick={() => decision.current?.('truth')}>Verdad</button>
-                    <button className="choice lie" disabled={step.mustTell} onClick={() => decision.current?.('lie')}>Mentira</button>
-                  </div>
-                  {step.mustLie && <p className="hint">Te quedan mentiras y se acaban las preguntas: esta va mentira.</p>}
-                  {step.mustTell && <p className="hint">Ya usaste tus mentiras: de acá al final, verdad.</p>}
-                </div>
-              )}
+              {!(current && step.mode !== 'machine' && phase === 'play') && <p className="subtitle" aria-live="polite">{subtitle}</p>}
               {step.mode === 'listen' && (
-                <div className="listen">
-                  <span className="rec" aria-hidden /> <span>Te escucho</span>
-                  <button className="done" onClick={() => ear.current?.stop()}>Listo</button>
+                <div className="decide">
+                  {step.lie && !step.lie.banned && (
+                    <button className={`choice lie big ${lieOn ? 'armed' : ''}`} disabled={lieOn} onClick={markLie}>
+                      {lieOn ? (step.lie.forced ? 'Esta va mentira' : 'Vas a mentir') : `Mentir · quedan ${step.lie.left}`}
+                    </button>
+                  )}
+                  {step.lie?.banned && <p className="hint">Sin mentiras. De acá al final, verdad.</p>}
+                  <div className="listen">
+                    <span className="rec" aria-hidden /> <span>Te escucho</span>
+                    <button className="done" onClick={() => ear.current?.stop()}>Listo</button>
+                  </div>
                 </div>
               )}
               {step.mode === 'wait' && <div className="listen muted"><span className="dots" aria-hidden />Anotando</div>}
@@ -339,21 +395,19 @@ export function Game({ code }: { code: string }) {
               : `La máquina encontró ${result.caught} de tus ${result.lies} mentiras.`}
           </p>
           <ul className="lies-list" aria-label="Tus mentiras">
-            {result.your_lies.map((pos) => {
-              const item = g.items.find((i) => i.position === pos);
-              const got = result.picks.some((p) => p.position === pos);
-              return (
-                <li key={pos} className={got ? 'got' : 'passed'}>
-                  <span>{item?.screen_text}</span>
-                  <b>{got ? 'Te agarró' : 'Zafaste'}</b>
-                </li>
-              );
-            })}
+            {(result.lies_detail ?? result.your_lies.map((pos) => ({
+              item_id: String(pos), text: g.items.find((i) => i.position === pos)?.screen_text ?? '', got: result.picks.some((p) => p.position === pos),
+            }))).map((l) => (
+              <li key={l.item_id} className={l.got ? 'got' : 'passed'}>
+                <span>{l.text}</span>
+                <b>{l.got ? 'Te agarró' : 'Zafaste'}</b>
+              </li>
+            ))}
           </ul>
           <div className="prize">
             {result.replay
               ? <span>Revancha: sin premio.</span>
-              : <span><b>+{result.tickets.total}</b> Golden Tickets</span>}
+              : <span><b>+{result.tickets.total}</b> Golden Tickets{(result.multiplier ?? 1) > 1 && <> · x{String(result.multiplier).replace('.', ',')}</>}</span>}
             {result.ranking.position && <span>#{result.ranking.position} de {result.ranking.players}</span>}
           </div>
           <div className="actions">

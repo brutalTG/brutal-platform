@@ -1,14 +1,15 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { from, audit, explain } from '@/lib/db';
+import { db, from, audit, explain } from '@/lib/db';
 import { normalizePhone } from '@/lib/phone';
 import type { FormResult } from '@/components/ui/form';
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? '').trim();
 const int = (f: FormData, k: string) => Number.parseInt(str(f, k), 10);
 
-const KINDS = { calibration: ['calibration', 'obvious_lie'], game: ['fun', 'signal'] } as const;
+const KINDS = { calibration: ['calibration', 'obvious_lie'], game: ['fun', 'signal'], rafaga: ['flash', 'trap'] } as const;
+const MEDIA_BUCKET = 'pressure-media';
 const ANSWER_TYPES = ['choice', 'yes_no', 'agree', 'number', 'open'];
 
 async function experimentSlug(id: string) {
@@ -20,11 +21,18 @@ async function experimentSlug(id: string) {
 export async function saveItem(form: FormData): Promise<FormResult> {
   const id = str(form, 'id');
   const experiment_id = str(form, 'experiment_id');
-  const section = str(form, 'section') as 'calibration' | 'game';
+  const section = str(form, 'section') as 'calibration' | 'game' | 'rafaga';
   const kind = str(form, 'kind');
-  const prompt = str(form, 'prompt');
+  const rafaga = section === 'rafaga';
+  const echo = rafaga && kind === 'flash' && form.get('echo') === 'on';
   const screen_text = str(form, 'screen_text') || null;
-  const answer_type = str(form, 'answer_type');
+  // En la ráfaga, si no vuelve por voz, la máquina no dice nada: el texto de pantalla hace de pregunta.
+  const prompt = rafaga && !echo ? (screen_text ?? '') : str(form, 'prompt');
+  const answer_type = rafaga && !echo ? 'yes_no' : str(form, 'answer_type');
+  const media_url = str(form, 'media_url') || null;
+  const emoji_a = str(form, 'emoji_a') || null;
+  const emoji_b = str(form, 'emoji_b') || null;
+  const correct = str(form, 'correct') || null;
   const follow_up = str(form, 'follow_up') || null;
   const subthesis_id = str(form, 'subthesis_id') || null;
   const source_note = str(form, 'source_note') || null;
@@ -37,7 +45,12 @@ export async function saveItem(form: FormData): Promise<FormResult> {
   const fields: Record<string, string> = {};
   if (!(section in KINDS)) fields.section = 'Elegí una sección.';
   else if (!(KINDS[section] as readonly string[]).includes(kind)) fields.kind = section === 'game' ? 'En el juego: diversión o señal.' : 'En la calibración: verdad o mentira de control.';
-  if (prompt.length < 3) fields.prompt = 'Escribí lo que dice la máquina.';
+  if (rafaga && !screen_text) fields.screen_text = 'Escribí el texto que aparece.';
+  if (rafaga && (!emoji_a || !emoji_b)) fields.emoji_a = 'Poné los dos emojis.';
+  if (rafaga && ((emoji_a?.length ?? 0) > 16 || (emoji_b?.length ?? 0) > 16)) fields.emoji_a = 'Un emoji por botón.';
+  if (kind === 'trap' && !['a', 'b'].includes(correct ?? '')) fields.correct = 'Elegí cuál es el toque correcto.';
+  if (media_url && !/^https:\/\/\S+$/.test(media_url)) fields.media_url = 'Tiene que ser un link https.';
+  if (prompt.length < 3) fields[rafaga && !echo ? 'screen_text' : 'prompt'] = rafaga && !echo ? 'Escribí el texto que aparece.' : 'Escribí lo que dice la máquina.';
   if (prompt.length > 400) fields.prompt = 'Máximo 400 caracteres: la máquina lo dice en voz alta.';
   if (screen_text && screen_text.length > 200) fields.screen_text = 'Máximo 200 caracteres.';
   if (!ANSWER_TYPES.includes(answer_type)) fields.answer_type = 'Elegí cómo se responde.';
@@ -51,8 +64,10 @@ export async function saveItem(form: FormData): Promise<FormResult> {
   if (kind === 'signal' && !subthesis_id) fields.subthesis_id = 'Una pregunta de señal tiene que apuntar a una sub-tesis.';
   if (Object.keys(fields).length) return { ok: false, error: 'Revisá los campos marcados.', fields };
 
-  const row = { section, kind, prompt, screen_text, answer_type, follow_up, follow_up_when, claim_yes, claim_no,
-    option_a: answer_type === 'choice' ? option_a : null, option_b: answer_type === 'choice' ? option_b : null, subthesis_id: kind === 'signal' ? subthesis_id : null, source_note };
+  const row = { section, kind, prompt, screen_text, answer_type, follow_up: rafaga && !echo ? null : follow_up, follow_up_when: rafaga && !echo ? 'always' : follow_up_when,
+    claim_yes: rafaga && !echo ? null : claim_yes, claim_no: rafaga && !echo ? null : claim_no,
+    option_a: answer_type === 'choice' ? option_a : null, option_b: answer_type === 'choice' ? option_b : null, subthesis_id: kind === 'signal' ? subthesis_id : null, source_note,
+    ...(rafaga ? { media_url, emoji_a, emoji_b, echo, correct: kind === 'trap' ? correct : null } : {}) };
   if (id) {
     const { error } = await from('pressure', 'items').update(row).eq('id', id);
     if (error) return { ok: false, error: explain(error)! };
@@ -67,6 +82,22 @@ export async function saveItem(form: FormData): Promise<FormResult> {
   }
   revalidatePath(`/pressure/${await experimentSlug(experiment_id)}`);
   return { ok: true, message: id ? 'Pregunta guardada' : 'Pregunta agregada al final' };
+}
+
+/** Link para subir una imagen o video de la ráfaga directo al almacenamiento (sin pasar por el panel: los videos pesan). */
+export async function mediaUploadUrl(name: string, type: string): Promise<{ ok: true; uploadUrl: string; publicUrl: string } | { ok: false; error: string }> {
+  if (!/^(image\/(jpeg|png|webp|gif)|video\/(mp4|webm|quicktime))$/.test(type)) return { ok: false, error: 'Subí una imagen (jpg, png, webp, gif) o un video (mp4, webm, mov).' };
+  const st = db().storage;
+  const { data: bucket } = await st.getBucket(MEDIA_BUCKET);
+  if (!bucket) {
+    const { error } = await st.createBucket(MEDIA_BUCKET, { public: true, fileSizeLimit: 25_000_000 });
+    if (error && !/exists/i.test(error.message)) return { ok: false, error: error.message };
+  }
+  const ext = (name.split('.').pop() ?? '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5) || (type.startsWith('video') ? 'mp4' : 'jpg');
+  const path = `rafaga/${crypto.randomUUID()}.${ext}`;
+  const { data, error } = await st.from(MEDIA_BUCKET).createSignedUploadUrl(path);
+  if (error || !data) return { ok: false, error: error?.message ?? 'No pude preparar la subida.' };
+  return { ok: true, uploadUrl: data.signedUrl, publicUrl: st.from(MEDIA_BUCKET).getPublicUrl(path).data.publicUrl };
 }
 
 /** Sube o baja una pregunta dentro de su sección. */
@@ -100,7 +131,13 @@ export async function saveSettings(form: FormData): Promise<FormResult> {
   const id = str(form, 'experiment_id');
   const { data: exp, error: e1 } = await from('pressure', 'experiments').select('definition, slug').eq('id', id).single();
   if (e1 || !exp) return { ok: false, error: explain(e1) ?? 'No encontré el juego.' };
-  const { count } = await from('pressure', 'items').select('id', { count: 'exact', head: true }).eq('experiment_id', id).eq('section', 'game').eq('enabled', true);
+  const stages = { rafaga: form.get('stage_rafaga') === 'on', hilo: form.get('stage_hilo') === 'on', vuelta: form.get('stage_vuelta') === 'on' };
+  const { count: gameCount } = await from('pressure', 'items').select('id', { count: 'exact', head: true }).eq('experiment_id', id).eq('section', 'game').eq('enabled', true);
+  const { count: echoCount } = await from('pressure', 'items').select('id', { count: 'exact', head: true }).eq('experiment_id', id).eq('section', 'rafaga').eq('echo', true).eq('enabled', true);
+  // Se puede mentir en las del juego y en las de la vuelta.
+  const count = (gameCount ?? 0) + (stages.rafaga && stages.vuelta ? echoCount ?? 0 : 0);
+  const seconds = Number(str(form, 'rafaga_seconds').replace(',', '.'));
+  const ladder = str(form, 'ladder').split(/[\s;]+|,(?=\s)/).map((x) => Number(x.replace(',', '.').replace(/^x/i, ''))).filter((x) => Number.isFinite(x) && x > 0);
 
   const lies = int(form, 'lies'), winMax = int(form, 'win_max_caught');
   const perAnswer = int(form, 'per_answer'), max = int(form, 'max'), winBonus = int(form, 'win_bonus');
@@ -115,6 +152,8 @@ export async function saveSettings(form: FormData): Promise<FormResult> {
   if (!str(form, 'accusation').includes('{claims}')) fields.accusation = 'Tiene que incluir {claims}: ahí va lo que dijo.';
   if ([str(form, 'pitch1'), str(form, 'pitch2'), str(form, 'pitch3')].filter(Boolean).length === 0) fields.pitch1 = 'Al menos una frase.';
   if (String(form.get('consent') ?? '').trim().length < 20) fields.consent = 'Explicá que es con voz y qué pasa con lo que dice.';
+  if (!(seconds >= 1.5 && seconds <= 10)) fields.rafaga_seconds = 'Entre 1,5 y 10 segundos.';
+  if (stages.hilo && (ladder.length < 1 || ladder.length > 10 || ladder.some((x, i) => x > 1000 || (i > 0 && x <= ladder[i - 1])))) fields.ladder = 'De menor a mayor, separados por espacios. Ej: 1,5 2 3 5 10';
   if (Object.keys(fields).length) return { ok: false, error: 'Revisá los campos marcados.', fields };
 
   const prev = (exp as { definition: Record<string, any> }).definition;
@@ -129,6 +168,9 @@ export async function saveSettings(form: FormData): Promise<FormResult> {
     },
     rules: { ...prev.rules, lies, win_max_caught: winMax },
     rewards: { per_answer: perAnswer, max, win_bonus: winBonus },
+    stages,
+    rafaga: { ...(prev.rafaga ?? {}), seconds },
+    hilo: { ...(prev.hilo ?? {}), multipliers: stages.hilo ? ladder : (prev.hilo?.multipliers ?? ladder) },
     voice: { ...prev.voice, voice_id: voiceId, fallback_voice_id: str(form, 'fallback_voice_id') || prev.voice?.fallback_voice_id },
     lines: {
       ...prev.lines,
@@ -136,6 +178,7 @@ export async function saveSettings(form: FormData): Promise<FormResult> {
       game_start: str(form, 'game_start'), unclear: str(form, 'unclear'), not_heard: str(form, 'not_heard'),
       accusation: str(form, 'accusation'), win: str(form, 'win'), lose: str(form, 'lose'),
       result_escaped: str(form, 'result_escaped'), result_caught: str(form, 'result_caught'),
+      rafaga_start: str(form, 'rafaga_start'), hilo_start: str(form, 'hilo_start'), hilo_end: str(form, 'hilo_end'), vuelta_start: str(form, 'vuelta_start'),
     },
   };
   const { error } = await from('pressure', 'experiments').update({ definition }).eq('id', id);

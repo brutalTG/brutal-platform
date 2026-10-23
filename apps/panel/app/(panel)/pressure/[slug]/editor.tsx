@@ -1,18 +1,20 @@
 'use client';
 
 import * as React from 'react';
-import { ArrowDown, ArrowUp, Eye, EyeOff, Pencil, Plus, Power } from 'lucide-react';
+import { ArrowDown, ArrowUp, Eye, EyeOff, Pencil, Plus, Power, Upload } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { ConfirmAction } from '@/components/ui/confirm';
-import { ActionButton, Field, FormDialog, Input, Select, Textarea } from '@/components/ui/form';
+import { ActionButton, Checkbox, Field, FormDialog, Input, Select, Textarea } from '@/components/ui/form';
 import { useToast } from '@/components/ui/toast';
-import { moveItem, saveItem, saveSettings, setExperimentStatus, toggleItem } from '@/lib/pressure-actions';
+import { mediaUploadUrl, moveItem, saveItem, saveSettings, setExperimentStatus, toggleItem } from '@/lib/pressure-actions';
 
+export type Section = 'calibration' | 'game' | 'rafaga';
 export type Item = {
-  id: string; section: 'calibration' | 'game'; position: number; kind: string; prompt: string; screen_text: string | null;
+  id: string; section: Section; position: number; kind: string; prompt: string; screen_text: string | null;
   answer_type: string; follow_up: string | null; subthesis_id: string | null; source_note: string | null; enabled: boolean;
   follow_up_when: string; claim_yes: string | null; claim_no: string | null; option_a: string | null; option_b: string | null;
+  media_url?: string | null; emoji_a?: string | null; emoji_b?: string | null; echo?: boolean; correct?: string | null;
 };
 export type Subthesis = { id: string; code: string; statement: string };
 
@@ -25,7 +27,14 @@ const ANSWERS = [
   { value: 'number', label: 'Un número' }, { value: 'open', label: 'Libre' },
 ];
 
-export function ItemDialog({ experimentId, section, item, subtheses, trigger }: {
+export function ItemDialog(props: {
+  experimentId: string; section: Section; item?: Item; subtheses: Subthesis[]; trigger: React.ReactNode;
+}) {
+  if (props.section === 'rafaga') return <RafagaDialog {...props} />;
+  return <VoiceDialog {...props} section={props.section} />;
+}
+
+function VoiceDialog({ experimentId, section, item, subtheses, trigger }: {
   experimentId: string; section: 'calibration' | 'game'; item?: Item; subtheses: Subthesis[]; trigger: React.ReactNode;
 }) {
   const [kind, setKind] = React.useState(item?.kind ?? (section === 'game' ? 'fun' : 'calibration'));
@@ -109,7 +118,126 @@ export function ItemDialog({ experimentId, section, item, subtheses, trigger }: 
   );
 }
 
-export function AddItemButton(props: { experimentId: string; section: 'calibration' | 'game'; subtheses: Subthesis[] }) {
+/** Una card de la ráfaga: texto o imagen/video, dos emojis. Puede volver por voz al final. */
+function RafagaDialog({ experimentId, item, trigger }: { experimentId: string; item?: Item; subtheses: Subthesis[]; trigger: React.ReactNode }) {
+  const [kind, setKind] = React.useState(item?.kind ?? 'flash');
+  const [echo, setEcho] = React.useState(Boolean(item?.echo));
+  const [atype, setAtype] = React.useState(item?.answer_type === 'choice' ? 'choice' : 'yes_no');
+  const [media, setMedia] = React.useState(item?.media_url ?? '');
+  const [uploading, setUploading] = React.useState(false);
+  const [uploadError, setUploadError] = React.useState<string | null>(null);
+  const isVideo = /\.(mp4|webm|mov|m4v)($|\?)/i.test(media);
+
+  async function upload(file: File) {
+    setUploading(true); setUploadError(null);
+    try {
+      if (file.size > 25_000_000) throw new Error('Máximo 25 MB.');
+      const r = await mediaUploadUrl(file.name, file.type);
+      if (!r.ok) throw new Error(r.error);
+      const res = await fetch(r.uploadUrl, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } });
+      if (!res.ok) throw new Error(`No se pudo subir (${res.status}).`);
+      setMedia(r.publicUrl);
+    } catch (e) {
+      setUploadError(e instanceof Error ? e.message : 'No se pudo subir.');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <FormDialog
+      wide
+      trigger={trigger}
+      title={item ? `Editar ráfaga ${item.position}` : 'Nueva card de ráfaga'}
+      description="Se ve 3 segundos y se contesta tocando un emoji. Sin voz y sin mentiras."
+      submitLabel={item ? 'Guardar' : 'Agregar'}
+      action={saveItem}
+    >
+      {(err) => (
+        <>
+          <input type="hidden" name="id" value={item?.id ?? ''} />
+          <input type="hidden" name="experiment_id" value={experimentId} />
+          <input type="hidden" name="section" value="rafaga" />
+          <input type="hidden" name="media_url" value={media} />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Tipo" error={err.kind}>
+              <Select name="kind" value={kind} onChange={(e) => setKind(e.target.value)} options={[
+                { value: 'flash', label: 'Reacción: lo primero que te sale' }, { value: 'trap', label: 'Trampa: ¿está leyendo?' },
+              ]} />
+            </Field>
+            {kind === 'trap' && (
+              <Field label="Toque correcto" error={err.correct}>
+                <Select name="correct" defaultValue={item?.correct ?? 'b'} options={[{ value: 'a', label: 'El primer emoji' }, { value: 'b', label: 'El segundo emoji' }]} />
+              </Field>
+            )}
+          </div>
+          <Field label="Texto en pantalla" hint="Corto y en mayúsculas. Si hay imagen o video, va encima." error={err.screen_text}>
+            <Input name="screen_text" defaultValue={item?.screen_text ?? ''} maxLength={200} placeholder="LABURAR EN EL ESTADO" />
+          </Field>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Emoji 1" hint={echo ? 'Equivale a “sí” (o a la opción A) en la vuelta por voz.' : undefined} error={err.emoji_a}>
+              <Input name="emoji_a" defaultValue={item?.emoji_a ?? ''} maxLength={16} className="text-xl" placeholder="🫡" />
+            </Field>
+            <Field label="Emoji 2" error={err.emoji_b}>
+              <Input name="emoji_b" defaultValue={item?.emoji_b ?? ''} maxLength={16} className="text-xl" placeholder="🤮" />
+            </Field>
+          </div>
+          <Field label="Imagen o video" hint="Opcional. Hasta 25 MB. El video se ve sin sonido y en loop." error={err.media_url ?? uploadError ?? undefined}>
+            <div className="flex flex-wrap items-center gap-3">
+              {media && (isVideo
+                ? <video src={media} className="h-20 w-20 rounded object-cover" muted autoPlay loop playsInline />
+                // eslint-disable-next-line @next/next/no-img-element
+                : <img src={media} alt="" className="h-20 w-20 rounded object-cover" />)}
+              <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded border border-border-strong px-3 text-sm text-fg-2 hover:bg-sunken">
+                <Upload className="size-4" />{uploading ? 'Subiendo…' : media ? 'Cambiar' : 'Subir archivo'}
+                <input type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime" className="sr-only" disabled={uploading}
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); }} />
+              </label>
+              {media && <Button type="button" variant="ghost" size="sm" onClick={() => setMedia('')}>Quitar</Button>}
+            </div>
+          </Field>
+          {kind === 'flash' && (
+            <Checkbox name="echo" label="Vuelve al final por voz (ahí se puede mentir)" checked={echo} onChange={(e) => setEcho(e.target.checked)} />
+          )}
+          {echo && kind === 'flash' && (
+            <>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <Field label="Lo que pregunta la máquina en la vuelta" className="sm:col-span-2" error={err.prompt}>
+                  <Textarea name="prompt" defaultValue={item?.echo ? item.prompt : ''} maxLength={400} placeholder="¿Te gustaría laburar en el Estado? Sí o no." />
+                </Field>
+                <Field label="Cómo se responde" error={err.answer_type}>
+                  <Select name="answer_type" value={atype} onChange={(e) => setAtype(e.target.value)} options={[{ value: 'yes_no', label: 'Sí o no' }, { value: 'choice', label: 'Elige entre dos' }]} />
+                </Field>
+              </div>
+              {atype === 'choice' && (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label="Opción A (emoji 1)" error={err.option_a}><Input name="option_a" defaultValue={item?.option_a ?? ''} maxLength={80} /></Field>
+                  <Field label="Opción B (emoji 2)" error={err.option_b}><Input name="option_b" defaultValue={item?.option_b ?? ''} maxLength={80} /></Field>
+                </div>
+              )}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label={atype === 'choice' ? 'Si eligió A, dijo…' : 'Si dijo sí, dijo…'} hint='Para la acusación: "Mentiste cuando dijiste…"' error={err.claim_yes}>
+                  <Input name="claim_yes" defaultValue={item?.claim_yes ?? ''} maxLength={120} />
+                </Field>
+                <Field label={atype === 'choice' ? 'Si eligió B, dijo…' : 'Si dijo no, dijo…'} error={err.claim_no}>
+                  <Input name="claim_no" defaultValue={item?.claim_no ?? ''} maxLength={120} />
+                </Field>
+              </div>
+              <Field label="Repregunta" hint="Opcional." error={err.follow_up}>
+                <Input name="follow_up" defaultValue={item?.follow_up ?? ''} maxLength={300} />
+              </Field>
+            </>
+          )}
+          <Field label="Fuente del dato" hint="Solo para el equipo.">
+            <Input name="source_note" defaultValue={item?.source_note ?? ''} />
+          </Field>
+        </>
+      )}
+    </FormDialog>
+  );
+}
+
+export function AddItemButton(props: { experimentId: string; section: Section; subtheses: Subthesis[] }) {
   return <ItemDialog {...props} trigger={<Button variant={props.section === 'game' ? 'primary' : 'secondary'} icon={<Plus />}>{props.section === 'game' ? 'Agregar pregunta' : 'Agregar'}</Button>} />;
 }
 
@@ -153,6 +281,7 @@ export function StatusControl({ id, status }: { id: string; status: string }) {
 type Def = {
   pitch?: string[]; screens?: { entry_note?: string; consent?: string; consent_note?: string }; rules: { lies: number; win_max_caught: number }; rewards: { per_answer: number; max: number; win_bonus: number };
   voice: { voice_id: string; fallback_voice_id?: string }; lines: Record<string, string | string[]>;
+  stages?: { rafaga?: boolean; hilo?: boolean; vuelta?: boolean }; rafaga?: { seconds?: number }; hilo?: { multipliers?: number[] };
 };
 
 export function SettingsForm({ experimentId, def }: { experimentId: string; def: Def }) {
@@ -193,6 +322,21 @@ export function SettingsForm({ experimentId, def }: { experimentId: string; def:
           </Field>
         </div>
       ))}
+      {section('Etapas', 'Lo que rompe el ritmo de las preguntas con voz. Se prenden y apagan para probar combinaciones.', (
+        <>
+          <div className="grid gap-2">
+            <Checkbox name="stage_rafaga" label="Ráfaga al tacto después de calibrar" defaultChecked={def.stages?.rafaga ?? false} />
+            <Checkbox name="stage_vuelta" label="La vuelta: las cards marcadas vuelven por voz al final" defaultChecked={def.stages?.vuelta ?? false} />
+            <Checkbox name="stage_hilo" label="Mayor o menor en la mitad del juego (multiplica los tickets)" defaultChecked={def.stages?.hilo ?? false} />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Segundos por card de ráfaga" error={errors.rafaga_seconds}><Input name="rafaga_seconds" inputMode="decimal" defaultValue={String(def.rafaga?.seconds ?? 3).replace('.', ',')} /></Field>
+            <Field label="Multiplicadores de mayor o menor" hint="Uno por acierto, de menor a mayor." error={errors.ladder}>
+              <Input name="ladder" defaultValue={(def.hilo?.multipliers ?? [1.5, 2, 3, 5, 10]).map((x) => String(x).replace('.', ',')).join(' ')} />
+            </Field>
+          </div>
+        </>
+      ))}
       {section('Recompensas', 'Golden Tickets. Se cobran una sola vez por nodo; las revanchas no pagan.', (
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label="Por respuesta" error={errors.per_answer}><Input name="per_answer" type="number" min={0} defaultValue={def.rewards.per_answer} /></Field>
@@ -230,6 +374,14 @@ export function SettingsForm({ experimentId, def }: { experimentId: string; def:
             <Field label="Después de calibrar"><Textarea name="calibration_end" defaultValue={l.calibration_end} /></Field>
           </div>
           <Field label="Arranca el juego"><Textarea name="game_start" defaultValue={l.game_start} /></Field>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Antes de la ráfaga"><Input name="rafaga_start" defaultValue={l.rafaga_start ?? ''} /></Field>
+            <Field label="Antes de la vuelta"><Input name="vuelta_start" defaultValue={l.vuelta_start ?? ''} /></Field>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Antes de mayor o menor"><Textarea name="hilo_start" defaultValue={l.hilo_start ?? ''} /></Field>
+            <Field label="Después de mayor o menor"><Input name="hilo_end" defaultValue={l.hilo_end ?? ''} /></Field>
+          </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Si no entendió"><Input name="unclear" defaultValue={l.unclear} /></Field>
             <Field label="Si no escuchó"><Input name="not_heard" defaultValue={l.not_heard} /></Field>
