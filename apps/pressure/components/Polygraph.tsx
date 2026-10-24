@@ -10,7 +10,10 @@ export type PolygraphHandle = {
   setLevel: (level: number) => void; // volumen de la voz, 0..1
   setFrozen: (frozen: boolean) => void; // el papel se detiene (acusación)
   setSpeed: (factor: number) => void;
+  setDuo: (bg: string, fg: string) => void; // duotono de Drops: negro → fondo, blanco → frente
 };
+
+const rgb = (hex: string) => { const h = hex.replace('#', ''); return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)); };
 
 const IW = 1438, IH = 2576;
 const PAPER = { x0: 185, x1: 1225, y0: 700, y1: 1548 };
@@ -34,7 +37,7 @@ export const Polygraph = forwardRef<PolygraphHandle, { panelHeight: number; onTa
   function Polygraph({ panelHeight, onTap, label = 'Polígrafo en funcionamiento' }, ref) {
     const wrap = useRef<HTMLDivElement>(null);
     const canvas = useRef<HTMLCanvasElement>(null);
-    const api = useRef({ jolt: (_: number) => {}, relayout: () => {}, level: 0, frozen: false, speed: 1 });
+    const api = useRef({ jolt: (_: number) => {}, relayout: () => {}, level: 0, frozen: false, speed: 1, duo: null as null | { bg: number[]; fg: number[] } });
     const panelH = useRef(panelHeight);
     panelH.current = panelHeight;
 
@@ -43,10 +46,15 @@ export const Polygraph = forwardRef<PolygraphHandle, { panelHeight: number; onTa
       setLevel: (l) => { api.current.level = Math.max(0, Math.min(1, l)); },
       setFrozen: (f) => { api.current.frozen = f; },
       setSpeed: (s) => { api.current.speed = s; },
+      setDuo: (bg, fg) => { api.current.duo = { bg: rgb(bg), fg: rgb(fg) }; },
     }), []);
 
     useEffect(() => {
-      const cv = canvas.current!, box = wrap.current!, ctx = cv.getContext('2d')!;
+      const cv = canvas.current!, box = wrap.current!, out = cv.getContext('2d')!;
+      // Se dibuja en una capa aparte y después se pasa a duotono: resultado = fondo + gris × (frente − fondo), canal por canal.
+      const frameC = document.createElement('canvas'), ctx = frameC.getContext('2d')!;
+      const grayC = document.createElement('canvas'), gctx = grayC.getContext('2d')!;
+      const tintC = document.createElement('canvas'), tctx = tintC.getContext('2d')!;
       const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
       const SPEED = reduce ? 22 : 52;
       let W = 0, H = 0, DPR = 1, S = 1, OX = 0;
@@ -90,6 +98,7 @@ export const Polygraph = forwardRef<PolygraphHandle, { panelHeight: number; onTa
         DPR = Math.min(2, window.devicePixelRatio || 1);
         W = box.clientWidth; H = box.clientHeight;
         cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+        for (const c of [frameC, grayC, tintC]) { c.width = cv.width; c.height = cv.height; }
         const cover = Math.max(W / IW, H / IH);
         // El polígrafo nunca pasa de 42% de la pantalla: el texto manda.
         const fit = Math.min(H - panelH.current - 6, H * 0.42) / 1585;
@@ -198,24 +207,45 @@ export const Polygraph = forwardRef<PolygraphHandle, { panelHeight: number; onTa
         tg = ctx.createLinearGradient(0, IH * S - 60, 0, IH * S); tg.addColorStop(0, 'rgba(5,5,5,0)'); tg.addColorStop(1, '#050505'); ctx.fillStyle = tg; ctx.fillRect(0, IH * S - 60, W, 60);
       }
 
+      // Pasa la capa a la pantalla, en duotono si hay colores.
+      function compose() {
+        const w = cv.width, h = cv.height, duo = api.current.duo;
+        out.setTransform(1, 0, 0, 1, 0, 0);
+        out.globalCompositeOperation = 'source-over';
+        if (!duo) { out.drawImage(frameC, 0, 0); return; }
+        // Gris: misma luz, sin color.
+        gctx.globalCompositeOperation = 'source-over'; gctx.drawImage(frameC, 0, 0);
+        gctx.globalCompositeOperation = 'saturation'; gctx.fillStyle = '#808080'; gctx.fillRect(0, 0, w, h);
+        const part = (sign: 1 | -1) => duo.fg.map((f, i) => Math.max(0, sign * (f - duo.bg[i])));
+        const tint = (c: number[]) => {
+          tctx.globalCompositeOperation = 'source-over'; tctx.drawImage(grayC, 0, 0);
+          tctx.globalCompositeOperation = 'multiply'; tctx.fillStyle = `rgb(${c.join(',')})`; tctx.fillRect(0, 0, w, h);
+        };
+        out.fillStyle = `rgb(${duo.bg.join(',')})`; out.fillRect(0, 0, w, h);
+        const neg = part(-1), pos = part(1);
+        if (neg.some(Boolean)) { tint(neg); out.globalCompositeOperation = 'difference'; out.drawImage(tintC, 0, 0); }
+        if (pos.some(Boolean)) { tint(pos); out.globalCompositeOperation = 'lighter'; out.drawImage(tintC, 0, 0); }
+        out.globalCompositeOperation = 'source-over';
+      }
+
       function frame(now: number) {
         if (!running) return;
         const dt = Math.min(0.05, (now - last) / 1000); last = now;
-        tick(dt); draw(); raf = requestAnimationFrame(frame);
+        tick(dt); draw(); compose(); raf = requestAnimationFrame(frame);
       }
       const onVis = () => { running = !document.hidden; if (running) { last = performance.now(); raf = requestAnimationFrame(frame); } };
       document.addEventListener('visibilitychange', onVis);
-      api.current.relayout = () => { layout(); draw(); };
-      const ro = new ResizeObserver(() => { layout(); draw(); });
+      api.current.relayout = () => { layout(); draw(); compose(); };
+      const ro = new ResizeObserver(() => { layout(); draw(); compose(); });
       ro.observe(box);
 
-      layout(); draw();
+      layout(); draw(); compose();
       const im = new Image();
       im.onload = () => {
         img = im; buildLayers(); layout();
         const pre = Math.ceil(((PAPER.y1 - 900) / SPEED) * 60);
         for (let i = 0; i < pre; i++) tick(1 / 60);
-        draw(); last = performance.now(); raf = requestAnimationFrame(frame);
+        draw(); compose(); last = performance.now(); raf = requestAnimationFrame(frame);
       };
       im.src = '/maquina.jpg';
       return () => { running = false; cancelAnimationFrame(raf); ro.disconnect(); document.removeEventListener('visibilitychange', onVis); };

@@ -6,7 +6,8 @@ import { Polygraph, type PolygraphHandle } from '@/components/Polygraph';
 import { Rich } from '@/components/Rich';
 import { Rafaga } from '@/components/Rafaga';
 import { Hilo } from '@/components/Hilo';
-import { Dots, Header, type Clock } from '@/components/Header';
+import { DropHeader, useRewardEvent, type Clock } from '@/components/drops/SurveyHeader';
+import { getNextDuotonePair } from '@/components/drops/color-generator';
 import { ApiError, client, intro as fetchIntro, start, type Finish, type Intro, type Game as GameDef, type GameItem, type Start, type Tap } from '@/lib/api';
 import { Listener, Machine } from '@/lib/voice';
 
@@ -40,7 +41,19 @@ export function Game({ code }: { code: string }) {
   const [clock, setClock] = useState<Clock | null>(null);
   const [tickets, setTickets] = useState(0);
   const [multiplier, setMultiplier] = useState(1);
-  const [progress, setProgress] = useState<{ n: number; total: number } | null>(null);
+  // Barra de historias de Drops: un segmento por pantalla del juego.
+  const [story, setStory] = useState({ n: 0, total: 1 });
+  const [reward, fireReward] = useRewardEvent();
+  // Duotono de Drops: arranca en negro y amarillo; desde la primera pregunta cambia en cada toque.
+  const [duo, setDuo] = useState({ bg: '#000000', fg: '#EAFF00' });
+  const nextDuo = useCallback(() => setDuo(getNextDuotonePair()), []);
+  useEffect(() => {
+    // En <html>, para que todas las variables que dependen de estas (--bg, --fg…) se recalculen.
+    const r = document.documentElement.style;
+    r.setProperty('--dynamic-bg', duo.bg); r.setProperty('--dynamic-fg', duo.fg);
+    document.body.style.backgroundColor = duo.bg; document.body.style.color = duo.fg;
+    poly.current?.setDuo(duo.bg, duo.fg);
+  }, [duo]);
   const [current, setCurrent] = useState<Shown | null>(null);
   const [lieUi, setLieUi] = useState<LieUi | null>(null);
   const [lieOn, setLieOn] = useState(false);
@@ -147,6 +160,12 @@ export function Game({ code }: { code: string }) {
       ...[...g.items, ...(g.stages?.vuelta ? g.vuelta : [])].flatMap((i) => [i.prompt, ...(i.follow_up ? [i.follow_up] : [])]),
     ].filter(Boolean));
 
+    // Cuántas pantallas tiene la partida, para la barra de arriba.
+    const voicedCount = g.items.length + (g.stages?.vuelta ? g.vuelta.length : 0);
+    const totalScreens = g.calibration.length + (g.stages?.rafaga && g.rafaga.length ? 1 : 0) + (g.stages?.hilo ? 1 : 0) + voicedCount;
+    let screen = 0;
+    const advance = () => { setStory({ n: screen++, total: totalScreens }); nextDuo(); };
+
     if (s.replay) { setSubtitle('Ya cobraste tus tickets. Esta es una revancha: se juega igual, sin premio.'); await sleep(2200); }
     setClock({ totalMs: CALIB_MS, deadline: null });
     await say(lines.intro);
@@ -155,7 +174,7 @@ export function Game({ code }: { code: string }) {
     // Calibración: verdad + una mentira obvia. Sirve de línea de base.
     for (let i = 0; i < g.calibration.length; i++) {
       const c = g.calibration[i];
-      setProgress({ n: i, total: g.calibration.length });
+      advance();
       setClock({ totalMs: CALIB_MS, deadline: null });
       await say(c.prompt);
       const calPause = c.answer_type === 'open' ? 1600 : 1000;
@@ -164,12 +183,12 @@ export function Game({ code }: { code: string }) {
       pending.push(api.current!.answer({ item_id: c.id, stage: 'main', attempt: 1, features: feats(heard, null) }, heard.audio));
       if (c.kind === 'obvious_lie') poly.current?.jolt(0.9);
     }
-    setProgress(null);
     await say(lines.calibration_end);
 
     // Ráfaga al tacto: sin voz, sin mentiras. Lo primero que les sale.
     if (g.stages?.rafaga && g.rafaga.length > 0) {
       await say(lines.rafaga_start || 'Ráfaga. No pienses. Tocá.');
+      advance();
       const taps = await overlayStep<Tap[]>({ mode: 'rafaga' });
       pending.push(api.current!.taps(taps));
     }
@@ -183,17 +202,14 @@ export function Game({ code }: { code: string }) {
     for (let k = 0; k < voiced.length; k++) {
       const item = voiced[k];
       if (k === hiloAfter) {
-        setProgress(null);
         await say(lines.hilo_start || 'Mayor o menor.');
+        advance();
         const m = await overlayStep<number>({ mode: 'hilo' });
         setMultiplier(m);
         if (lines.hilo_end) await say(lines.hilo_end);
       }
-      if (k === g.items.length && lines.vuelta_start) {
-        setProgress(null);
-        await say(lines.vuelta_start);
-      }
-      setProgress({ n: k, total: voiced.length });
+      if (k === g.items.length && lines.vuelta_start) await say(lines.vuelta_start);
+      advance();
 
       // Un solo botón: MENTIR. Se puede tocar mientras la máquina pregunta o mientras contesta.
       // Si no lo toca, es verdad. El presupuesto obliga al final.
@@ -245,12 +261,13 @@ export function Game({ code }: { code: string }) {
         pending.push(api.current!.answer({ item_id: item.id, stage: 'follow', attempt: 1, features: feats(f, null) }, f.audio));
       }
       if (!s.replay) {
+        const before = earned;
         earned = Math.min(g.rewards.max, earned + g.rewards.per_answer);
         setTickets(earned);
+        if (earned > before) fireReward('tickets', earned - before);
       }
     }
     setCurrent(null);
-    setProgress(null);
     setClock(null);
 
     // Todas las respuestas tienen que estar guardadas antes de acusar.
@@ -291,6 +308,7 @@ export function Game({ code }: { code: string }) {
     if (lieAt.current !== null || !lieUi || lieUi.banned) return;
     lieAt.current = performance.now();
     setLieOn(true);
+    nextDuo();
     try { navigator.vibrate?.(25); } catch { /* */ }
   }
 
@@ -322,14 +340,15 @@ export function Game({ code }: { code: string }) {
       {!inGame && phase !== 'result' && <div className="mark">Brutal<sup>™</sup></div>}
 
       {inGame && (
-        <Header clock={clock} tickets={tickets} multiplier={multiplier} playing={g?.playing} showTickets={!session?.replay} />
+        <DropHeader total={story.total} current={story.n} clock={clock} tickets={tickets} multiplier={multiplier}
+          playing={g?.playing ?? 0} rewardEvent={reward} showStats={!session?.replay} />
       )}
 
       {step.mode === 'rafaga' && g && (
-        <Rafaga items={g.rafaga} seconds={g.rafaga_seconds || 3} onClock={setClock} onDone={(t) => overlay.current?.(t)} />
+        <Rafaga items={g.rafaga} seconds={g.rafaga_seconds || 3} onClock={setClock} onTick={nextDuo} onDone={(t) => overlay.current?.(t)} />
       )}
       {step.mode === 'hilo' && api.current && (
-        <Hilo play={(a, st) => api.current!.hilo(a, st)} onClock={setClock} onDone={(m) => overlay.current?.(m)} />
+        <Hilo play={(a, st) => api.current!.hilo(a, st)} onClock={setClock} onTick={nextDuo} onDone={(m) => overlay.current?.(m)} />
       )}
 
       {stamp && phase !== 'result' && <div className={`stamp ${stamp === 'escaped' ? 'ok' : ''}`}>{stamp === 'escaped' ? 'ZAFASTE' : 'TE AGARRÓ'}</div>}
@@ -383,7 +402,6 @@ export function Game({ code }: { code: string }) {
                 </button>
               )}
               {step.mode === 'wait' && !current && <p className="listening muted"><span className="dots-anim" aria-hidden />Anotando</p>}
-              {progress && <Dots total={progress.total} current={progress.n} />}
             </>
           )}
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { HiloView } from '@/lib/api';
-import type { Clock } from './Header';
+import type { Clock } from './drops/SurveyHeader';
 
 const SUITS = ['s', 'h', 'd', 'c'] as const;
 const NAMES: Record<number, string> = { 1: 'As', 11: 'Jota', 12: 'Reina', 13: 'Rey' };
@@ -15,9 +15,9 @@ const DECIDE_MS = 15_000;
  * Tiene 15 segundos para decidir; si no decide, se planta solo.
  * Devuelve el multiplicador con el que se quedó (1 si perdió o no apostó).
  */
-export function Hilo({ play, onDone, onClock }: {
+export function Hilo({ play, onDone, onClock, onTick }: {
   play: (action: 'start' | 'higher' | 'lower' | 'stand', step?: number) => Promise<HiloView>;
-  onDone: (multiplier: number) => void; onClock: (c: Clock | null) => void;
+  onDone: (multiplier: number) => void; onClock: (c: Clock | null) => void; onTick: () => void;
 }) {
   const [view, setView] = useState<HiloView | null>(null);
   const [busy, setBusy] = useState(false);
@@ -28,6 +28,8 @@ export function Hilo({ play, onDone, onClock }: {
   done.current = onDone;
   const clockCb = useRef(onClock);
   clockCb.current = onClock;
+  const tickCb = useRef(onTick);
+  tickCb.current = onTick;
   const timeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const act = useRef<(a: 'higher' | 'lower' | 'stand') => void>(() => {});
 
@@ -67,6 +69,7 @@ export function Hilo({ play, onDone, onClock }: {
       const prev = cardSrc(view.card, suit);
       setSuit(SUITS[Math.floor(Math.random() * 4)]);
       setDeal({ prev, ok: !!v.ok });
+      tickCb.current();
       setView({ ...v, card: v.next ?? v.card });
       try { navigator.vibrate?.(v.ok ? 15 : [80, 40, 80]); } catch { /* */ }
       await new Promise((r) => setTimeout(r, 750));
