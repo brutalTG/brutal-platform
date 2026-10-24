@@ -5,6 +5,8 @@ export const metadata: Metadata = {
   title: 'PRESSURE',
   description: '¿Podés mentirle a una IA?',
   robots: { index: false, follow: false },
+  // iPhone: desde "Agregar a inicio" abre sin barras de Safari y con la barra de estado sobre el juego.
+  appleWebApp: { capable: true, title: 'PRESSURE', statusBarStyle: 'black-translucent' },
 };
 export const viewport: Viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover', themeColor: '#000000' };
 

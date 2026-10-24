@@ -52,6 +52,9 @@ export function Game({ code }: { code: string }) {
     const r = document.documentElement.style;
     r.setProperty('--dynamic-bg', duo.bg); r.setProperty('--dynamic-fg', duo.fg);
     document.body.style.backgroundColor = duo.bg; document.body.style.color = duo.fg;
+    // La barra del navegador (arriba en Safari y Chrome) toma el color del fondo, así no queda una franja gris.
+    document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute('content', duo.bg));
+    document.documentElement.style.backgroundColor = duo.bg;
     // En la entrada el polígrafo va con sus colores reales; el duotono arranca con el juego.
     if (phase === 'entry' || phase === 'loading' || phase === 'error') poly.current?.setDuo(null);
     else poly.current?.setDuo(duo.bg, duo.fg);
