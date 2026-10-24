@@ -7,9 +7,14 @@ export function Rich({ text, vars = {} }: { text: string; vars?: Record<string, 
     <>
       {filled.split(/\n\s*\n/).map((para, i) => (
         <p key={i}>
-          {para.split(/(\*[^*]+\*)/g).map((part, j) =>
-            part.startsWith('*') && part.endsWith('*') && part.length > 2 ? <b key={j}>{part.slice(1, -1)}</b> : <Fragment key={j}>{part}</Fragment>,
-          )}
+          {para.split('\n').map((line, l) => (
+            <Fragment key={l}>
+              {l > 0 && <br />}
+              {line.split(/(\*[^*]+\*)/g).map((part, j) =>
+                part.startsWith('*') && part.endsWith('*') && part.length > 2 ? <b key={j}>{part.slice(1, -1)}</b> : <Fragment key={j}>{part}</Fragment>,
+              )}
+            </Fragment>
+          ))}
         </p>
       ))}
     </>

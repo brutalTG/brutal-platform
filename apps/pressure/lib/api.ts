@@ -17,12 +17,13 @@ export type Game = {
   rafaga_seconds: number;
   vuelta: (GameItem & { media_url: string | null; emoji_a: string | null; emoji_b: string | null })[];
   hilo: { ladder: number[] };
+  playing: number;
 };
 export type RafagaItem = { id: string; position: number; kind: 'flash' | 'trap'; screen_text: string; media_url: string | null; emoji_a: string; emoji_b: string };
 export type Tap = { item_id: string; choice: 'a' | 'b' | null; latency_ms: number | null };
 export type HiloView = { card: number; next?: number; ok?: boolean; step: number; multiplier: number; ladder: number[]; done: boolean; busted?: boolean };
 export type Screens = { entry_note: string; consent: string; consent_note: string };
-export type Intro = { pitch: string[]; screens: Screens; rewards: { per_answer: number; max: number; win_bonus: number } };
+export type Intro = { pitch: string[]; screens: Screens; rewards: { per_answer: number; max: number; win_bonus: number }; playing?: number };
 export type Start = { token: string; session_id: string; alias: string; replay: boolean; game: Game };
 export type Finish = {
   verdict: 'caught' | 'escaped'; caught: number; lies: number;

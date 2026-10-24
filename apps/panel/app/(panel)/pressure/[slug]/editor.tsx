@@ -344,20 +344,17 @@ export function SettingsForm({ experimentId, def }: { experimentId: string; def:
           <Field label="Extra si gana" error={errors.win_bonus}><Input name="win_bonus" type="number" min={0} defaultValue={def.rewards.win_bonus} /></Field>
         </div>
       ))}
-      {section('Pantallas de inicio', 'Lo primero que lee el invitado, antes de jugar. *Así* va en negrita.', (
+      {section('Pantalla de entrada', 'Lo único que lee antes de jugar: al tocar Entrar se activa el micrófono y arranca. *Así* va en negrita; un salto de línea corta la frase.', (
         <>
-          <Field label="Pantalla de entrada" hint="Una frase por línea. Ideal: tres." error={errors.pitch1}>
+          <Field label="Texto principal" hint="Hasta tres bloques. Debajo se muestra el premio en tickets." error={errors.pitch1}>
             <div className="grid gap-2">
-              <Input name="pitch1" defaultValue={def.pitch?.[0] ?? ''} aria-label="Frase 1" />
-              <Input name="pitch2" defaultValue={def.pitch?.[1] ?? ''} aria-label="Frase 2" />
-              <Input name="pitch3" defaultValue={def.pitch?.[2] ?? ''} aria-label="Frase 3" />
+              <Textarea name="pitch1" className="min-h-[56px]" defaultValue={def.pitch?.[0] ?? ''} aria-label="Bloque 1" />
+              <Textarea name="pitch2" className="min-h-[56px]" defaultValue={def.pitch?.[1] ?? ''} aria-label="Bloque 2" />
+              <Textarea name="pitch3" className="min-h-[56px]" defaultValue={def.pitch?.[2] ?? ''} aria-label="Bloque 3" />
             </div>
           </Field>
-          <Field label="Nota debajo de Entrar"><Input name="entry_note" defaultValue={def.screens?.entry_note ?? 'Es anónimo. No te vamos a pedir tu nombre.'} /></Field>
-          <Field label="Pantalla del micrófono" hint="Una línea en blanco separa párrafos. {max} y {bonus} se reemplazan por los tickets; en las revanchas ese párrafo no se muestra." error={errors.consent}>
-            <Textarea name="consent" className="min-h-[150px]" defaultValue={def.screens?.consent ?? ''} />
-          </Field>
-          <Field label="Nota debajo de Activar micrófono"><Input name="consent_note" defaultValue={def.screens?.consent_note ?? 'Dura unos 3 minutos.'} /></Field>
+          <Field label="Debajo del premio" hint="Ej: 3 minutos. Al entrar se activa el micrófono."><Input name="consent_note" defaultValue={def.screens?.consent_note ?? ''} /></Field>
+          <Field label="Letra chica debajo de Entrar" hint="Que diga que es anónimo y que las respuestas quedan grabadas."><Input name="entry_note" defaultValue={def.screens?.entry_note ?? ''} /></Field>
         </>
       ))}
       {section('Voz', 'ID de la voz en ElevenLabs (Voices → elegís una → ⋯ → Copy voice ID). Si la principal falla, usa la de respaldo.', (

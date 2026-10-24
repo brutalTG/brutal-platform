@@ -65,9 +65,9 @@ async function addEvent(sessionId: string, startedAt: string, type: string, payl
 }
 
 const DEFAULT_SCREENS = {
-  entry_note: 'Es anónimo. No te vamos a pedir tu nombre.',
+  entry_note: 'Es anónimo: no te vamos a pedir ningún dato personal. Tus respuestas quedan grabadas.',
   consent: '*Es con voz.* La máquina pregunta en voz alta y vos contestás hablando. Ponete auriculares o andá a un lugar tranquilo.\n\nTus respuestas quedan grabadas, sin tu nombre.\n\nLlegar al final: hasta *{max} Golden Tickets*. Ganarle a la máquina: *+{bonus}*.',
-  consent_note: 'Dura unos 3 minutos.',
+  consent_note: '3 minutos. Al entrar se activa el micrófono.',
 };
 export type Screens = typeof DEFAULT_SCREENS;
 export const screensOf = (d: { screens?: Partial<Screens> }) => ({ ...DEFAULT_SCREENS, ...(d.screens ?? {}) });
@@ -80,9 +80,16 @@ export async function introFromCode(code: string) {
   if (!link || link.revoked_at) throw new HttpError(404, 'invalid_link', 'El link no es válido. Pedí uno nuevo por WhatsApp.');
   if (Date.parse(link.expires_at) < Date.now()) throw new HttpError(410, 'expired_link', 'El link venció. Mandá cualquier mensaje por WhatsApp y te llega otro.');
   if (link.uses >= link.max_uses) throw new HttpError(410, 'used_link', 'Este link ya se usó. Pedí otro por WhatsApp.');
-  const exp = await must(from('pressure', 'experiments').select('definition, status').eq('slug', link.target_id).single(), 'experimento') as any;
+  const exp = await must(from('pressure', 'experiments').select('id, definition, status').eq('slug', link.target_id).single(), 'experimento') as any;
   if (!['testing', 'live'].includes(exp.status)) throw new HttpError(409, 'not_open', 'La máquina está apagada por ahora.');
-  return { pitch: exp.definition.pitch ?? [], screens: screensOf(exp.definition), rewards: exp.definition.rewards };
+  return { pitch: exp.definition.pitch ?? [], screens: screensOf(exp.definition), rewards: exp.definition.rewards, playing: await playingNow(exp.id) };
+}
+
+/** Cuántos están jugando ahora: partidas abiertas en los últimos 15 minutos. Número real, nunca inventado. */
+async function playingNow(experimentId: string) {
+  const { count } = await from('pressure', 'sessions').select('id', { count: 'exact', head: true })
+    .eq('experiment_id', experimentId).eq('status', 'started').gte('started_at', new Date(Date.now() - 15 * 60_000).toISOString());
+  return count ?? 0;
 }
 
 // ---------- Audios ----------
@@ -162,6 +169,7 @@ export async function startFromCode(code: string, device: Record<string, unknown
       rafaga_seconds: d.rafaga?.seconds ?? 3,
       vuelta: vuelta.map((i) => ({ ...publicItem(i), position: shownPosition(i, game), media_url: i.media_url, emoji_a: i.emoji_a, emoji_b: i.emoji_b })),
       hilo: { ladder: ladderOf(d) },
+      playing: Math.max(1, await playingNow(exp.id)),
     },
   };
 }

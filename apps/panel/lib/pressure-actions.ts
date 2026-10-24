@@ -151,7 +151,6 @@ export async function saveSettings(form: FormData): Promise<FormResult> {
   if (!/^[A-Za-z0-9]{12,40}$/.test(voiceId)) fields.voice_id = 'Pegá el ID de la voz de ElevenLabs.';
   if (!str(form, 'accusation').includes('{claims}')) fields.accusation = 'Tiene que incluir {claims}: ahí va lo que dijo.';
   if ([str(form, 'pitch1'), str(form, 'pitch2'), str(form, 'pitch3')].filter(Boolean).length === 0) fields.pitch1 = 'Al menos una frase.';
-  if (String(form.get('consent') ?? '').trim().length < 20) fields.consent = 'Explicá que es con voz y qué pasa con lo que dice.';
   if (!(seconds >= 1.5 && seconds <= 10)) fields.rafaga_seconds = 'Entre 1,5 y 10 segundos.';
   if (stages.hilo && (ladder.length < 1 || ladder.length > 10 || ladder.some((x, i) => x > 1000 || (i > 0 && x <= ladder[i - 1])))) fields.ladder = 'De menor a mayor, separados por espacios. Ej: 1,5 2 3 5 10';
   if (Object.keys(fields).length) return { ok: false, error: 'Revisá los campos marcados.', fields };
@@ -159,11 +158,10 @@ export async function saveSettings(form: FormData): Promise<FormResult> {
   const prev = (exp as { definition: Record<string, any> }).definition;
   const definition = {
     ...prev,
-    pitch: [str(form, 'pitch1'), str(form, 'pitch2'), str(form, 'pitch3')].filter(Boolean),
+    pitch: ['pitch1', 'pitch2', 'pitch3'].map((k) => String(form.get(k) ?? '').replace(/\r/g, '').trim()).filter(Boolean),
     screens: {
       ...(prev.screens ?? {}),
       entry_note: str(form, 'entry_note'),
-      consent: String(form.get('consent') ?? '').replace(/\r/g, '').trim(),
       consent_note: str(form, 'consent_note'),
     },
     rules: { ...prev.rules, lies, win_max_caught: winMax },

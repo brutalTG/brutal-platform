@@ -2,90 +2,112 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { HiloView } from '@/lib/api';
+import type { Clock } from './Header';
 
-const FACE: Record<number, string> = { 1: 'A', 11: 'J', 12: 'Q', 13: 'K' };
-const SUITS = ['♠', '♥', '♦', '♣'];
-const face = (n: number) => FACE[n] ?? String(n);
+const SUITS = ['s', 'h', 'd', 'c'] as const;
+const NAMES: Record<number, string> = { 1: 'As', 11: 'Jota', 12: 'Reina', 13: 'Rey' };
 const fmtX = (m: number) => `x${String(m).replace('.', ',')}`;
+const cardSrc = (v: number, s: string) => `/cards/${v}${s}.webp`;
+const DECIDE_MS = 15_000;
 
 /**
  * Mayor o menor. La API reparte: el navegador nunca sabe la carta que viene.
+ * Tiene 15 segundos para decidir; si no decide, se planta solo.
  * Devuelve el multiplicador con el que se quedó (1 si perdió o no apostó).
  */
-export function Hilo({ play, onDone }: { play: (action: 'start' | 'higher' | 'lower' | 'stand', step?: number) => Promise<HiloView>; onDone: (multiplier: number) => void }) {
+export function Hilo({ play, onDone, onClock }: {
+  play: (action: 'start' | 'higher' | 'lower' | 'stand', step?: number) => Promise<HiloView>;
+  onDone: (multiplier: number) => void; onClock: (c: Clock | null) => void;
+}) {
   const [view, setView] = useState<HiloView | null>(null);
   const [busy, setBusy] = useState(false);
-  const [flip, setFlip] = useState<{ from: number; to: number; ok: boolean } | null>(null);
+  const [deal, setDeal] = useState<{ prev: string; ok: boolean } | null>(null);
   const [end, setEnd] = useState<{ multiplier: number; busted: boolean } | null>(null);
-  const [suit, setSuit] = useState('♠');
+  const [suit, setSuit] = useState<string>(() => SUITS[Math.floor(Math.random() * 4)]);
   const done = useRef(onDone);
   done.current = onDone;
+  const clockCb = useRef(onClock);
+  clockCb.current = onClock;
+  const timeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const act = useRef<(a: 'higher' | 'lower' | 'stand') => void>(() => {});
 
   useEffect(() => {
     play('start').then((v) => {
       setView(v);
       if (v.done) finish(v.multiplier, !!v.busted);
     }).catch(() => done.current(1));
+    // Precarga del mazo: son livianas y así no hay salto al dar vuelta.
+    for (let v = 1; v <= 13; v++) for (const s of SUITS) { const im = new Image(); im.src = cardSrc(v, s); }
+    return () => { if (timeout.current) clearTimeout(timeout.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Reloj de decisión: arranca cada vez que hay una carta nueva en la mesa.
+  useEffect(() => {
+    if (!view || end || busy) return;
+    clockCb.current({ totalMs: DECIDE_MS, deadline: performance.now() + DECIDE_MS });
+    timeout.current = setTimeout(() => act.current('stand'), DECIDE_MS);
+    return () => { if (timeout.current) clearTimeout(timeout.current); };
+  }, [view, end, busy]);
+
   function finish(multiplier: number, busted: boolean) {
     setEnd({ multiplier, busted });
+    clockCb.current({ totalMs: DECIDE_MS, deadline: null });
     try { navigator.vibrate?.(busted ? [200] : [30, 40, 30, 40, 60]); } catch { /* */ }
-    setTimeout(() => done.current(multiplier), busted ? 1800 : 1600);
+    setTimeout(() => { clockCb.current(null); done.current(multiplier); }, busted ? 1900 : 1700);
   }
 
-  async function act(action: 'higher' | 'lower' | 'stand') {
+  act.current = async (action) => {
     if (!view || busy || end) return;
+    if (timeout.current) clearTimeout(timeout.current);
     setBusy(true);
     try {
       const v = await play(action, action === 'stand' ? undefined : view.step);
       if (action === 'stand') { setView(v); finish(v.multiplier, false); return; }
-      setFlip({ from: view.card, to: v.next ?? v.card, ok: !!v.ok });
+      const prev = cardSrc(view.card, suit);
       setSuit(SUITS[Math.floor(Math.random() * 4)]);
-      try { navigator.vibrate?.(v.ok ? 15 : [80, 40, 80]); } catch { /* */ }
-      await new Promise((r) => setTimeout(r, 900));
-      setFlip(null);
+      setDeal({ prev, ok: !!v.ok });
       setView({ ...v, card: v.next ?? v.card });
+      try { navigator.vibrate?.(v.ok ? 15 : [80, 40, 80]); } catch { /* */ }
+      await new Promise((r) => setTimeout(r, 750));
+      setDeal(null);
       if (v.done) finish(v.multiplier, !!v.busted);
     } catch {
       done.current(view.multiplier);
     } finally {
       setBusy(false);
     }
-  }
+  };
 
-  if (!view) return <div className="hilo"><p className="hilo-title">MAYOR O MENOR</p><p className="note">Mezclando…</p></div>;
-  const red = suit === '♥' || suit === '♦';
-  const shown = flip ? flip.to : view.card;
+  if (!view) return <div className="hilo"><h2 className="hilo-title">Mayor o menor</h2></div>;
+  const reached = end ? (end.busted ? -1 : view.step - 1) : view.step - 1;
 
   return (
     <div className={`hilo ${end?.busted ? 'busted' : ''}`}>
-      <p className="hilo-title">MAYOR O MENOR</p>
+      <h2 className="hilo-title">Mayor o menor</h2>
       <ol className="ladder" aria-label="Multiplicadores">
-        {view.ladder.map((m, i) => (
-          <li key={i} className={i < view.step ? 'won' : i === view.step && !end ? 'next' : ''}>{fmtX(m)}</li>
-        ))}
+        {view.ladder.map((m, i) => <li key={i} className={i <= reached ? 'on' : ''}>{fmtX(m)}</li>)}
       </ol>
-      <div className="cards">
-        {flip && <div className="card old"><b>{face(flip.from)}</b></div>}
-        <div className={`card ${red ? 'red' : ''} ${flip ? (flip.ok ? 'in ok' : 'in bad') : ''}`} key={`${shown}-${view.step}-${flip ? 1 : 0}`}>
-          <b>{face(shown)}</b><span>{suit}</span>
-        </div>
+      <div className="table">
+        {deal && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img className="card prev" src={deal.prev} alt="" />
+        )}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img key={`${view.card}-${view.step}-${suit}`} className={`card ${deal ? (deal.ok ? 'in ok' : 'in bad') : ''}`}
+          src={cardSrc(view.card, suit)} alt={NAMES[view.card] ?? String(view.card)} />
       </div>
       {end ? (
-        <p className={`hilo-end ${end.busted ? 'bad' : ''}`}>{end.busted ? 'PERDISTE EL MULTIPLICADOR' : `TE LLEVÁS ${fmtX(end.multiplier)}`}</p>
+        <p className={`hilo-end ${end.busted ? 'bad' : ''}`}>{end.busted ? 'Perdiste el multiplicador' : view.step === 0 ? 'Pasaste' : `Te llevás ${fmtX(end.multiplier)}`}</p>
       ) : (
         <>
-          <p className="hilo-now">{view.step === 0 ? '¿La que viene es mayor o menor?' : `Tenés ${fmtX(view.multiplier)}. ¿Seguís?`}</p>
-          <div className="row">
-            <button className="choice" disabled={busy} onClick={() => act('higher')}>Mayor</button>
-            <button className="choice" disabled={busy} onClick={() => act('lower')}>Menor</button>
+          <div className="thumbs">
+            <button className="thumb-btn" disabled={busy} onClick={() => act.current('higher')} aria-label="Mayor">👍</button>
+            <button className="thumb-btn" disabled={busy} onClick={() => act.current('lower')} aria-label="Menor">👎</button>
           </div>
-          <button className="stand" disabled={busy} onClick={() => act('stand')}>
-            {view.step === 0 ? 'Paso, no apuesto' : `Me planto con ${fmtX(view.multiplier)}`}
+          <button className="cta" disabled={busy} onClick={() => act.current('stand')}>
+            {view.step === 0 ? 'Paso' : `Me planto con ${fmtX(view.multiplier)}`}
           </button>
-          <p className="note">Empate cuenta como acierto. Si errás, volvés a x1.</p>
         </>
       )}
     </div>
