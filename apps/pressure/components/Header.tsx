@@ -19,7 +19,8 @@ export function TimerPill({ clock }: { clock: Clock | null }) {
   const left = clock?.deadline ? Math.max(0, clock.deadline - now) : total;
   const pct = total > 0 ? (left / total) * 100 : 100;
   const secs = Math.ceil(left / 1000);
-  const urgent = !!clock?.deadline && secs <= 3 && left > 0;
+  // Titila en los últimos 3 segundos, salvo en las etapas que duran eso nomás (la ráfaga).
+  const urgent = !!clock?.deadline && total > 5000 && secs <= 3 && left > 0;
   return (
     <div className={`pill timer ${urgent ? 'urgent' : ''}`} role="timer" aria-label={`${secs} segundos`}>
       <div className="timer-fill" style={{ width: `${pct}%` }}>
