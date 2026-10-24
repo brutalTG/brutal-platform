@@ -52,8 +52,10 @@ export function Game({ code }: { code: string }) {
     const r = document.documentElement.style;
     r.setProperty('--dynamic-bg', duo.bg); r.setProperty('--dynamic-fg', duo.fg);
     document.body.style.backgroundColor = duo.bg; document.body.style.color = duo.fg;
-    poly.current?.setDuo(duo.bg, duo.fg);
-  }, [duo]);
+    // En la entrada el polígrafo va con sus colores reales; el duotono arranca con el juego.
+    if (phase === 'entry' || phase === 'loading' || phase === 'error') poly.current?.setDuo(null);
+    else poly.current?.setDuo(duo.bg, duo.fg);
+  }, [duo, phase]);
   const [current, setCurrent] = useState<Shown | null>(null);
   const [lieUi, setLieUi] = useState<LieUi | null>(null);
   const [lieOn, setLieOn] = useState(false);
@@ -341,7 +343,7 @@ export function Game({ code }: { code: string }) {
 
       {inGame && (
         <DropHeader total={story.total} current={story.n} clock={clock} tickets={tickets} multiplier={multiplier}
-          playing={g?.playing ?? 0} rewardEvent={reward} showStats={!session?.replay} />
+          playing={g?.playing ?? 0} rewardEvent={reward} />
       )}
 
       {step.mode === 'rafaga' && g && (

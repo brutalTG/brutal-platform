@@ -91,7 +91,7 @@ export function Hilo({ play, onDone, onClock, onTick }: {
       <ol className="ladder" aria-label="Multiplicadores">
         {view.ladder.map((m, i) => <li key={i} className={i <= reached ? 'on' : ''}>{fmtX(m)}</li>)}
       </ol>
-      <div className="table">
+      <div className="hilo-table">
         {deal && (
           // eslint-disable-next-line @next/next/no-img-element
           <img className="card prev" src={deal.prev} alt="" />

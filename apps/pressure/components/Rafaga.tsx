@@ -184,14 +184,17 @@ export function Rafaga({ items, seconds, onDone, onClock, onTick }: {
         </div>
       )}
 
-      {/* Puntos de la ráfaga, debajo del header */}
-      <div className="relative z-30 flex flex-col items-center" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 142px)', opacity: blinkOpacity }}>
+      {/* Contador y puntos de rafaga_emoji, debajo del header */}
+      <div className="relative z-30 flex flex-col items-center gap-2" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 142px)' }}>
+        <span className="font-['Roboto'] font-semibold text-[14px] opacity-50" style={{ color: hasMedia ? '#fff' : 'var(--dynamic-fg, #fff)' }}>
+          {idx + 1} / {items.length}
+        </span>
         <div className="flex items-center gap-[6px]">
           {items.map((_, i) => (
-            <div key={i} className="w-[11px] h-[11px] rounded-full" style={{
-              backgroundColor: hasMedia ? '#fff' : 'var(--dynamic-fg)',
-              opacity: i <= idx ? 1 : 0.2,
-              border: i <= idx ? 'none' : `1px solid ${hasMedia ? '#fff' : 'var(--dynamic-fg)'}`,
+            <div key={i} className="rounded-full" style={{
+              width: 9, height: 9,
+              backgroundColor: i <= idx ? (hasMedia ? '#fff' : 'var(--dynamic-fg, #fff)') : 'transparent',
+              border: i <= idx ? 'none' : `2px solid color-mix(in srgb, ${hasMedia ? '#fff' : 'var(--dynamic-fg, #fff)'} 30%, transparent)`,
             }} />
           ))}
         </div>
@@ -211,12 +214,16 @@ export function Rafaga({ items, seconds, onDone, onClock, onTick }: {
           <div className="flex-[1]" />
         </div>
       ) : (
-        // rafaga-burst: texto grande y dos emojis de 100 px
-        <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-6" style={{ opacity: blinkOpacity }}>
-          <h2 className="font-['Roboto'] font-bold text-[39px] text-center leading-tight m-0" style={{ color: 'var(--dynamic-fg)', marginBottom: 48 }}>
-            {it.screen_text}
-          </h2>
-          {emojis(100, 'gap-12')}
+        // rafaga_emoji de Drops (la del 🔥/🧊): texto de 36 px y emojis de 72 px, sin marco.
+        <div className="relative z-10 flex-1 flex flex-col items-center" style={{ opacity: blinkOpacity }}>
+          <div className="flex-[1.5]" />
+          <div className="flex flex-col items-center gap-8">
+            <h2 className="font-['Roboto'] font-bold text-[36px] text-center leading-tight px-4 m-0" style={{ color: 'var(--dynamic-fg, #fff)' }}>
+              {it.screen_text}
+            </h2>
+            {emojis(72, 'gap-12')}
+          </div>
+          <div className="flex-[3]" />
         </div>
       )}
     </div>

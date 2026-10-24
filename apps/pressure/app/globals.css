@@ -59,7 +59,7 @@ button:focus-visible { outline: 2px solid var(--y); outline-offset: 3px; }
 /* ---------- Panel de abajo: lo que dice la máquina y cómo contestar ---------- */
 .panel { position: absolute; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; align-items: center; gap: 16px; text-align: center; padding: 8px 20px max(18px, env(safe-area-inset-bottom)); z-index: 3; background: linear-gradient(to bottom, rgba(0,0,0,0), var(--bg) 24px); }
 .app.solo .panel { position: static; background: none; }
-.panel.play { min-height: 54dvh; justify-content: center; gap: 18px; }
+.panel.play { height: 55dvh; justify-content: center; gap: 16px; background: var(--bg); padding-top: 14px; }
 .copy { display: flex; flex-direction: column; gap: 16px; font-size: 21px; line-height: 1.32; color: var(--fg); max-width: 30ch; margin: 0; }
 .copy p { margin: 0; text-wrap: balance; }
 .copy b { font-weight: 700; }
@@ -112,25 +112,26 @@ button:focus-visible { outline: 2px solid var(--y); outline-offset: 3px; }
 .emoji.off { opacity: .2; transform: scale(.85); }
 
 /* ---------- Mayor o menor ---------- */
-.hilo { position: absolute; inset: 0; z-index: 6; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 20px; padding: calc(var(--bar-h) + 18px) 20px max(22px, env(safe-area-inset-bottom)); text-align: center; animation: fade .25s ease both; }
-.hilo.busted .table { animation: shake .4s ease both; }
+.hilo { position: absolute; inset: 0; z-index: 6; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 16px; padding: calc(var(--bar-h) + 18px) 20px max(22px, env(safe-area-inset-bottom)); text-align: center; animation: fade .25s ease both; }
+.hilo.busted .hilo-table { animation: shake .4s ease both; }
 @keyframes shake { 20%, 60% { transform: translateX(-8px); } 40%, 80% { transform: translateX(8px); } }
 .hilo-title { margin: 0; font-size: 32px; font-weight: 400; color: var(--fg); }
 .ladder { list-style: none; margin: 0; padding: 3px; display: flex; gap: 2px; border: 2px solid var(--y); border-radius: 999px; }
 .ladder li { min-width: 54px; padding: 3px 10px; border-radius: 999px; font-size: 14px; font-weight: 700; color: var(--y); font-variant-numeric: tabular-nums; transition: background .2s ease, color .2s ease; }
 .ladder li.on { background: var(--y); color: var(--bg); }
-.table { position: relative; width: min(52vw, 210px); aspect-ratio: 400 / 581; margin: 6px 0; }
-.table .card { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; border-radius: 10px; }
+.hilo-table { position: relative; flex: 1 1 0; min-height: 110px; max-height: 300px; width: 100%; margin: 0; }
+.hilo-table .card { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 .card.prev { transform: translateX(-30px) rotate(-9deg); opacity: .5; }
 .card.in { animation: deal .42s cubic-bezier(.2,.8,.2,1) both; }
 .card.in.ok { filter: drop-shadow(0 0 0 var(--y)) drop-shadow(0 0 14px rgba(234,255,0,.55)); }
 .card.in.bad { filter: drop-shadow(0 0 16px rgba(255,59,47,.8)); }
 @keyframes deal { from { transform: translate(130px, -50px) rotate(20deg); opacity: 0; } to { transform: none; opacity: 1; } }
 .thumbs { display: flex; justify-content: space-between; width: min(100%, 320px); }
-.thumb-btn { width: 120px; height: 110px; border: 0; background: none; font-size: 84px; line-height: 1; cursor: pointer; transition: transform .1s ease; }
+.thumb-btn { width: 110px; height: 90px; border: 0; background: none; font-size: 84px; line-height: 1; cursor: pointer; transition: transform .1s ease; }
 .thumb-btn:active:not(:disabled) { transform: scale(1.15); }
 .thumb-btn:disabled { opacity: .4; }
-.hilo .cta { margin-top: auto; }
+.hilo .cta { margin-top: 0; flex-shrink: 0; }
+.hilo .thumbs, .hilo .ladder, .hilo-title { flex-shrink: 0; }
 .hilo-end { margin: 18px 0 0; font-size: clamp(30px, 9vw, 40px); font-weight: 800; color: var(--y); animation: pop .4s ease both; }
 .hilo-end.bad { color: var(--red); }
 

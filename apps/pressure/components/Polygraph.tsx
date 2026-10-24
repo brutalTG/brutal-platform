@@ -10,7 +10,7 @@ export type PolygraphHandle = {
   setLevel: (level: number) => void; // volumen de la voz, 0..1
   setFrozen: (frozen: boolean) => void; // el papel se detiene (acusación)
   setSpeed: (factor: number) => void;
-  setDuo: (bg: string, fg: string) => void; // duotono de Drops: negro → fondo, blanco → frente
+  setDuo: (bg: string | null, fg?: string) => void; // duotono de Drops: negro → fondo, blanco → frente. null = colores reales
 };
 
 const rgb = (hex: string) => { const h = hex.replace('#', ''); return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)); };
@@ -46,7 +46,7 @@ export const Polygraph = forwardRef<PolygraphHandle, { panelHeight: number; onTa
       setLevel: (l) => { api.current.level = Math.max(0, Math.min(1, l)); },
       setFrozen: (f) => { api.current.frozen = f; },
       setSpeed: (s) => { api.current.speed = s; },
-      setDuo: (bg, fg) => { api.current.duo = { bg: rgb(bg), fg: rgb(fg) }; },
+      setDuo: (bg, fg) => { api.current.duo = bg && fg ? { bg: rgb(bg), fg: rgb(fg) } : null; },
     }), []);
 
     useEffect(() => {
@@ -100,9 +100,9 @@ export const Polygraph = forwardRef<PolygraphHandle, { panelHeight: number; onTa
         cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
         for (const c of [frameC, grayC, tintC]) { c.width = cv.width; c.height = cv.height; }
         const cover = Math.max(W / IW, H / IH);
-        // El polígrafo nunca pasa de 42% de la pantalla: el texto manda.
-        const fit = Math.min(H - panelH.current - 6, H * 0.42) / 1585;
-        S = Math.max(0.12, Math.min(cover, fit));
+        // El polígrafo ocupa siempre el 45% de arriba de la pantalla (hasta el borde de abajo del papel).
+        void cover;
+        S = Math.max(0.12, (H * 0.45) / 1585);
         OX = W / 2 - PAPER_CX * S;
         if (IW * S >= W) OX = Math.min(0, Math.max(W - IW * S, OX));
       }

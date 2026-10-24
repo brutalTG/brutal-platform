@@ -169,7 +169,8 @@ export async function startFromCode(code: string, device: Record<string, unknown
       rafaga_seconds: d.rafaga?.seconds ?? 3,
       vuelta: vuelta.map((i) => ({ ...publicItem(i), position: shownPosition(i, game), media_url: i.media_url, emoji_a: i.emoji_a, emoji_b: i.emoji_b })),
       hilo: { ladder: ladderOf(d) },
-      playing: Math.max(1, await playingNow(exp.id)),
+      // En test se puede mostrar un número fijo (Ajustes → "Jugando"); si no, el real.
+      playing: typeof (d as any).playing_display === 'number' ? (d as any).playing_display : Math.max(1, await playingNow(exp.id)),
     },
   };
 }

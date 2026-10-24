@@ -56,6 +56,8 @@ export function TimerBar({ clock }: { clock: Clock | null }) {
   }, [isBlinking]);
 
   const timeString = `00:${Math.min(99, seconds).toString().padStart(2, '0')}`;
+  // Sin reloj corriendo (la máquina habla, una pantalla sin tiempo): solo el rayado, sin números.
+  const idle = !clock?.deadline;
 
   return (
     <div
@@ -72,7 +74,7 @@ export function TimerBar({ clock }: { clock: Clock | null }) {
           backgroundImage: 'repeating-linear-gradient(135deg, var(--dynamic-fg, #fff) 0, var(--dynamic-fg, #fff) 2px, transparent 2px, transparent 6px)',
         }}
       />
-      {progress > 0 && (
+      {!idle && progress > 0 && (
         <div
           className="absolute left-0 top-0 h-full flex items-center justify-center overflow-hidden rounded-l-full"
           style={{ backgroundColor: 'var(--dynamic-fg, #fff)', width: `${progress}%`, transition: 'width 0.05s linear' }}
@@ -127,9 +129,9 @@ export function StatPills({ coins, tickets, rewardEvent }: { coins?: number; tic
 }
 
 /** El header completo, como en SurveyApp de Drops. */
-export function DropHeader({ total, current, clock, tickets, multiplier, playing, rewardEvent, showStats = true }: {
+export function DropHeader({ total, current, clock, tickets, multiplier, playing, rewardEvent }: {
   total: number; current: number; clock: Clock | null; tickets: number; multiplier: number; playing: number;
-  rewardEvent: RewardEvent | null; showStats?: boolean;
+  rewardEvent: RewardEvent | null;
 }) {
   return (
     <div
@@ -142,8 +144,8 @@ export function DropHeader({ total, current, clock, tickets, multiplier, playing
       <div className="w-full flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="font-['Silkscreen'] text-sm tracking-wide" style={{ color: 'var(--dynamic-fg)' }}>
-              BRUTAL////////////////
+            <span className="font-['Roboto'] font-bold text-[24px] leading-none tracking-[-0.01em]" style={{ color: 'var(--dynamic-fg)' }}>
+              Brutal<sup className="text-[11px] align-[0.9em] ml-px">™</sup>
             </span>
             {multiplier > 1 && (
               <span
@@ -157,10 +159,10 @@ export function DropHeader({ total, current, clock, tickets, multiplier, playing
           {playing > 0 && <PlayingBadge count={playing} />}
         </div>
         <div className="flex items-center w-full gap-1.5">
-          <div className={showStats ? 'w-[45%] shrink-0' : 'w-full'}>
+          <div className="w-[45%] shrink-0">
             <TimerBar clock={clock} />
           </div>
-          {showStats && <StatPills tickets={tickets} rewardEvent={rewardEvent} />}
+          <StatPills tickets={tickets} rewardEvent={rewardEvent} />
         </div>
       </div>
     </div>

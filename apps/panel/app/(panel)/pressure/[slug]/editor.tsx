@@ -282,6 +282,7 @@ type Def = {
   pitch?: string[]; screens?: { entry_note?: string; consent?: string; consent_note?: string }; rules: { lies: number; win_max_caught: number }; rewards: { per_answer: number; max: number; win_bonus: number };
   voice: { voice_id: string; fallback_voice_id?: string }; lines: Record<string, string | string[]>;
   stages?: { rafaga?: boolean; hilo?: boolean; vuelta?: boolean }; rafaga?: { seconds?: number }; hilo?: { multipliers?: number[] };
+  playing_display?: number | null;
 };
 
 export function SettingsForm({ experimentId, def }: { experimentId: string; def: Def }) {
@@ -331,6 +332,9 @@ export function SettingsForm({ experimentId, def }: { experimentId: string; def:
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Segundos por card de ráfaga" error={errors.rafaga_seconds}><Input name="rafaga_seconds" inputMode="decimal" defaultValue={String(def.rafaga?.seconds ?? 3).replace('.', ',')} /></Field>
+            <Field label="“Jugando” que se muestra arriba" hint="Un número fijo para la prueba. Vacío = los que están jugando de verdad." error={errors.playing_display}>
+              <Input name="playing_display" inputMode="numeric" defaultValue={def.playing_display ?? ''} />
+            </Field>
             <Field label="Multiplicadores de mayor o menor" hint="Uno por acierto, de menor a mayor." error={errors.ladder}>
               <Input name="ladder" defaultValue={(def.hilo?.multipliers ?? [1.5, 2, 3, 5, 10]).map((x) => String(x).replace('.', ',')).join(' ')} />
             </Field>

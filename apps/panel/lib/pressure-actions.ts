@@ -151,6 +151,9 @@ export async function saveSettings(form: FormData): Promise<FormResult> {
   if (!/^[A-Za-z0-9]{12,40}$/.test(voiceId)) fields.voice_id = 'Pegá el ID de la voz de ElevenLabs.';
   if (!str(form, 'accusation').includes('{claims}')) fields.accusation = 'Tiene que incluir {claims}: ahí va lo que dijo.';
   if ([str(form, 'pitch1'), str(form, 'pitch2'), str(form, 'pitch3')].filter(Boolean).length === 0) fields.pitch1 = 'Al menos una frase.';
+  const playingRaw = str(form, 'playing_display');
+  const playingDisplay = playingRaw === '' ? null : Number.parseInt(playingRaw, 10);
+  if (playingDisplay !== null && !(playingDisplay >= 1 && playingDisplay <= 100000)) fields.playing_display = 'Un número entre 1 y 100.000, o vacío.';
   if (!(seconds >= 1.5 && seconds <= 10)) fields.rafaga_seconds = 'Entre 1,5 y 10 segundos.';
   if (stages.hilo && (ladder.length < 1 || ladder.length > 10 || ladder.some((x, i) => x > 1000 || (i > 0 && x <= ladder[i - 1])))) fields.ladder = 'De menor a mayor, separados por espacios. Ej: 1,5 2 3 5 10';
   if (Object.keys(fields).length) return { ok: false, error: 'Revisá los campos marcados.', fields };
@@ -167,6 +170,7 @@ export async function saveSettings(form: FormData): Promise<FormResult> {
     rules: { ...prev.rules, lies, win_max_caught: winMax },
     rewards: { per_answer: perAnswer, max, win_bonus: winBonus },
     stages,
+    playing_display: playingDisplay,
     rafaga: { ...(prev.rafaga ?? {}), seconds },
     hilo: { ...(prev.hilo ?? {}), multipliers: stages.hilo ? ladder : (prev.hilo?.multipliers ?? ladder) },
     voice: { ...prev.voice, voice_id: voiceId, fallback_voice_id: str(form, 'fallback_voice_id') || prev.voice?.fallback_voice_id },
