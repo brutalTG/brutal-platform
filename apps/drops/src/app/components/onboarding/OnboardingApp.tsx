@@ -8,7 +8,7 @@ import svgPaths from "../../../imports/svg-mcipxppzoz";
 import { getNextDuotonePair } from "../color-generator";
 import { getReferrerCode } from "../referral";
 import { hapticMedium } from "../haptics";
-import { ONBOARDING_STEPS } from "./onboarding-data";
+import { ONBOARDING_STEPS, mergeOnboarding } from "./onboarding-data";
 import { submitApplication } from "./onboarding-api";
 import { AccessNotice } from "../AccessNotice";
 import {
@@ -85,6 +85,7 @@ export default function OnboardingApp() {
 
   // --- LÓGICA DE REANUDACIÓN INTELIGENTE ---
   const [isInitializing, setIsInitializing] = useState(true);
+  const [allSteps, setAllSteps] = useState(ONBOARDING_STEPS);
   useEffect(() => {
     async function checkExistingProgress() {
       try {
@@ -103,13 +104,15 @@ export default function OnboardingApp() {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "invalid_access");
+        const merged = mergeOnboarding(data.onboarding);
+        setAllSteps(merged);
         setAccessState("ready");
         if (data.nextAction === "drop" && data.dropUrl) {
           window.location.replace(data.dropUrl);
           return;
         }
         if (data.nextAction === "waitlist") {
-          const steps = ONBOARDING_STEPS.filter((step) => step.type !== "phone");
+          const steps = merged.filter((step) => step.type !== "phone");
           setStepIndex(Math.max(0, steps.length - 1));
           setSubmitResult({
             queuePosition: 0,
@@ -149,7 +152,7 @@ export default function OnboardingApp() {
     changeColors();
   }, [stepIndex, changeColors]);
 
-  const activeSteps = useMemo(() => ONBOARDING_STEPS.filter((step) => step.type !== "phone"), []);
+  const activeSteps = useMemo(() => allSteps.filter((step) => step.type !== "phone"), [allSteps]);
   const currentStep = activeSteps[stepIndex];
   const totalSteps = activeSteps.length;
 

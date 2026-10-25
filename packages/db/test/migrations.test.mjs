@@ -114,3 +114,22 @@ test('una sola partida con premio por nodo; las revanchas no cobran', async () =
   const alias = (await db.query(`select core.public_alias($1) as a`, [p])).rows[0].a;
   assert.match(alias, /^NODO-[0-9A-F]{4}$/);
 });
+
+test('el panel guarda el orden de un Drop de una vez, sin chocar posiciones', async () => {
+  const db = await freshDb();
+  const q = [];
+  for (let i = 0; i < 3; i++) {
+    const { rows } = await db.query(`insert into drops.questions (format, label, content) values ('choice', $1, '{}') returning id`, [`q${i}`]);
+    q.push(rows[0].id);
+  }
+  const d = '11111111-1111-4111-8111-111111111111';
+  const save = (ids, off = []) => db.query(`select drops.panel_save_drop($1::jsonb)`, [JSON.stringify({ id: d, slug: 'drop-x', name: 'X', config: { a: 1 }, question_ids: ids, disabled_ids: off })]);
+  await save(q);
+  await save([q[2], q[0], q[1]], [q[0]]);
+  const { rows } = await db.query(`select question_id, position, enabled from drops.drop_questions where drop_id = $1 order by position`, [d]);
+  assert.deepEqual(rows.map((r) => [r.question_id, r.position, r.enabled]), [[q[2], 0, true], [q[0], 1, false], [q[1], 2, true]]);
+  await save([q[1]]);
+  const left = await db.query(`select count(*)::int n from drops.drop_questions where drop_id = $1`, [d]);
+  assert.equal(left.rows[0].n, 1);
+  await assert.rejects(save([q[1], q[1]]), /dos veces/);
+});

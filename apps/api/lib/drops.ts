@@ -186,7 +186,10 @@ export async function startSession(a: Access, body: { drop_id?: string; device?:
   if (!cards.length) throw new HttpError(404, 'no_questions', 'Drop has no questions for this node');
   await from('core', 'nodes').update({ last_active_at: new Date().toISOString() }).eq('id', node.id);
   const existing = await sessionOf(node.pseudonym_id, d.id);
-  if (existing) {
+  if (existing && a.test && (existing.status === 'completed' || existing.claimed_at)) {
+    // Link de prueba del panel: cada vez se juega de nuevo desde cero.
+    await must(from('drops', 'sessions').delete().eq('id', existing.id), 'borrar partida de prueba');
+  } else if (existing) {
     if (existing.status === 'completed' || existing.claimed_at) throw new HttpError(409, 'already_completed', 'Already completed');
     return { session_id: existing.id, resumed: true, current_index: existing.position };
   }
@@ -302,6 +305,11 @@ export async function claimDrop(a: Access, body: { dropId?: string; drop_id?: st
   const answers = await must(from('drops', 'answers').select('position, reward_currency, reward_value, reward_granted, trap_correct, questions(content)').eq('session_id', s.id), 'respuestas') as any[];
   const total = computeClaim(answers.map((x) => ({ ...x, reward_value: Number(x.reward_value), penalty: Number(x.questions?.content?.penalty) || 0 })), Number(s.multiplier) || 1);
   const season = d.season_id ?? (await must(from('economy', 'seasons').select('id').eq('status', 'active').maybeSingle(), 'temporada') as any)?.id ?? null;
+  if (a.test) {
+    // Prueba: muestra lo que hubiera cobrado, sin acreditar nada.
+    await from('drops', 'sessions').update({ claimed_at: new Date().toISOString() }).eq('id', s.id).is('claimed_at', null);
+    return { ok: true, alreadyClaimed: false, test: true, credited: { usd: node.is_minor ? 0 : total.usd, coins: node.is_minor ? 0 : total.usd, tickets: total.tickets } };
+  }
   const entries = [
     total.usd > 0 && !node.is_minor && { currency: 'cash_usd', amount: total.usd, key: `drop_cash:${s.id}` },
     total.tickets > 0 && { currency: 'tickets', amount: total.tickets, key: `drop_tickets:${s.id}` },
@@ -382,9 +390,16 @@ async function nextAfterOnboarding(node: Node) {
   return { nextAction: 'drop', dropUrl: link.url, dropId: d.slug, dropName: d.name };
 }
 
+/** Textos del onboarding editados en el panel (core.apps.config.onboarding de 'drops'). Sin editar: null y el reproductor usa los suyos. */
+async function onboardingTexts() {
+  const { data, error } = await from('core', 'apps').select('config').eq('slug', 'drops').maybeSingle();
+  if (error) return null;
+  return (data as any)?.config?.onboarding ?? null;
+}
+
 export async function applyInit(a: Access) {
   const node = await nodeOf(a.nodeId);
-  const base = { ok: true, nodeId: node.id, status: node.status, onboardingStep: onboarded(node) ? 100 : 0, referralCode: null };
+  const base = { ok: true, nodeId: node.id, status: node.status, onboardingStep: onboarded(node) ? 100 : 0, referralCode: null, onboarding: await onboardingTexts() };
   if (onboarded(node) && playable(node, a.test)) return { ...base, ...(await nextAfterOnboarding(node)) };
   return { ...base, nextAction: 'onboarding', dropUrl: null, dropId: null, dropName: null };
 }

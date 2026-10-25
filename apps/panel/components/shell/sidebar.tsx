@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard, FlaskConical, Users, Layers, AudioLines, Coins, MessageSquare, Settings2, ScrollText,
+  LayoutDashboard, FlaskConical, Users, Layers, AudioLines, Coins, MessageSquare, Settings2, ScrollText, Blocks, DoorOpen, ChartColumn,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -13,18 +13,21 @@ export function Sidebar({ counts }: { counts: { attention?: number; bitacora?: n
   const path = usePathname();
   const groups: { title: string; items: Item[] }[] = [
     {
-      title: 'Operación',
+      title: 'Armar',
       items: [
         { href: '/', label: 'Hoy', icon: <LayoutDashboard />, badge: counts.attention },
-        { href: '/estudios', label: 'Estudios', icon: <FlaskConical /> },
-        { href: '/nodos', label: 'Nodos', icon: <Users /> },
+        { href: '/onboarding', label: 'Onboarding', icon: <DoorOpen /> },
+        { href: '/experimentos', label: 'Experimentos', icon: <FlaskConical /> },
+        { href: '/herramientas', label: 'Caja de herramientas', icon: <Blocks /> },
       ],
     },
     {
-      title: 'Instrumentos',
+      title: 'Resultados',
       items: [
-        { href: '/drops', label: 'Drops', icon: <Layers /> },
-        { href: '/pressure', label: 'Pressure', icon: <AudioLines /> },
+        { href: '/nodos', label: 'Nodos', icon: <Users /> },
+        { href: '/drops', label: 'Partidas de Drops', icon: <Layers /> },
+        { href: '/pressure', label: 'Detector (voz)', icon: <AudioLines /> },
+        { href: '/estudios', label: 'Estudios', icon: <ChartColumn /> },
       ],
     },
     {
@@ -81,7 +84,8 @@ export function Sidebar({ counts }: { counts: { attention?: number; bitacora?: n
 export function MobileNav() {
   const path = usePathname();
   const items = [
-    ['/', 'Hoy'], ['/estudios', 'Estudios'], ['/nodos', 'Nodos'], ['/drops', 'Drops'], ['/pressure', 'Pressure'],
+    ['/', 'Hoy'], ['/onboarding', 'Onboarding'], ['/experimentos', 'Experimentos'], ['/herramientas', 'Herramientas'],
+    ['/nodos', 'Nodos'], ['/drops', 'Partidas'], ['/pressure', 'Detector'], ['/estudios', 'Estudios'],
     ['/recompensas', 'Recompensas'], ['/mensajes', 'Mensajes'], ['/sistema', 'Sistema'], ['/bitacora', 'Bitácora'],
   ];
   const isActive = (href: string) => (href === '/' ? path === '/' : path === href || path.startsWith(href + '/'));

@@ -93,3 +93,22 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
     phase: "closing",
   },
 ];
+
+// Textos editables desde el panel (Onboarding). Llegan del API por id de paso y se aplican sobre estos pasos.
+// Solo se cambian textos y opciones: los datos que se piden (y sus validaciones) son fijos.
+const EDITABLE = ["title", "subtitle", "copy", "placeholder", "rejectMessage", "options", "min", "max", "minSelect", "maxSelect"] as const;
+
+export function mergeOnboarding(overrides: unknown): OnboardingStep[] {
+  if (!overrides || typeof overrides !== "object") return ONBOARDING_STEPS;
+  const o = overrides as Record<string, Record<string, unknown>>;
+  return ONBOARDING_STEPS.map((step) => {
+    const patch = o[step.id];
+    if (!patch || typeof patch !== "object") return step;
+    const next: Record<string, unknown> = { ...step };
+    for (const k of EDITABLE) {
+      if (!(k in next) || patch[k] === undefined || patch[k] === null) continue;
+      if (typeof next[k] === typeof patch[k] && (!Array.isArray(next[k]) || (Array.isArray(patch[k]) && (patch[k] as unknown[]).length > 0))) next[k] = patch[k];
+    }
+    return next as unknown as OnboardingStep;
+  });
+}
