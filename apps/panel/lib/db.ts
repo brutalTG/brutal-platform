@@ -15,7 +15,7 @@ export function db() {
   return client;
 }
 
-export type Schema = 'core' | 'signal' | 'profile' | 'economy' | 'messaging' | 'drops' | 'pressure';
+export type Schema = 'core' | 'signal' | 'profile' | 'economy' | 'messaging' | 'drops' | 'pressure' | 'amigos';
 
 export function from(schema: Schema, table: string) {
   return db().schema(schema).from(table);

@@ -11,7 +11,7 @@ export function db() {
   return client;
 }
 
-export type Schema = 'core' | 'signal' | 'profile' | 'economy' | 'messaging' | 'drops' | 'pressure';
+export type Schema = 'core' | 'signal' | 'profile' | 'economy' | 'messaging' | 'drops' | 'pressure' | 'amigos';
 export const from = (schema: Schema, table: string) => db().schema(schema).from(table);
 
 // Devuelve los datos o tira el error con contexto. Evita olvidarse de chequear `error`.

@@ -11,6 +11,8 @@ Repo único de BRUTAL: todas las apps, la base de datos y las piezas compartidas
 | `apps/panel` | Panel central. Cada webapp suma su sección | `panel.brutal.lat` | `test-panel.brutal.lat` |
 | `apps/drops` | Webapp de Drops (incluye el onboarding del nodo) | `drops.brutal.lat` | `test-drops.brutal.lat` |
 | `apps/pressure` | Webapp de Pressure (juegos de voz con ElevenLabs) | `pressure.brutal.lat` | `test-pressure.brutal.lat` |
+| `apps/amigos` | Sitio público de AMIGOS DE MIERDA (el juego se juega por WhatsApp) | `amigos.brutal.lat` | `test-amigos.brutal.lat` |
+| `apps/wa-gateway` | Número de WhatsApp propio de AMIGOS DE MIERDA. Proceso permanente (no va en Vercel) | Railway / VM | Railway / VM |
 | `packages/db` | Esquema y migraciones de Supabase. Única fuente de verdad de la base | — | — |
 | `packages/identity` | Links firmados, sesión del nodo y firma entre apps | — | — |
 | `packages/ui` | Sistema de diseño compartido | — | — |
