@@ -17,7 +17,6 @@ export function amigosMissing() {
   const out: string[] = [];
   if (!/^[1-9]\d{7,14}$/.test(amigosEnv.publicNumber)) out.push('AMIGOS_PUBLIC_NUMBER');
   if (amigosEnv.mode === 'gateway') {
-    if (!/^https?:\/\//.test(amigosEnv.gatewayUrl)) out.push('AMIGOS_GATEWAY_URL');
     if (amigosEnv.gatewaySecret.length < 32) out.push('AMIGOS_GATEWAY_SECRET');
   }
   return out;
@@ -74,9 +73,13 @@ class SignedStore extends SupabaseStore {
   }
 }
 
+export function amigosStore() {
+  return new SignedStore({ mode: amigosEnv.mode, gatewayUrl: amigosEnv.gatewayUrl, gatewaySecret: amigosEnv.gatewaySecret });
+}
+
 export function amigosCtx(now = new Date()): Ctx {
   return {
-    store: new SignedStore({ mode: amigosEnv.mode, gatewayUrl: amigosEnv.gatewayUrl, gatewaySecret: amigosEnv.gatewaySecret }),
+    store: amigosStore(),
     urls,
     now,
     publicNumber: amigosEnv.publicNumber || '5490000000000',

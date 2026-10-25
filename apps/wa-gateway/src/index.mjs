@@ -207,6 +207,28 @@ ${state.lastError ? `<p style="color:#888">Último error: ${String(state.lastErr
   }
 }).listen(cfg.port, () => log.info({ port: cfg.port }, 'gateway escuchando'));
 
+// Lo que el API dejó en cola: lo busca cada pocos segundos (no hace falta IP pública).
+let polling = false;
+setInterval(async () => {
+  if (polling || !state.connected || outQueue.size() > 0) return;
+  polling = true;
+  try {
+    const { items = [] } = await api('/amigos/outbox', { limit: 10 });
+    for (const it of items) {
+      outQueue(async () => {
+        try {
+          await deliver(it);
+          await api('/amigos/outbox/ack', { id: it.id, ok: true });
+        } catch (e) {
+          await api('/amigos/outbox/ack', { id: it.id, ok: false, error: String(e) }).catch(() => {});
+          throw e;
+        }
+      });
+    }
+  } catch (e) { log.warn({ err: String(e) }, 'no pude leer la cola'); }
+  finally { polling = false; }
+}, Math.max(2, Number(process.env.POLL_SECONDS ?? 3)) * 1000);
+
 // El reloj del juego.
 setInterval(() => { if (toApi.size() < 3) toApi(() => api('/amigos/tick')); }, Math.max(15, cfg.tickSeconds) * 1000);
 

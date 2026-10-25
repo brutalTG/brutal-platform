@@ -261,6 +261,15 @@ export class SupabaseStore implements Store {
 
   // ---------- Lo que sale ----------
   async send(p: Person, out: Outbound, purpose: string) {
+    // Sin URL de gateway: el mensaje queda en cola y el gateway lo viene a buscar (puede correr en cualquier compu, sin IP pública).
+    if (this.cfg.mode === 'gateway' && !this.cfg.gatewayUrl) {
+      await from('messaging', 'messages').insert({
+        contact_id: p.contactId, node_id: p.nodeId, direction: 'out', purpose, status: 'queued',
+        body: out.text?.slice(0, 4096) ?? null, media_url: out.imageUrl ?? out.audioUrl ?? null,
+        media_kind: out.imageUrl ? 'image' : out.audioUrl ? 'audio' : null, idempotency_key: `out:${crypto.randomUUID()}`,
+      });
+      return;
+    }
     const r = await gatewaySend(this.cfg, p.phone, out);
     const now = new Date().toISOString();
     await from('messaging', 'messages').insert({
@@ -271,5 +280,30 @@ export class SupabaseStore implements Store {
       media_kind: out.imageUrl ? 'image' : out.audioUrl ? 'audio' : null, idempotency_key: `out:${crypto.randomUUID()}`,
     });
     if (r.ok) await from('messaging', 'contacts').update({ last_outbound_at: now }).eq('id', p.contactId);
+  }
+
+  /** Lo que espera salir, en orden. Al entregarlo queda como enviado: si el gateway falla, avisa con ack. */
+  async claimOutbox(limit: number) {
+    const rows = await must(from('messaging', 'messages').select('id, contact_id, body, media_url, media_kind, created_at')
+      .eq('status', 'queued').like('purpose', 'amigos%').order('created_at').limit(limit), 'cola') as any[];
+    if (rows.length === 0) return [];
+    const now = new Date().toISOString();
+    const claimed = await must(from('messaging', 'messages').update({ status: 'sent', sent_at: now })
+      .in('id', rows.map((r) => r.id)).eq('status', 'queued').select('id'), 'tomar cola') as { id: string }[];
+    const ok = new Set(claimed.map((c) => c.id));
+    const contacts = await must(from('messaging', 'contacts').select('id, phone_e164').in('id', [...new Set(rows.map((r) => r.contact_id))]), 'teléfonos') as any[];
+    const phone = new Map(contacts.map((c) => [c.id, c.phone_e164]));
+    for (const id of new Set(rows.map((r) => r.contact_id))) await from('messaging', 'contacts').update({ last_outbound_at: now }).eq('id', id);
+    return rows.filter((r) => ok.has(r.id)).map((r) => ({
+      id: r.id, to: String(phone.get(r.contact_id) ?? '').replace(/\D/g, ''), text: r.body,
+      image_url: r.media_kind === 'image' ? r.media_url : null, audio_url: r.media_kind === 'audio' ? r.media_url : null,
+    }));
+  }
+
+  async ackOutbox(id: string, ok: boolean, providerId: string | null, error: string | null) {
+    const now = new Date().toISOString();
+    await from('messaging', 'messages').update(ok
+      ? { provider_message_id: providerId ? `amigos:${providerId}` : null }
+      : { status: 'failed', failed_at: now, error_code: 'gateway', error_message: (error ?? 'falló el envío').slice(0, 500) }).eq('id', id);
   }
 }

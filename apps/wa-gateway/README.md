@@ -9,9 +9,13 @@ No usa la API oficial de Meta: no hay plantillas ni ventana de 24 horas. A cambi
 - El bot solo le habla a quien le escribió primero, con ritmo humano (escribe, espera) y con un tope por minuto (`MAX_PER_MINUTE`, 30 por defecto).
 - Si el número cae, se cambia el número en `AMIGOS_PUBLIC_NUMBER` del API y se vuelve a vincular: los grupos siguen.
 
+## Cómo se habla con el API
+
+El gateway no necesita IP pública: cada 3 segundos le pregunta al API qué tiene que mandar (`/amigos/outbox`), lo manda y avisa cómo salió. Los mensajes que entran los manda al API (`/amigos/webhook`). Por eso puede correr en una compu cualquiera que esté prendida y con internet. En el API, `AMIGOS_GATEWAY_URL` se deja vacío.
+
 ## Dónde corre
 
-Necesita estar prendido siempre: Railway, una VM chica o una compu. Vercel no sirve porque apaga los procesos entre pedidos. La sesión vive en `AUTH_DIR`, que tiene que ser un volumen persistente (si se borra, hay que volver a vincular).
+Necesita estar prendido siempre: una compu que no se apague, una VM chica o un servidor. Vercel no sirve porque apaga los procesos entre pedidos. La sesión vive en `AUTH_DIR`, que tiene que ser un volumen persistente (si se borra, hay que volver a vincular).
 
 ```bash
 docker build -f apps/wa-gateway/Dockerfile -t amigos-gateway .
