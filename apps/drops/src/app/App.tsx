@@ -4,6 +4,7 @@ import { createBrowserRouter, RouterProvider } from "react-router";
 // Lazy-load each route so a module failure in one doesn't crash the others
 const SurveyApp = lazy(() => import("./components/SurveyApp"));
 const OnboardingApp = lazy(() => import("./components/onboarding/OnboardingApp"));
+const LinkRedeem = lazy(() => import("./components/LinkRedeem"));
 
 function RouteLoading() {
   return (
@@ -48,6 +49,7 @@ function OnboardingRoute() {
 }
 
 const router = createBrowserRouter([
+  { path: "/a/:code", Component: () => <Suspense fallback={<RouteLoading />}><LinkRedeem /></Suspense> },
   { path: "/entrar", Component: OnboardingRoute },
   { path: "/*", Component: SurveyRoute },
 ]);

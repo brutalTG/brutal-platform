@@ -30,7 +30,7 @@ async function node(db, phone, birth) {
 test('todas las migraciones corren desde cero', async () => {
   const db = await freshDb();
   const { rows } = await db.query(`select count(*)::int as n from pg_tables where schemaname in ('core','signal','profile','economy','messaging','drops','pressure')`);
-  assert.equal(rows[0].n, 34);
+  assert.equal(rows[0].n, 36);
   const v = await db.query(`select count(*)::int as n from core.ops_kpis`);
   assert.equal(v.rows[0].n, 1);
   const rls = await db.query(`select count(*)::int as n from pg_tables where schemaname in ('core','signal','profile','economy','messaging','drops','pressure') and not rowsecurity`);

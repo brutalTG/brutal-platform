@@ -4,12 +4,12 @@ import { verifyToken, safeEqual } from './crypto';
 
 // Respuestas JSON con CORS solo para la webapp del juego.
 export function cors(origin: string | null) {
-  const allowed = new Set([env.pressureOrigin, ...(env.brutalEnv === 'test' ? ['http://localhost:3002'] : [])]);
+  const allowed = new Set([env.pressureOrigin, env.dropsOrigin, ...(env.brutalEnv === 'test' ? ['http://localhost:3002', 'http://localhost:3003'] : [])]);
   const h: Record<string, string> = { Vary: 'Origin' };
   if (origin && allowed.has(origin)) {
     h['Access-Control-Allow-Origin'] = origin;
-    h['Access-Control-Allow-Methods'] = 'POST, GET, OPTIONS';
-    h['Access-Control-Allow-Headers'] = 'Content-Type, Authorization';
+    h['Access-Control-Allow-Methods'] = 'POST, GET, PUT, OPTIONS';
+    h['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Brutal-Access-Token';
     h['Access-Control-Max-Age'] = '600';
   }
   return h;

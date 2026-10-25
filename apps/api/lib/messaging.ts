@@ -3,6 +3,7 @@ import { env } from './env';
 import { from, must } from './db';
 import { newCode, sha256 } from './crypto';
 import { command, render, sendText, type Inbound } from './whatsapp';
+import { createDropsLink } from './drops';
 
 const cfg = () => ({ mode: env.whatsappMode, endpoint: env.watiEndpoint, token: env.watiToken, channel: env.watiChannel });
 
@@ -106,6 +107,16 @@ export async function handleInbound(m: Inbound) {
   if (cmd === 'ranking') {
     await sendToContact(to, await rankingText(nodeId), 'ranking', 'ranking');
     return { handled: true, reply: 'ranking' };
+  }
+  // Drops: si todavía no completó el perfil, primero el onboarding.
+  if (cmd === 'drop' || cmd === 'profile') {
+    const n = await must(from('core', 'nodes').select('nickname, birth_date, province').eq('id', nodeId).single(), 'perfil') as any;
+    const ready = Boolean(n.nickname && n.birth_date && n.province);
+    const l = await createDropsLink(nodeId, ready ? { purpose: 'drop', destination: cmd === 'profile' ? 'profile' : 'drop' } : { purpose: 'onboarding', hours: 72 });
+    const text = !ready ? `Bienvenido a BRUTAL. Armá tu perfil acá (dos minutos) y entrás al Drop:\n\n${l.url}\n\nEl link es tuyo, no lo pases.`
+      : cmd === 'profile' ? `Tu perfil, tus tickets y el ranking:\n\n${l.url}` : `Tu Drop te está esperando:\n\n${l.url}\n\nEl link es tuyo, no lo pases.`;
+    await sendToContact(to, text, ready ? `drops_${cmd}` : 'drops_onboarding');
+    return { handled: true, reply: ready ? `drops_${cmd}` : 'drops_onboarding' };
   }
   const link = await createPlayLink(nodeId, m.phone, ACTIVE_EXPERIMENT);
   await sendToContact(to, render(await template('pressure_invite'), { link }), 'pressure_invite', 'pressure_invite');

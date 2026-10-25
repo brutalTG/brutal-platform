@@ -10,6 +10,8 @@ export const env = {
   internalSecret: process.env.INTERNAL_API_SECRET ?? '',
   // Dónde vive la webapp del juego, para armar links y permitir CORS.
   pressureOrigin: (process.env.PRESSURE_ORIGIN ?? 'https://test-pressure.brutal.lat').replace(/\/+$/, ''),
+  // Dónde vive el reproductor de Drops (onboarding, Drops, perfil, ranking).
+  dropsOrigin: (process.env.DROPS_ORIGIN ?? 'https://test-drops.brutal.lat').replace(/\/+$/, ''),
   elevenlabsKey: process.env.ELEVENLABS_API_KEY ?? '',
   whatsappMode: (process.env.WHATSAPP_MODE ?? 'mock') as 'mock' | 'wati' | 'disabled',
   watiEndpoint: (process.env.WATI_API_ENDPOINT ?? '').replace(/\/+$/, ''),

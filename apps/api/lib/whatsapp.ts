@@ -2,7 +2,7 @@
 // y el panel los muestra, pero no sale nada.
 
 export type Inbound = { providerMessageId: string; waId: string; phone: string; displayName: string | null; text: string; at: string | null };
-export type Command = 'play' | 'ranking' | 'opt_out' | 'help';
+export type Command = 'play' | 'ranking' | 'opt_out' | 'help' | 'drop' | 'profile';
 
 export function identity(value: unknown) {
   const waId = String(value ?? '').replace(/\D/g, '');
@@ -19,6 +19,8 @@ export function command(text: string): Command {
   if (['BAJA', 'STOP', 'SALIR', 'NO ME ESCRIBAN'].includes(t)) return 'opt_out';
   if (['RANKING', 'TABLA', 'TICKETS', 'PUNTOS'].includes(t)) return 'ranking';
   if (['AYUDA', 'MENU', 'HELP'].includes(t)) return 'help';
+  if (['DROP', 'DROPS', 'QUIERO ENTRAR', 'ENTRAR'].includes(t)) return 'drop';
+  if (['PERFIL', 'MI PERFIL', 'CUENTA', 'SALDO', 'BALANCE'].includes(t)) return 'profile';
   // Cualquier otra cosa ("hola", "JUGAR", "PRESSURE") recibe el link al juego.
   return 'play';
 }
