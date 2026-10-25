@@ -4,9 +4,12 @@ import { from, must } from './db';
 import { newCode, sha256, signToken, verifyToken } from './crypto';
 import { HttpError } from './http';
 import {
-  birthDateFromAge, computeClaim, consistencyOf, displayReward, multiplierFor, normalizeWallet, observationOf, parseLocation, POLICY, resolveReward,
-  type AnswerBody,
+  birthDateFromAge, computeClaim, consistencyOf, displayReward, hiloStep, hiloView, HILO_LADDER, multiplierFor, normalizeWallet, observationOf, parseLocation, POLICY,
+  resolveReward, sessionMultiplier, type AnswerBody, type Hand, type HiloAction, type VoiceAnswer,
 } from './drops-game';
+import { parseAnswer } from './game';
+import { db } from './db';
+import { stt, tts, wordFeatures } from './elevenlabs';
 
 // API del reproductor de Drops (traído del sandbox). Mismo contrato que el servidor viejo,
 // sobre la base nueva: nodos en core, señal en signal.observations, tickets y plata en economy.ledger.
@@ -237,14 +240,21 @@ export async function recordResponse(a: Access, body: AnswerBody & { session_id?
   const q = card.questions;
 
   const latency = typeof body.latency_ms === 'number' && Number.isFinite(body.latency_ms) && body.latency_ms >= 0 ? Math.round(body.latency_ms) : 0;
-  const below = latency < (q.min_latency_ms ?? 400);
+  const below = !(q.format === 'voice' || q.format === 'mayor_menor') && latency < (q.min_latency_ms ?? 400);
   const isTrap = q.format === 'trap' || q.format === 'trap_silent';
+  // Una respuesta hablada no se puede dar "sin leer": la latencia mínima no aplica.
   const trapCorrect = isTrap ? Number(body.choice_index) === Number(q.content?.correctIndex) : null;
   const r = resolveReward(rewardOf(card), node.is_minor);
   const currency = r.cash > 0 ? 'cash_usd' : r.tickets > 0 ? 'tickets' : null;
   const value = r.cash > 0 ? r.cash : r.tickets;
   const granted = !below && trapCorrect !== false && currency !== null;
 
+  if (q.format === 'mayor_menor') {
+    // La mano la tiene el servidor: lo que mande el teléfono no cuenta.
+    const hand = await must(from('drops', 'hilo_hands').select('cards, decisions, status, multiplier').eq('session_id', s.id).eq('position', position!).maybeSingle(), 'mano') as any;
+    if (hand && hand.status === 'playing') await from('drops', 'hilo_hands').update({ status: 'timeout', multiplier: 1, updated_at: new Date().toISOString() }).eq('session_id', s.id).eq('position', position!);
+    body = { ...body, hilo: hand ? { status: hand.status === 'playing' ? 'timeout' : hand.status, multiplier: hand.status === 'playing' ? 1 : Number(hand.multiplier), steps: hand.status === 'busted' ? hand.decisions.length - 1 : hand.decisions.length, cards: hand.cards, decisions: hand.decisions } : null };
+  }
   const obs = observationOf(q.format, q.content ?? {}, body);
   const { data: ob, error: obErr } = await from('signal', 'observations').insert({
     pseudonym_id: node.pseudonym_id, app_slug: 'drops', instrument_type: 'drop', instrument_id: d.slug, instrument_version: String(s.drop_version),
@@ -283,7 +293,8 @@ export async function completeSession(a: Access, body: { session_id?: string; ar
   const now = new Date();
   await must(from('drops', 'sessions').update({
     status: 'completed', completed_at: now.toISOString(), total_ms: Math.max(0, now.getTime() - Date.parse(s.started_at)),
-    multiplier: multiplierFor(d.config?.multiplierCheckpoints, answers.length),
+    multiplier: sessionMultiplier(multiplierFor(d.config?.multiplierCheckpoints, answers.length),
+      (await must(from('drops', 'hilo_hands').select('status, multiplier').eq('session_id', s.id), 'manos') as any[])),
     traps_passed: passed, traps_failed: traps.length - passed,
     avg_latency_ms: lat.length ? Math.round(lat.reduce((p, c) => p + c, 0) / lat.length) : null,
     consistency: consistencyOf(answers), archetype: body.archetype_result ?? null, bic_scores: body.bic_scores ?? null,
@@ -428,4 +439,85 @@ export async function apply(a: Access, b: Record<string, any>) {
   const fresh = await nodeOf(node.id);
   const next = await nextAfterOnboarding(fresh);
   return { ok: true, applicationId: node.id, referralCode: null, queuePosition: 0, whatsappNoticeStatus: null, ...next, dropAccessExpiresAt: null };
+}
+
+// ---------- Mayor o menor dentro del Drop ----------
+async function cardAt(a: Access, sessionId: string | undefined, position: number | undefined, questionId: string | undefined, format: string) {
+  const { node, s, d } = await ownedSession(a, sessionId);
+  if (!playable(node, a.test)) throw new HttpError(403, 'not_authorized', 'Not authorized');
+  if (s.status !== 'started') throw new HttpError(409, 'session_not_active', 'Session is not active');
+  if (!Number.isInteger(position) || position! < 0) throw new HttpError(400, 'position_required', 'position required');
+  const card = (await cardsOf(d.id))[position!];
+  if (!card || card.question_id !== questionId || card.questions.format !== format) throw new HttpError(400, 'wrong_question', 'Question is not part of this drop position');
+  return { node, s, d, q: card.questions };
+}
+
+export async function dropHilo(a: Access, b: { session_id?: string; position?: number; question_id?: string; action?: string; at_step?: number }) {
+  const action = (['start', 'higher', 'lower', 'stand'].includes(String(b.action)) ? b.action : 'start') as HiloAction;
+  const { s, q } = await cardAt(a, b.session_id, b.position, b.question_id, 'mayor_menor');
+  const ladder = Array.isArray(q.content?.ladder) && q.content.ladder.every((x: unknown) => Number(x) > 1) ? q.content.ladder.map(Number).slice(0, 8) : HILO_LADDER;
+  const row = await must(from('drops', 'hilo_hands').select('cards, decisions, status, multiplier').eq('session_id', s.id).eq('position', b.position!).maybeSingle(), 'mano') as any;
+  const current: Hand | null = row ? { cards: row.cards, decisions: row.decisions, status: row.status, multiplier: Number(row.multiplier) } : null;
+  const next = hiloStep(current, action, ladder, undefined, typeof b.at_step === 'number' ? b.at_step : undefined);
+  if (!row) {
+    const { error } = await from('drops', 'hilo_hands').insert({ session_id: s.id, position: b.position, question_id: q.id, cards: next.cards, decisions: next.decisions, status: next.status, multiplier: next.multiplier });
+    if (error) return dropHilo(a, { ...b, action: 'start' }); // otra pestaña la arrancó recién
+  } else if (next.cards.length !== row.cards.length || next.status !== row.status) {
+    // Solo avanza si nadie la movió en el medio (mismo largo de decisiones).
+    const { data } = await from('drops', 'hilo_hands').update({ cards: next.cards, decisions: next.decisions, status: next.status, multiplier: next.multiplier, updated_at: new Date().toISOString() })
+      .eq('session_id', s.id).eq('position', b.position!).eq('status', 'playing').select('session_id');
+    if (!data?.length) return dropHilo(a, { ...b, action: 'start' });
+  }
+  return hiloView(next, ladder);
+}
+
+// ---------- Pregunta por voz dentro del Drop ----------
+const DROPS_AUDIO = 'drops-audio';
+let dropsAudioReady = false;
+
+/** Recibe el audio, lo transcribe, lo guarda en privado y lo registra como la respuesta de esa carta. */
+export async function recordVoice(a: Access, form: FormData) {
+  const sessionId = String(form.get('session_id') ?? ''), questionId = String(form.get('question_id') ?? '');
+  const position = Number.parseInt(String(form.get('position_in_drop') ?? ''), 10);
+  const { s, q } = await cardAt(a, sessionId, position, questionId, 'voice');
+  const audio = form.get('audio');
+  const latency = Number(form.get('latency_ms')) || null;
+  let voice: VoiceAnswer | null = null;
+  if (audio instanceof Blob && audio.size > 800) {
+    if (audio.size > 6_000_000) throw new HttpError(413, 'too_big', 'Audio demasiado largo');
+    const ext = (audio.type.includes('mp4') ? 'm4a' : audio.type.includes('ogg') ? 'ogg' : 'webm');
+    let path: string | null = null;
+    try {
+      const st = db().storage;
+      if (!dropsAudioReady) { const { data } = await st.getBucket(DROPS_AUDIO); if (!data) await st.createBucket(DROPS_AUDIO, { public: false, fileSizeLimit: 8_000_000 }); dropsAudioReady = true; }
+      path = `${s.id}/${position}.${ext}`;
+      const { error } = await st.from(DROPS_AUDIO).upload(path, audio, { contentType: audio.type || 'audio/webm', upsert: true });
+      if (error) path = null;
+    } catch { path = null; }
+    let transcript = '', words: Awaited<ReturnType<typeof stt>>['words'] = [];
+    try { ({ text: transcript, words } = await stt(audio, `drop-${position}.${ext}`)); } catch (e) { console.error('stt drops', e); }
+    const type = (['choice', 'yes_no', 'agree', 'number', 'open'].includes(q.content?.answerType) ? q.content.answerType : 'open') as any;
+    const parsed = parseAnswer(type, transcript, type === 'choice' ? { a: String(q.content?.optionA ?? ''), b: String(q.content?.optionB ?? '') } : undefined);
+    const wf = wordFeatures(words);
+    voice = {
+      transcript, stated: parsed.kind, number: 'value' in parsed ? (parsed as any).value : null, audio_path: path ? `${DROPS_AUDIO}/${path}` : null,
+      speech_ms: Number(form.get('speech_ms')) || null, words: wf.words, first_word_ms: wf.first_word_ms,
+    };
+  }
+  const r = await recordResponse(a, { session_id: sessionId, question_id: questionId, position_in_drop: position, latency_ms: latency, voice, multiplier_at_position: Number(form.get('multiplier_at_position')) || 1 });
+  return { ...r, transcript: voice?.transcript ?? null };
+}
+
+/** La voz de BRUTAL leyendo una carta de voz del Drop que se está jugando (solo esos textos). */
+export async function dropTts(a: Access, b: { text?: string }) {
+  const text = String(b.text ?? '');
+  if (!text || text.length > 400) throw new HttpError(400, 'bad_text', 'bad text');
+  const d = await dropFor(a);
+  if (!d) throw new HttpError(404, 'no_active_drop', 'No active drop');
+  const voiced = (await cardsOf(d.id)).filter((c) => c.questions.format === 'voice' && c.questions.content?.speak !== false).map((c) => String(c.questions.content?.text ?? ''));
+  if (!voiced.includes(text)) throw new HttpError(403, 'not_in_script', 'not in script');
+  const exp = await must(from('pressure', 'experiments').select('definition').order('created_at', { ascending: false }).limit(1).maybeSingle(), 'voz') as any;
+  const voice = d.config?.voice ?? exp?.definition?.voice;
+  if (!voice?.voice_id) throw new HttpError(503, 'voice_not_configured', 'Sin voz configurada');
+  return tts(text, voice);
 }

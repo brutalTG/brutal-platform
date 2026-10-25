@@ -41,6 +41,7 @@ export interface PanelDrop {
   splash?: SplashConfig;
   segmentIds?: string[];
   lastPublishedAt?: string;
+  studyId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -60,11 +61,15 @@ export interface ProfileDimension {
 // ---------- Copia en memoria ----------
 let questions: PanelQuestion[] = [];
 let drops: PanelDrop[] = [];
+let studies: { id: string; name: string }[] = [];
 
-export function hydrate(data: { questions: PanelQuestion[]; drops: PanelDrop[] }) {
+export function hydrate(data: { questions: PanelQuestion[]; drops: PanelDrop[]; studies?: { id: string; name: string }[] }) {
   questions = data.questions;
   drops = data.drops;
+  studies = data.studies ?? [];
 }
+
+export const getStudies = () => studies;
 
 // ---------- Guardado en orden ----------
 export type SaveState = { pending: number; error: string | null };
@@ -312,6 +317,7 @@ export const QUESTION_TYPE_CATEGORIES: Record<string, { label: string; types: Qu
   basic: { label: "Básico", types: ["choice", "slider", "confesionario"] },
   visual: { label: "Visual", types: ["choice_emoji", "choice_hybrid", "slider_emoji", "binary_media", "hot_take_visual", "media_reaction"] },
   interactive: { label: "Interactivo", types: ["ranking", "prediction_bet", "rafaga", "rafaga_emoji", "rafaga_burst", "hot_take"] },
+  voz: { label: "Voz y juegos", types: ["voice", "mayor_menor"] },
   special: { label: "Especial", types: ["trap", "trap_silent", "dead_drop"] },
 };
 
@@ -321,6 +327,7 @@ export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
   trap: "Trampa", hot_take: "Hot Take", trap_silent: "Trampa silenciosa", choice_emoji: "Elegir emoji",
   choice_hybrid: "Elegir mixto", slider_emoji: "Escala emoji", rafaga_emoji: "Ráfaga emoji",
   hot_take_visual: "Hot Take visual", media_reaction: "Reacción a imagen", rafaga_burst: "Ráfaga con imagen o video",
+  voice: "Pregunta por voz", mayor_menor: "Mayor o menor",
 };
 
 export const QUESTION_TYPE_ICONS: Record<QuestionType, string> = {
@@ -328,6 +335,7 @@ export const QUESTION_TYPE_ICONS: Record<QuestionType, string> = {
   binary_media: "🖼️", rafaga: "⚡", dead_drop: "💀", trap: "🪤", hot_take: "🔥",
   trap_silent: "🕵️", choice_emoji: "😀", choice_hybrid: "💬", slider_emoji: "🫠",
   rafaga_emoji: "⚡😀", hot_take_visual: "🔥🖼️", media_reaction: "📸", rafaga_burst: "💥⚡",
+  voice: "🎙️", mayor_menor: "🃏",
 };
 
 export function getDefaultQuestionData(type: QuestionType): Question {
@@ -355,6 +363,8 @@ export function getDefaultQuestionData(type: QuestionType): Question {
     case "trap": return { ...base, type: "trap", text: "", options: ["", ""], correctIndex: 0, penalty: 50 };
     case "trap_silent": return { ...base, type: "trap_silent", text: "", options: ["", ""], correctIndex: 0, penalty: 25 };
     case "dead_drop": return { ...base, timer: 0, type: "dead_drop", firstLine: "", codeLines: [""], lastLines: [""] };
+    case "voice": return { timer: 0, type: "voice", text: "", speak: true, answerType: "open", maxSeconds: 20 };
+    case "mayor_menor": return { timer: 0, type: "mayor_menor", ladder: [1.5, 2, 3, 5, 10], secondsPerCard: 15 };
     case "media_reaction": return { ...base, type: "media_reaction", imageUrl: "", text: "", mode: "emoji", options: ["😍", "🤮"] };
     default: return { ...base, type: "choice", text: "", options: ["", ""] };
   }

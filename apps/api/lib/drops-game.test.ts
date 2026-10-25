@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { birthDateFromAge, computeClaim, consistencyOf, multiplierFor, normalizeWallet, observationOf, parseLocation, resolveReward } from './drops-game.ts';
+import { hiloStep, hiloView, sessionMultiplier, birthDateFromAge, computeClaim, consistencyOf, multiplierFor, normalizeWallet, observationOf, parseLocation, resolveReward } from './drops-game.ts';
 
 test('un menor nunca cobra plata', () => {
   assert.deepEqual(resolveReward({ cash: 0.2, tickets: 0, minor: null }, true), { cash: 0, tickets: 1 });
@@ -37,4 +37,42 @@ test('varios', () => {
   assert.equal(birthDateFromAge(20, new Date('2026-10-24T12:00:00Z')), '2006-10-24');
   assert.deepEqual(parseLocation('Buenos Aires > La Plata'), { province: 'Buenos Aires', city: 'La Plata' });
   assert.equal(consistencyOf([{ latency_ms: 1, created_at: '2026-01-01T00:00:00Z' }]), null);
+});
+
+test('mayor o menor: acierta, se planta, y un reintento no saca otra carta', () => {
+  const deck = [7, 9, 9, 2];
+  const draw = () => deck.shift()!;
+  let h = hiloStep(null, 'start', undefined, draw);
+  assert.deepEqual(h.cards, [7]);
+  h = hiloStep(h, 'higher', undefined, draw, 0);
+  assert.equal(h.multiplier, 1.5);
+  h = hiloStep(h, 'higher', undefined, draw, 0); // reintento del paso 0
+  assert.equal(h.cards.length, 2);
+  h = hiloStep(h, 'higher', undefined, draw, 1); // 9 -> 9: empate cuenta
+  assert.equal(h.multiplier, 2);
+  h = hiloStep(h, 'stand');
+  assert.equal(h.status, 'stood');
+  assert.equal(hiloView(h).card, 9);
+});
+
+test('mayor o menor: si erra pierde el multiplicador', () => {
+  const deck = [10, 3];
+  const h = hiloStep(hiloStep(null, 'start', undefined, () => deck.shift()!), 'higher', undefined, () => deck.shift()!);
+  assert.equal(h.status, 'busted');
+  assert.equal(h.multiplier, 1);
+  const v = hiloView(h);
+  assert.deepEqual([v.card, v.next, v.ok, v.step], [10, 3, false, 0]);
+});
+
+test('multiplicador final: checkpoints por las manos ganadas', () => {
+  assert.equal(sessionMultiplier(1.5, [{ status: 'stood', multiplier: 2 }, { status: 'busted', multiplier: 1 }]), 3);
+  assert.equal(sessionMultiplier(1, []), 1);
+});
+
+test('voz y mayor o menor como observación', () => {
+  const v = observationOf('voice', { optionA: 'Oficina', optionB: 'Remoto' }, { voice: { transcript: 'remoto obvio', stated: 'b', number: null, audio_path: 'x', speech_ms: 900, words: 2, first_word_ms: 300 } });
+  assert.equal(v.kind, 'voice');
+  assert.equal(v.text, 'Remoto');
+  const g = observationOf('mayor_menor', {}, { hilo: { status: 'stood', multiplier: 3, steps: 3, cards: [], decisions: [] } });
+  assert.equal(g.text, 'se plantó en x3');
 });

@@ -21,6 +21,16 @@ import { API_BASE } from "./api-base";
 // ============================================================
 
 let _sessionId: string | null = null;
+
+/** La partida en curso (la necesitan las cartas que hablan con el servidor mientras se juegan, como mayor o menor). */
+export const currentSessionId = () => _sessionId;
+
+/** Espera a que la partida exista (se crea en segundo plano al arrancar). */
+export async function waitForSession(timeoutMs = 8000): Promise<string | null> {
+  const end = Date.now() + timeoutMs;
+  while (!_sessionId && Date.now() < end) await new Promise((r) => setTimeout(r, 150));
+  return _sessionId;
+}
 let _dropId: string | null = null;
 
 /** Offline queue — responses that couldn't be sent yet */
@@ -110,6 +120,9 @@ function answerToPayloadFields(answer: UserAnswer): Record<string, any> {
     case "prediction_bet":
       fields.choice = answer.side;
       break;
+    case "mayor_menor":
+      // La mano la guarda el servidor; acá solo se avisa que terminó.
+      break;
   }
 
   return fields;
@@ -195,6 +208,25 @@ async function _sendResponse(
   currentMultiplier: number = 1
 ): Promise<void> {
   if (!_sessionId) return;
+
+  if (answer.type === "voice") {
+    const form = new FormData();
+    form.append("session_id", _sessionId);
+    form.append("question_id", (question as any).questionId || "");
+    form.append("position_in_drop", String(index));
+    form.append("latency_ms", String(answer.latencyMs ?? ""));
+    form.append("speech_ms", String(answer.speechMs ?? ""));
+    form.append("multiplier_at_position", String(currentMultiplier));
+    if (answer.audio) form.append("audio", answer.audio, `respuesta.${answer.mime.includes("mp4") ? "m4a" : "webm"}`);
+    const headers = { ...authHeaders() } as Record<string, string>;
+    delete headers["Content-Type"];
+    try {
+      await fetchWithRetry(`${API_BASE}/voice`, { method: "POST", headers, body: form });
+    } catch (err) {
+      console.error(`[BRUTAL] Voice ${index} upload error:`, err);
+    }
+    return;
+  }
 
   const payload: Record<string, any> = {
     session_id: _sessionId,

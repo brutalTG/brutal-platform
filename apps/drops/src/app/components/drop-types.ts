@@ -254,7 +254,33 @@ export interface RafagaBurstQuestion {
   secondsPerItem?: number;
 }
 
+/** Pregunta por voz: se lee (y opcionalmente la dice la voz de BRUTAL) y se contesta hablando. */
+export interface VoiceQuestion {
+  type: "voice";
+  text: string;
+  /** La voz de BRUTAL la lee en voz alta (default: true). */
+  speak?: boolean;
+  /** Cómo se interpreta lo que dijo: libre, entre dos opciones, sí/no, de acuerdo o un número. */
+  answerType?: "open" | "choice" | "yes_no" | "agree" | "number";
+  optionA?: string;
+  optionB?: string;
+  /** Máximo de segundos hablando (default: 20). */
+  maxSeconds?: number;
+}
+
+/** Mayor o menor: juego de cartas que multiplica los Golden Tickets de la partida. */
+export interface MayorMenorQuestion {
+  type: "mayor_menor";
+  text?: string;
+  /** Escalera de multiplicadores por acierto (default: 1.5, 2, 3, 5, 10). */
+  ladder?: number[];
+  /** Segundos para decidir cada carta (default: 15). */
+  secondsPerCard?: number;
+}
+
 export type QuestionContent =
+  | VoiceQuestion
+  | MayorMenorQuestion
   | ChoiceQuestion
   | PredictionBetQuestion
   | RankingQuestion

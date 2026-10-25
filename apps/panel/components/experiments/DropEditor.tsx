@@ -42,6 +42,7 @@ import {
   syncDropNow,
   publishDropNow,
   previewDrop,
+  getStudies,
   QUESTION_TYPE_LABELS,
   QUESTION_TYPE_ICONS,
 } from "./panel-store";
@@ -573,6 +574,21 @@ export function DropEditor({ dropId, onBack, onRefresh }: DropEditorProps) {
                 <Archive size={12} /> Archivar
               </button>
             )}
+            <a
+              href={`/experimentos/lanzar?drop=${encodeURIComponent(drop.dropId)}`}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs rounded-lg transition-colors"
+              style={{ border: "1px solid var(--p-border)", color: "var(--p-text-muted)" }}
+              title="Mandar el link por WhatsApp a un grupo de nodos"
+            >
+              Mandar
+            </a>
+            <a
+              href={`/resultados/drops/${encodeURIComponent(drop.dropId)}`}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs rounded-lg transition-colors"
+              style={{ border: "1px solid var(--p-border)", color: "var(--p-text-muted)" }}
+            >
+              Resultados
+            </a>
             <button
               onClick={handlePreview}
               disabled={publishing}
@@ -609,20 +625,24 @@ export function DropEditor({ dropId, onBack, onRefresh }: DropEditorProps) {
         {expandedConfig && (
           <div className="rounded-xl p-5 flex flex-col gap-4" style={{ backgroundColor: "var(--p-bg-input)", border: "1px solid var(--p-border-subtle)" }}>
             <h3 className="text-sm font-bold flex items-center gap-2" style={{ color: "var(--p-text)" }}>
-              <Settings size={14} /> Configuración del Drop
+              <Settings size={14} /> Configuración del experimento
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium uppercase tracking-wider" style={{ color: "var(--p-text-muted)" }}>Identificador (va en los links)</label>
-                <input
-                  className="rounded-lg px-3 py-2 text-sm font-mono focus:outline-none"
+                <label className="text-xs font-medium uppercase tracking-wider" style={{ color: "var(--p-text-muted)" }}>Estudio</label>
+                <select
+                  className="rounded-lg px-3 py-2 text-sm focus:outline-none"
                   style={{ backgroundColor: "var(--p-bg-hover)", border: "1px solid var(--p-border-subtle)", color: "var(--p-text)" }}
-                  value={drop.dropId}
-                  onChange={(e) => save({ dropId: e.target.value })}
-                />
+                  value={drop.studyId ?? ""}
+                  onChange={(e) => save({ studyId: e.target.value || null })}
+                >
+                  <option value="">Sin estudio</option>
+                  {getStudies().map((st) => <option key={st.id} value={st.id}>{st.name}</option>)}
+                </select>
+                <span className="text-[11px]" style={{ color: "var(--p-text-ghost)" }}>Identificador en los links: <span className="font-mono">{drop.dropId}</span></span>
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-medium uppercase tracking-wider" style={{ color: "var(--p-text-muted)" }}>Timeout message</label>
+                <label className="text-xs font-medium uppercase tracking-wider" style={{ color: "var(--p-text-muted)" }}>Mensaje si se le acaba el tiempo</label>
                 <input
                   className="rounded-lg px-3 py-2 text-sm focus:outline-none"
                   style={{ backgroundColor: "var(--p-bg-hover)", border: "1px solid var(--p-border-subtle)", color: "var(--p-text)" }}

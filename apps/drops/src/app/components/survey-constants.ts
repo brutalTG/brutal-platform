@@ -24,6 +24,8 @@ const ACTION_HINTS: Partial<Record<Question["type"], string>> = {
   binary_media: "Elegi una",
   rafaga: "Rafaga",
   rafaga_emoji: "Rafaga",
+  voice: "Hablá",
+  mayor_menor: "Mayor o menor",
 };
 
 export function getActionHint(q: Question): string {

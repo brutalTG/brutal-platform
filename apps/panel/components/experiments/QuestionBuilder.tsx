@@ -640,6 +640,52 @@ function TypeSpecificFields({
         </>
       );
 
+    case "voice":
+      return (
+        <>
+          <TextField label="Pregunta" value={d.text} onChange={(v) => onChange({ text: v } as any)} multiline placeholder="Corta: se lee en voz alta y se contesta hablando." />
+          <ToggleField label="La dice la voz de BRUTAL" description="Si está apagado, solo se lee en pantalla." value={d.speak !== false} onChange={(v) => onChange({ speak: v } as any)} />
+          <SelectField
+            label="Cómo se lee la respuesta"
+            value={d.answerType ?? "open"}
+            onChange={(v) => onChange({ answerType: v } as any)}
+            options={[
+              { value: "open", label: "Libre: queda la frase" },
+              { value: "choice", label: "Entre dos opciones (dichas en voz)" },
+              { value: "yes_no", label: "Sí o no" },
+              { value: "agree", label: "De acuerdo o no" },
+              { value: "number", label: "Un número" },
+            ]}
+          />
+          {d.answerType === "choice" && (
+            <div className="grid grid-cols-2 gap-3">
+              <TextField label="Opción A" value={d.optionA ?? ""} onChange={(v) => onChange({ optionA: v } as any)} />
+              <TextField label="Opción B" value={d.optionB ?? ""} onChange={(v) => onChange({ optionB: v } as any)} />
+            </div>
+          )}
+          <NumberField label="Máximo de segundos hablando" value={d.maxSeconds ?? 20} onChange={(v) => onChange({ maxSeconds: v } as any)} min={5} max={60} />
+          <p className="text-xs" style={{ color: "var(--p-text-faint)" }}>El jugador ve «Tu respuesta queda grabada». El audio se guarda en privado y se transcribe; en Resultados ves la frase y cómo se repartieron las respuestas.</p>
+        </>
+      );
+
+    case "mayor_menor":
+      return (
+        <>
+          <TextField label="Texto de arriba (opcional)" value={d.text ?? ""} onChange={(v) => onChange({ text: v || undefined } as any)} placeholder="¿La que sigue es mayor o menor?" />
+          <TextField
+            label="Escalera de multiplicadores"
+            value={(d.ladder ?? [1.5, 2, 3, 5, 10]).join(", ")}
+            onChange={(v) => {
+              const ladder = v.split(",").map((x) => Number(x.trim().replace(",", "."))).filter((x) => Number.isFinite(x) && x > 1).slice(0, 8);
+              onChange({ ladder: ladder.length ? ladder : undefined } as any);
+            }}
+            placeholder="1.5, 2, 3, 5, 10"
+          />
+          <NumberField label="Segundos para decidir cada carta" value={d.secondsPerCard ?? 15} onChange={(v) => onChange({ secondsPerCard: v } as any)} min={5} max={60} />
+          <p className="text-xs" style={{ color: "var(--p-text-faint)" }}>Cada acierto sube un escalón; errar lo pierde; plantarse lo asegura. Multiplica los Golden Tickets de toda la partida. Las cartas las reparte el servidor.</p>
+        </>
+      );
+
     case "confesionario":
       return (
         <>

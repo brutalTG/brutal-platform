@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard, FlaskConical, Users, Layers, AudioLines, Coins, MessageSquare, Settings2, ScrollText, Blocks, DoorOpen, ChartColumn,
+  LayoutDashboard, FlaskConical, Users, Layers, Coins, MessageSquare, Settings2, ScrollText, Blocks, DoorOpen, ChartColumn, FileText, Lightbulb,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -16,31 +16,29 @@ export function Sidebar({ counts }: { counts: { attention?: number; bitacora?: n
       title: 'Armar',
       items: [
         { href: '/', label: 'Hoy', icon: <LayoutDashboard />, badge: counts.attention },
-        { href: '/onboarding', label: 'Onboarding', icon: <DoorOpen /> },
+        { href: '/estudios', label: 'Estudios', icon: <Lightbulb /> },
         { href: '/experimentos', label: 'Experimentos', icon: <FlaskConical /> },
         { href: '/herramientas', label: 'Caja de herramientas', icon: <Blocks /> },
+        { href: '/onboarding', label: 'Onboarding', icon: <DoorOpen /> },
       ],
     },
     {
-      title: 'Resultados',
+      title: 'Leer',
       items: [
+        { href: '/resultados', label: 'Resultados', icon: <ChartColumn /> },
+        { href: '/informes', label: 'Informes', icon: <FileText /> },
+        { href: '/drops', label: 'Campo en vivo', icon: <Layers /> },
         { href: '/nodos', label: 'Nodos', icon: <Users /> },
-        { href: '/drops', label: 'Partidas de Drops', icon: <Layers /> },
-        { href: '/pressure', label: 'Detector (voz)', icon: <AudioLines /> },
-        { href: '/estudios', label: 'Estudios', icon: <ChartColumn /> },
       ],
     },
     {
-      title: 'Plataforma',
+      title: 'Ajustes',
       items: [
         { href: '/recompensas', label: 'Recompensas', icon: <Coins /> },
         { href: '/mensajes', label: 'Mensajes', icon: <MessageSquare /> },
         { href: '/sistema', label: 'Sistema', icon: <Settings2 /> },
+        { href: '/bitacora', label: 'Bitácora', icon: <ScrollText />, badge: counts.bitacora },
       ],
-    },
-    {
-      title: 'Inteligencia',
-      items: [{ href: '/bitacora', label: 'Bitácora', icon: <ScrollText />, badge: counts.bitacora }],
     },
   ];
 
@@ -84,10 +82,11 @@ export function Sidebar({ counts }: { counts: { attention?: number; bitacora?: n
 export function MobileNav() {
   const path = usePathname();
   const items = [
-    ['/', 'Hoy'], ['/onboarding', 'Onboarding'], ['/experimentos', 'Experimentos'], ['/herramientas', 'Herramientas'],
-    ['/nodos', 'Nodos'], ['/drops', 'Partidas'], ['/pressure', 'Detector'], ['/estudios', 'Estudios'],
+    ['/', 'Hoy'], ['/estudios', 'Estudios'], ['/experimentos', 'Experimentos'], ['/herramientas', 'Herramientas'], ['/onboarding', 'Onboarding'],
+    ['/resultados', 'Resultados'], ['/informes', 'Informes'], ['/drops', 'Campo'], ['/nodos', 'Nodos'],
     ['/recompensas', 'Recompensas'], ['/mensajes', 'Mensajes'], ['/sistema', 'Sistema'], ['/bitacora', 'Bitácora'],
   ];
+
   const isActive = (href: string) => (href === '/' ? path === '/' : path === href || path.startsWith(href + '/'));
   return (
     <nav aria-label="Secciones del panel" className="flex gap-1 overflow-x-auto px-3 py-2">

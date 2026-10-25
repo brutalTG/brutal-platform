@@ -49,6 +49,27 @@ export default async function HoyPage() {
         description="El campo en curso, lo que requiere una decisión y lo que propuso la inteligencia."
       />
 
+      <Card className="mb-6">
+        <ol className="grid grid-cols-2 gap-px overflow-hidden rounded-md bg-border sm:grid-cols-3 lg:grid-cols-6">
+          {[
+            ['1', 'Estudio', 'La pregunta, la tesis y cómo decidimos.', '/estudios'],
+            ['2', 'Experimento', 'Elegí piezas de la caja y ordenalas.', '/experimentos'],
+            ['3', 'Probar', 'Jugalo en tu teléfono antes de mandarlo.', '/experimentos'],
+            ['4', 'Mandar', 'Publicalo y mandá el link por WhatsApp.', '/experimentos'],
+            ['5', 'Resultados', 'Qué respondieron, con cortes.', '/resultados'],
+            ['6', 'Informe', 'Lectura con IA, Black Brief, piezas.', '/informes'],
+          ].map(([n, t, d, href]) => (
+            <li key={n} className="bg-surface">
+              <a href={href} className="flex h-full flex-col gap-1 p-3 hover:bg-sunken">
+                <span className="tabular text-xs text-fg-3">{n}</span>
+                <span className="font-medium">{t}</span>
+                <span className="text-xs text-fg-3">{d}</span>
+              </a>
+            </li>
+          ))}
+        </ol>
+      </Card>
+
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Nodos activos" value={fmt.n(k.active_nodes)} hint={`${fmt.n(k.new_nodes_7d)} nuevos en 7 días`} href="/nodos?estado=active" />
         <Stat label="Observaciones · 7 días" value={fmt.n(k.observations_7d)} hint="Todo lo que entregaron las webapps" />

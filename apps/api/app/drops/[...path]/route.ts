@@ -1,11 +1,13 @@
 import { handle, json, preflight, HttpError } from '@/lib/http';
 import {
   accessContext, accessFrom, activeDrop, apply, applyInit, claimDrop, completeSession, economyPolicy, exchangeCode, gate,
-  leaderboard, recordResponse, setWallet, startSession, userProfile,
+  dropHilo, dropTts, leaderboard, recordResponse, recordVoice, setWallet, startSession, userProfile,
 } from '@/lib/drops';
+import { cors } from '@/lib/http';
 
 // Todo el API del reproductor de Drops bajo /drops/*. Mismas rutas que el servidor del sandbox.
 export const runtime = 'nodejs';
+export const maxDuration = 60;
 export const OPTIONS = preflight;
 
 type Ctx = { params: Promise<{ path: string[] }> };
@@ -37,6 +39,12 @@ async function route(req: Request, ctx: Ctx) {
   if (m === 'GET' && path === 'active-drop') return json(req, await activeDrop(a));
   if (m === 'POST' && path === 'sessions/start') return json(req, await startSession(a, await body(req)));
   if (m === 'POST' && path === 'responses') return json(req, await recordResponse(a, await body(req)));
+  if (m === 'POST' && path === 'voice') return json(req, await recordVoice(a, await req.formData()));
+  if (m === 'POST' && path === 'hilo') return json(req, await dropHilo(a, await body(req)));
+  if (m === 'POST' && path === 'tts') {
+    const audio = await dropTts(a, await body(req));
+    return new Response(audio, { headers: { 'Content-Type': 'audio/mpeg', 'Cache-Control': 'private, max-age=3600', ...cors(req.headers.get('origin')) } });
+  }
   if (m === 'POST' && path === 'sessions/complete') return json(req, await completeSession(a, await body(req)));
   if (m === 'POST' && path === 'claim-rewards') return json(req, await claimDrop(a, await body(req)));
   if (m === 'GET' && path === 'user/profile') return json(req, await userProfile(a));

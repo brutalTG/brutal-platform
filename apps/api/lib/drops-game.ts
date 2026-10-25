@@ -50,14 +50,30 @@ export function computeClaim(answers: AnswerRow[], multiplier: number) {
   return { usd, tickets: Math.floor(tickets * Math.max(1, Number(multiplier) || 1)) };
 }
 
+export type VoiceAnswer = { transcript: string; stated: string | null; number: number | null; audio_path: string | null; speech_ms: number | null; words: number; first_word_ms: number | null };
+export type HiloResult = { status: string; multiplier: number; steps: number; cards: number[]; decisions: string[] };
+
 export type AnswerBody = {
   choice_index?: number | null; slider_value?: number | null; ranking_result?: unknown[] | null;
   rafaga_choices?: unknown[] | null; text_response?: string | null; choice?: string | null;
+  voice?: VoiceAnswer | null; hilo?: HiloResult | null;
 };
 
 /** Cómo queda la respuesta en signal.observations. */
 export function observationOf(format: string, content: Record<string, any>, b: AnswerBody) {
   const options: unknown[] = Array.isArray(content.options) ? content.options : [];
+  if (format === 'voice') {
+    const v = b.voice;
+    if (!v) return { kind: 'voice', value: { silent: true }, text: null, number: null };
+    const word = v.stated === 'a' ? content.optionA ?? 'A' : v.stated === 'b' ? content.optionB ?? 'B' : v.stated;
+    return { kind: 'voice', value: { ...v }, text: word && !['open', 'unclear'].includes(word) ? String(word) : v.transcript || null, number: v.number };
+  }
+  if (format === 'mayor_menor') {
+    const h = b.hilo;
+    if (!h) return { kind: 'game_move', value: { status: 'timeout', multiplier: 1, steps: 0 }, text: 'no jugó', number: 1 };
+    const text = h.status === 'busted' ? `perdió después de ${h.steps} aciertos` : h.status === 'timeout' ? 'no terminó' : `se plantó en x${h.multiplier}`;
+    return { kind: 'game_move', value: { ...h }, text, number: h.multiplier };
+  }
   if (typeof b.choice_index === 'number') {
     const option = options[b.choice_index] ?? null;
     return { kind: 'choice', value: { index: b.choice_index, option }, text: option == null ? String(b.choice_index) : String(option), number: b.choice_index };
@@ -101,3 +117,39 @@ export function parseLocation(raw: unknown) {
   const [p, c] = s.split(/\s*(?:>|—|-)\s*/);
   return { province: p?.slice(0, 80) || null, city: c?.slice(0, 80) || null };
 }
+
+// ---------- Mayor o menor ----------
+export const HILO_LADDER = [1.5, 2, 3, 5, 10];
+export type Hand = { cards: number[]; decisions: string[]; status: 'playing' | 'stood' | 'busted' | 'timeout'; multiplier: number };
+export type HiloAction = 'start' | 'higher' | 'lower' | 'stand';
+
+const okGuess = (cur: number, next: number, g: string) => (g === 'higher' ? next >= cur : next <= cur);
+
+/** Un paso de la mano. El servidor saca la carta; el teléfono solo ve la que tiene enfrente. Reintentos no sacan otra carta. */
+export function hiloStep(hand: Hand | null, action: HiloAction, ladder: number[] = HILO_LADDER, draw: () => number = () => 1 + Math.floor(Math.random() * 13), atStep?: number): Hand {
+  const h: Hand = hand ? { ...hand, cards: [...hand.cards], decisions: [...hand.decisions] } : { cards: [draw()], decisions: [], status: 'playing', multiplier: 1 };
+  if (action === 'start' || h.status !== 'playing') return h;
+  if (typeof atStep === 'number' && atStep < h.decisions.length) return h;
+  if (action === 'stand') return { ...h, status: 'stood' };
+  const cur = h.cards[h.cards.length - 1], next = draw();
+  h.cards.push(next);
+  h.decisions.push(action);
+  if (!okGuess(cur, next, action)) return { ...h, status: 'busted', multiplier: 1 };
+  const step = h.decisions.length;
+  return { ...h, multiplier: ladder[Math.min(step, ladder.length) - 1], status: step >= ladder.length ? 'stood' : 'playing' };
+}
+
+/** Lo que ve el jugador de la mano. */
+export function hiloView(h: Hand, ladder: number[] = HILO_LADDER) {
+  const steps = h.status === 'busted' ? h.decisions.length - 1 : h.decisions.length;
+  const lastOk = h.decisions.length === 0 ? null : h.status !== 'busted';
+  return {
+    card: h.status === 'busted' ? h.cards[h.cards.length - 2] : h.cards[h.cards.length - 1],
+    next: h.decisions.length ? h.cards[h.cards.length - 1] : null,
+    ok: lastOk, step: steps, multiplier: h.multiplier, ladder, done: h.status !== 'playing', busted: h.status === 'busted',
+  };
+}
+
+/** Multiplicador final de la partida: checkpoints por avanzar × lo que se ganó en las manos de mayor o menor. */
+export const sessionMultiplier = (checkpoint: number, hands: { status: string; multiplier: number }[]) =>
+  Math.round(hands.reduce((m, h) => (h.status === 'stood' ? m * Math.max(1, Number(h.multiplier) || 1) : m), checkpoint) * 100) / 100;

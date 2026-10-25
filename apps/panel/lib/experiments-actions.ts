@@ -13,7 +13,7 @@ export type PanelQuestionRow = { id: string; data: Json; label: string; tags: st
 export type PanelDropRow = {
   id: string; name: string; dropId: string; status: 'draft' | 'active' | 'archived'; timeoutMessage: string;
   multiplierCheckpoints: Json; reveal: Json; questionIds: string[]; disabledQuestionIds: string[]; splash?: Json; segmentIds?: string[];
-  lastPublishedAt?: string; createdAt: string; updatedAt: string;
+  lastPublishedAt?: string; studyId?: string | null; createdAt: string; updatedAt: string;
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -69,21 +69,24 @@ function rowToDrop(r: any, cards: any[]): PanelDropRow {
     disabledQuestionIds: mine.filter((c) => !c.enabled).map((c) => c.question_id),
     ...(cfg.splash ? { splash: cfg.splash } : {}),
     ...(r.segment_ids?.length ? { segmentIds: r.segment_ids } : {}),
+    studyId: r.study_id ?? null,
     ...(r.published_at ? { lastPublishedAt: r.published_at } : {}),
     createdAt: r.created_at, updatedAt: cfg.editedAt ?? r.updated_at,
   };
 }
 
 // ---------- Lectura ----------
-export async function loadBuilder(): Promise<{ ok: true; questions: PanelQuestionRow[]; drops: PanelDropRow[] } | { ok: false; error: string }> {
-  const [q, d, c] = await Promise.all([
+export async function loadBuilder(): Promise<{ ok: true; questions: PanelQuestionRow[]; drops: PanelDropRow[]; studies: { id: string; name: string }[]; detectors: { slug: string; name: string; status: string }[] } | { ok: false; error: string }> {
+  const [q, d, c, st, px] = await Promise.all([
     from('drops', 'questions').select('*').neq('status', 'retired').order('created_at'),
     from('drops', 'drops').select('*').order('created_at'),
     from('drops', 'drop_questions').select('drop_id, question_id, position, enabled'),
+    from('signal', 'studies').select('id, name').neq('status', 'archived').order('created_at', { ascending: false }),
+    from('pressure', 'experiments').select('slug, name, status').order('created_at', { ascending: false }),
   ]);
   const error = q.error ?? d.error ?? c.error;
   if (error) return { ok: false, error: explain(error)! };
-  return { ok: true, questions: (q.data ?? []).map(rowToQuestion), drops: (d.data ?? []).map((r) => rowToDrop(r, c.data ?? [])) };
+  return { ok: true, questions: (q.data ?? []).map(rowToQuestion), drops: (d.data ?? []).map((r) => rowToDrop(r, c.data ?? [])), studies: (st.data ?? []) as { id: string; name: string }[], detectors: (px.data ?? []) as { slug: string; name: string; status: string }[] };
 }
 
 export async function listSegments() {
@@ -136,6 +139,7 @@ export async function saveDrop(d: PanelDropRow): Promise<Saved> {
     },
   });
   if (error) return fail(/duplicate key.*slug/i.test(error.message) ? 'Ya hay otro Drop con ese identificador.' : error);
+  await from('drops', 'drops').update({ study_id: d.studyId && UUID.test(d.studyId) ? d.studyId : null }).eq('id', d.id);
   if (d.status === 'archived') await from('drops', 'drops').update({ status: 'archived' }).eq('id', d.id).neq('status', 'archived');
   if (d.status === 'draft') await from('drops', 'drops').update({ status: 'draft' }).eq('id', d.id).in('status', ['archived', 'closed']);
   return { ok: true };

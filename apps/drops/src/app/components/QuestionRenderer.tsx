@@ -27,6 +27,8 @@ import { MediaReactionQuestion } from "./media-reaction-question";
 import { DeadDropScreen } from "./dead-drop-screen";
 import { resolveDeadDrop } from "./dead-drop-resolver";
 import { RafagaBurstQuestion } from "./rafaga-burst-question";
+import { VoiceQuestion } from "./voice-question";
+import { MayorMenorQuestion } from "./mayor-menor-question";
 
 interface Props {
   question: Question;
@@ -132,6 +134,47 @@ export function QuestionRenderer({
         />
         {reactionText && <MicroReaction text={reactionText} duration={REACTION_MS} />}
       </>
+    );
+  }
+
+  // ---- PIEZAS NUEVAS: voz y mayor o menor ----
+
+  if (q.type === "voice") {
+    return (
+      <VoiceQuestion
+        key={questionIndex}
+        actionHint={actionHint}
+        text={q.text}
+        speak={q.speak !== false}
+        maxSeconds={q.maxSeconds ?? 20}
+        answerType={q.answerType}
+        optionA={q.optionA}
+        optionB={q.optionB}
+        onDone={({ audio, mime, speechMs, latencyMs }) => {
+          if (!pipeline.acquireLock()) return;
+          pipeline.markFirstAnswered();
+          pipeline.captureLatency();
+          pipeline.submitStandard({ type: "voice", audio, mime, speechMs, latencyMs });
+        }}
+      />
+    );
+  }
+
+  if (q.type === "mayor_menor") {
+    return (
+      <MayorMenorQuestion
+        key={questionIndex}
+        text={q.text}
+        position={questionIndex}
+        questionId={(q as any).questionId || ""}
+        secondsPerCard={q.secondsPerCard ?? 15}
+        onDone={({ multiplier, busted, steps }) => {
+          if (!pipeline.acquireLock()) return;
+          pipeline.markFirstAnswered();
+          const latencyMs = pipeline.captureLatency();
+          pipeline.submitStandard({ type: "mayor_menor", multiplier, busted, steps, latencyMs });
+        }}
+      />
     );
   }
 

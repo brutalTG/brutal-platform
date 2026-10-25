@@ -3,6 +3,7 @@ import { from, explain } from '@/lib/db';
 import { fmt } from '@/lib/utils';
 import { statusOf } from '@/lib/status';
 import { Badge, Card, EmptyState, ErrorNotice, PageHeader, RowLink, Table, TD, TH, THead, TR } from '@/components/ui/primitives';
+import { NewStudyButton } from './study-forms';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Estudios' };
@@ -13,11 +14,11 @@ export default async function EstudiosPage() {
   const { data, error } = await from('signal', 'study_overview').select('*').order('updated_at', { ascending: false });
   return (
     <>
-      <PageHeader title="Estudios" description="Cada pregunta sobre la Gen Z, de la tesis a la salida. Los instrumentos son las webapps de turno." />
+      <PageHeader title="Estudios" description="Acá empieza todo: una pregunta sobre la generación, la tesis y cómo vamos a decidir. Desde cada estudio armás sus experimentos y leés sus resultados." actions={<NewStudyButton />} />
       {error ? <ErrorNotice message={explain(error)!} /> : (
         <Card>
           {(data ?? []).length === 0 ? (
-            <EmptyState icon={<FlaskConical />} title="Todavía no hay estudios" description="Un estudio empieza con una tesis. La inteligencia propone sub-tesis e instrumentos desde ahí." />
+            <EmptyState icon={<FlaskConical />} title="Todavía no hay estudios" description="Creá el primero: una pregunta, una tesis y qué tendría que pasar para confirmarla." action={<NewStudyButton />} />
           ) : (
             <Table>
               <THead><tr><TH>Estudio</TH><TH>Etapa</TH><TH align="right">Sub-tesis</TH><TH align="right">Instrumentos</TH><TH align="right">Nodos alcanzados</TH><TH align="right">Observaciones</TH></tr></THead>

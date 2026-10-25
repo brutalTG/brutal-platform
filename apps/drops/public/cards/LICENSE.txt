@@ -1,0 +1,2 @@
+Cartas: "SVG-cards" 1.1, Copyright (C) 2004 David Bellot. LGPL 2.1 o posterior.
+Convertidas a WebP (400 px de ancho) sin otros cambios. Original: http://svg-cards.sourceforge.net

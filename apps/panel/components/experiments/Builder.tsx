@@ -25,10 +25,10 @@ type View =
   | { screen: "pieces" }
   | { screen: "piece"; editId?: string };
 
-export function Builder({ initial, tab }: { initial: { questions: PanelQuestion[]; drops: PanelDrop[] }; tab: "experimentos" | "piezas" }) {
+export function Builder({ initial, tab, openId, detectors = [] }: { initial: { questions: PanelQuestion[]; drops: PanelDrop[]; studies?: { id: string; name: string }[] }; tab: "experimentos" | "piezas"; openId?: string; detectors?: { slug: string; name: string; status: string }[] }) {
   // La copia en memoria se carga una sola vez, antes de pintar las pantallas.
   useMemo(() => hydrate(initial), [initial]);
-  const [view, setView] = useState<View>(tab === "piezas" ? { screen: "pieces" } : { screen: "drops" });
+  const [view, setView] = useState<View>(tab === "piezas" ? { screen: "pieces" } : openId && initial.drops.some((d) => d.id === openId) ? { screen: "drop_editor", dropId: openId } : { screen: "drops" });
   const [save, setSave] = useState<SaveState>({ pending: 0, error: null });
   useEffect(() => onSaveState(setSave), []);
 
@@ -42,7 +42,25 @@ export function Builder({ initial, tab }: { initial: { questions: PanelQuestion[
   let body: React.ReactNode;
   switch (view.screen) {
     case "drops":
-      body = <DropManager onEditDrop={(id) => setView({ screen: "drop_editor", dropId: id })} />;
+      body = (
+        <>
+          <DropManager onEditDrop={(id) => setView({ screen: "drop_editor", dropId: id })} />
+          {detectors.length > 0 && (
+            <div className="mt-8">
+              <h3 className="mb-1 text-xs font-bold uppercase tracking-wider" style={{ color: "var(--p-text-faint)" }}>Detector de mentiras (voz)</h3>
+              <p className="mb-3 text-xs" style={{ color: "var(--p-text-ghost)" }}>Experimento de voz completo: calibración, ráfaga, mayor o menor y preguntas habladas. Se arma en su propio editor.</p>
+              <div className="flex flex-col gap-2">
+                {detectors.map((x) => (
+                  <a key={x.slug} href={`/pressure/${x.slug}`} className="flex items-center justify-between rounded-xl px-4 py-3 text-sm" style={{ backgroundColor: "var(--p-bg-card)", border: "1px solid var(--p-border-subtle)" }}>
+                    <span className="font-bold">{x.name}</span>
+                    <span className="text-xs" style={{ color: "var(--p-text-faint)" }}>{x.status === "live" ? "En juego" : x.status === "testing" ? "En prueba" : x.status === "retired" ? "Apagado" : "Borrador"} · abrir editor →</span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      );
       break;
     case "drop_editor":
       body = <DropEditor dropId={view.dropId} onBack={() => setView({ screen: "drops" })} onRefresh={() => {}} />;
