@@ -485,7 +485,7 @@ export async function recordVoice(a: Access, form: FormData) {
   let voice: VoiceAnswer | null = null;
   if (audio instanceof Blob && audio.size > 800) {
     if (audio.size > 6_000_000) throw new HttpError(413, 'too_big', 'Audio demasiado largo');
-    const ext = (audio.type.includes('mp4') ? 'm4a' : audio.type.includes('ogg') ? 'ogg' : 'webm');
+    const ext = audio.type.includes('mp4') ? 'm4a' : audio.type.includes('ogg') ? 'ogg' : audio.type.includes('mpeg') ? 'mp3' : audio.type.includes('wav') ? 'wav' : 'webm';
     let path: string | null = null;
     try {
       const st = db().storage;
