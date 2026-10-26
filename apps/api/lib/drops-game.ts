@@ -61,10 +61,28 @@ export type AnswerBody = {
   choice_index?: number | null; slider_value?: number | null; ranking_result?: unknown[] | null;
   rafaga_choices?: unknown[] | null; text_response?: string | null; choice?: string | null;
   voice?: VoiceAnswer | null; hilo?: HiloResult | null;
+  /** Detalle fino que manda el reproductor: latencia por ítem, toques, correcciones, apuesta, salidas de la app. */
+  meta?: unknown;
 };
 
-/** Cómo queda la respuesta en signal.observations. */
+/** El detalle fino, saneado: solo un objeto chico (hasta 4 KB), sin funciones ni anidamiento raro. Si no sirve, null. */
+export function cleanMeta(raw: unknown): Record<string, unknown> | null {
+  let v = raw;
+  if (typeof v === 'string') { try { v = JSON.parse(v); } catch { return null; } }
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const s = JSON.stringify(v);
+  if (!s || s.length > 4096 || s === '{}') return null;
+  return JSON.parse(s) as Record<string, unknown>;
+}
+
+/** Cómo queda la respuesta en signal.observations (con el detalle fino en value.meta). */
 export function observationOf(format: string, content: Record<string, any>, b: AnswerBody) {
+  const o = observationCore(format, content, b);
+  const meta = cleanMeta(b.meta);
+  return meta ? { ...o, value: { ...(o.value as Record<string, unknown>), meta } } : o;
+}
+
+function observationCore(format: string, content: Record<string, any>, b: AnswerBody) {
   const options: unknown[] = Array.isArray(content.options) ? content.options : [];
   if (format === 'voice') {
     const v = b.voice;

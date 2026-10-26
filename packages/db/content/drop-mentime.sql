@@ -95,6 +95,10 @@ insert into mentime_cards values
     "text": "Te dan un departamento a tu nombre HOY. A cambio firmás que no te vas del país por diez años. ¿Firmás?",
     "options": ["Firmo", "No firmo"],
     "reaction": "La máquina ya sabía."
+  }'),
+  (15, 'mentime-16-otro', 'choice', 'culture', 15, 0, 0, '{
+    "text": "Última. Sin premio. ¿Jugarías otro de estos mañana?",
+    "options": ["Sí, mandalo", "No, con uno alcanza"]
   }');
 
 insert into drops.questions (format, label, content, card_type, timer_s, status, tags, reward_cash_usd, reward_tickets)

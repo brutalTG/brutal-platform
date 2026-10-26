@@ -211,12 +211,12 @@ export function QuestionRenderer({
           optionA={q.optionA}
           optionB={q.optionB}
           maxTickets={q.maxTickets}
-          onConfirm={(option, _bet) => {
+          onConfirm={(option, bet) => {
             if (!pipeline.acquireLock()) return;
             pipeline.markFirstAnswered();
             const latencyMs = pipeline.captureLatency();
             const side = option === q.optionA ? "A" : "B";
-            pipeline.submitStandard({ type: "prediction_bet", side: side as "A" | "B", latencyMs });
+            pipeline.submitStandard({ type: "prediction_bet", side: side as "A" | "B", latencyMs, meta: { bet } });
           }}
         />
       )}
@@ -226,11 +226,11 @@ export function QuestionRenderer({
           actionHint={actionHint}
           text={q.text}
           options={q.options}
-          onConfirm={(ranked) => {
+          onConfirm={(ranked, detail) => {
             if (!pipeline.acquireLock()) return;
             pipeline.markFirstAnswered();
             const latencyMs = pipeline.captureLatency();
-            pipeline.submitWithDelay({ type: "ranking", order: ranked, latencyMs }, 300);
+            pipeline.submitWithDelay({ type: "ranking", order: ranked, latencyMs, meta: detail }, 300);
           }}
         />
       )}
@@ -257,11 +257,11 @@ export function QuestionRenderer({
           max={q.max}
           labelLeft={q.labelLeft}
           labelRight={q.labelRight}
-          onConfirm={(value) => {
+          onConfirm={(value, detail) => {
             if (!pipeline.acquireLock()) return;
             pipeline.markFirstAnswered();
             const latencyMs = pipeline.captureLatency();
-            pipeline.submitStandard({ type: "slider", value, latencyMs });
+            pipeline.submitStandard({ type: "slider", value, latencyMs, meta: detail });
           }}
         />
       )}
@@ -390,7 +390,7 @@ export function QuestionRenderer({
           promptBold={q.promptBold}
           items={rafagaItems}
           secondsPerItem={q.secondsPerItem}
-          onComplete={(answers) => {
+          onComplete={(answers, itemLatencyMs) => {
             if (!pipeline.acquireLock()) return;
             pipeline.markFirstAnswered();
             const latencyMs = pipeline.captureLatency();
@@ -403,7 +403,7 @@ export function QuestionRenderer({
               if (a === optB) return "B";
               return null;
             });
-            pipeline.submitStandard({ type: "rafaga", answers: abAnswers, latencyMs });
+            pipeline.submitStandard({ type: "rafaga", answers: abAnswers, latencyMs, meta: { item_latency_ms: itemLatencyMs } });
           }}
         />
       )}

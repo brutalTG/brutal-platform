@@ -80,7 +80,7 @@ export async function accessFrom(req: Request, purpose?: 'onboarding' | 'drop'):
  * Entra alguien por el link del grupo con su apodo. Se crea un nodo de prueba (teléfono inventado +999…,
  * canal `grupo:<drop>`) y se le da su link personal al Drop. Sin onboarding: solo el apodo.
  */
-export async function joinGroup(b: { code?: unknown; nickname?: unknown }) {
+export async function joinGroup(b: { code?: unknown; nickname?: unknown; client?: unknown }) {
   const code = String(b.code ?? '').trim().toLowerCase();
   const nickname = cleanNickname(b.nickname);
   if (!nickname) throw new HttpError(400, 'bad_nickname', 'Poné un apodo de 2 a 20 letras.');
@@ -102,7 +102,20 @@ export async function joinGroup(b: { code?: unknown; nickname?: unknown }) {
   }
   if (!nodeId) throw new Error('nodo de grupo: no se pudo crear');
   const link = await createDropsLink(nodeId, { purpose: 'drop', dropSlug: d.slug, hours: 72 });
+  await from('drops', 'join_events').insert({ drop_slug: d.slug, event: 'joined', node_id: nodeId, client_id: clientId(b.client) });
   return { ok: true, url: link.url, code: link.code, drop: d.name, nickname };
+}
+
+const clientId = (raw: unknown) => { const s = String(raw ?? '').toLowerCase(); return /^[a-z0-9-]{8,64}$/.test(s) ? s : null; };
+
+/** Alguien abrió el link de grupo (todavía no puso apodo). Para el embudo. */
+export async function joinOpened(b: { code?: unknown; client?: unknown }, userAgent: string | null) {
+  const code = String(b.code ?? '').trim().toLowerCase();
+  const live = await must(from('drops', 'drops').select('slug, config').eq('status', 'live'), 'drops en juego') as any[];
+  const d = live.find((x) => joinConfig(x.config?.join)?.code === code);
+  if (!d) return { ok: false };
+  await from('drops', 'join_events').insert({ drop_slug: d.slug, event: 'open', client_id: clientId(b.client), user_agent: userAgent?.slice(0, 300) ?? null });
+  return { ok: true };
 }
 
 // ---------- Nodo ----------
@@ -579,7 +592,7 @@ export async function recordVoice(a: Access, form: FormData) {
     const decision = Number(form.get('decision_ms'));
     voice = { ...(voice ?? { transcript: '', stated: null, number: null, audio_path: null, speech_ms: null, words: 0, first_word_ms: null }), committed, decision_ms: Number.isFinite(decision) && decision >= 0 ? Math.round(decision) : null };
   }
-  const r = await recordResponse(a, { session_id: sessionId, question_id: questionId, position_in_drop: position, latency_ms: latency, voice, multiplier_at_position: Number(form.get('multiplier_at_position')) || 1 });
+  const r = await recordResponse(a, { session_id: sessionId, question_id: questionId, position_in_drop: position, latency_ms: latency, voice, multiplier_at_position: Number(form.get('multiplier_at_position')) || 1, meta: form.get('meta') });
   return { ...r, transcript: voice?.transcript ?? null };
 }
 

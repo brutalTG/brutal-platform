@@ -15,6 +15,7 @@ import type { UserAnswer } from "./archetype-engine";
 import type { Question } from "./drop-types";
 import { userAuthHeaders } from "./access-context";
 import { API_BASE } from "./api-base";
+import { takeAway } from "./latency-tracker";
 
 // ============================================================
 // State
@@ -84,9 +85,11 @@ async function fetchWithRetry(
  * Server expects: choice_index, slider_value, ranking_result, rafaga_choices,
  * text_response, latency_ms, raw_response
  */
-function answerToPayloadFields(answer: UserAnswer): Record<string, any> {
+function answerToPayloadFields(answer: UserAnswer, index: number): Record<string, any> {
+  const meta = { ...(answer.meta ?? {}), ...(takeAway(index) ?? {}) };
   const fields: Record<string, any> = {
     latency_ms: answer.latencyMs ?? null,
+    ...(Object.keys(meta).length ? { meta } : {}),
   };
 
   switch (answer.type) {
@@ -221,6 +224,8 @@ async function _sendResponse(
       form.append("committed", answer.committed);
       form.append("decision_ms", String(answer.decisionMs ?? ""));
     }
+    const vmeta = { ...(answer.meta ?? {}), ...(takeAway(index) ?? {}) };
+    if (Object.keys(vmeta).length) form.append("meta", JSON.stringify(vmeta));
     if (answer.audio) form.append("audio", answer.audio, `respuesta.${answer.mime.includes("mp4") ? "m4a" : "webm"}`);
     const headers = { ...authHeaders() } as Record<string, string>;
     delete headers["Content-Type"];
@@ -240,7 +245,7 @@ async function _sendResponse(
     question_type: question.type,
     source: "drop_card",
     multiplier_at_position: currentMultiplier, // Send current multiplier to the backend
-    ...answerToPayloadFields(answer),
+    ...answerToPayloadFields(answer, index),
   };
 
   try {

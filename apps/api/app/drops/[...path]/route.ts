@@ -1,7 +1,7 @@
 import { handle, json, preflight, HttpError } from '@/lib/http';
 import {
   accessContext, accessFrom, activeDrop, apply, applyInit, claimDrop, completeSession, economyPolicy, exchangeCode, gate,
-  dropHilo, dropTts, joinGroup, leaderboard, recordResponse, recordVoice, setWallet, startSession, userProfile,
+  dropHilo, dropTts, joinGroup, joinOpened, leaderboard, recordResponse, recordVoice, setWallet, startSession, userProfile,
 } from '@/lib/drops';
 import { cors } from '@/lib/http';
 
@@ -28,6 +28,7 @@ async function route(req: Request, ctx: Ctx) {
     return json(req, await accessContext(await accessFrom(req, purpose)));
   }
   if (m === 'POST' && path === 'join') return json(req, await joinGroup(await body(req)), 201);
+  if (m === 'POST' && path === 'join/open') return json(req, await joinOpened(await body(req), req.headers.get('user-agent')));
   if (m === 'POST' && path === 'apply/init') return json(req, await applyInit(await accessFrom(req, 'onboarding')));
   if (m === 'POST' && path === 'apply') return json(req, await apply(await accessFrom(req, 'onboarding'), await body(req)), 201);
   if (m === 'GET' && path === 'leaderboard') {

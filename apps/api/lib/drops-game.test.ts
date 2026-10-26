@@ -138,3 +138,18 @@ test('link de grupo: configuración, apodo y teléfono inventado', () => {
   assert.ok(isGuestPhone(p));
   assert.ok(!isGuestPhone('+5491155550000'));
 });
+
+// ---------- Detalle fino de cada respuesta ----------
+import { cleanMeta } from './drops-game.ts';
+
+test('el detalle fino se guarda dentro de la observación, saneado', () => {
+  const o = observationOf('rafaga_emoji', {}, { rafaga_choices: ['A', 'B'], meta: { item_latency_ms: [420, 2800] } });
+  assert.deepEqual((o.value as any).meta, { item_latency_ms: [420, 2800] });
+  assert.deepEqual((o.value as any).choices, ['A', 'B']);
+  assert.deepEqual(cleanMeta('{"bet":30}'), { bet: 30 });
+  assert.equal(cleanMeta('no es json'), null);
+  assert.equal(cleanMeta([1, 2]), null);
+  assert.equal(cleanMeta({}), null);
+  assert.equal(cleanMeta({ x: 'a'.repeat(5000) }), null);
+  assert.equal((observationOf('choice', { options: ['Sí'] }, { choice_index: 0 }).value as any).meta, undefined);
+});

@@ -11,7 +11,7 @@ interface RafagaEmojiQuestionProps {
   promptBold: string;
   items: RafagaEmojiItem[];
   secondsPerItem?: number;
-  onComplete: (answers: (string | null)[]) => void;
+  onComplete: (answers: (string | null)[], itemLatencyMs: (number | null)[]) => void;
 }
 
 const BLINK_STEPS = [1, 0, 1, 0, 1, 0, 1];
@@ -41,6 +41,9 @@ export function RafagaEmojiQuestion({
 
   const currentIdxRef = useRef(0);
   const answersRef = useRef<(string | null)[]>(new Array(items.length).fill(null));
+  // Latencia de cada ítem: desde que el ítem queda quieto en pantalla hasta el toque.
+  const latRef = useRef<(number | null)[]>(new Array(items.length).fill(null));
+  const shownAtRef = useRef<number | null>(null);
   const completedRef = useRef(false);
   const transitioningRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -80,7 +83,7 @@ export function RafagaEmojiQuestion({
   const doComplete = useCallback(() => {
     if (completedRef.current) return;
     completedRef.current = true;
-    setTimeout(() => onCompleteRef.current([...answersRef.current]), 300);
+    setTimeout(() => onCompleteRef.current([...answersRef.current], [...latRef.current]), 300);
   }, []);
 
   const runBlink = useCallback((nextIdx: number) => {
@@ -127,6 +130,7 @@ export function RafagaEmojiQuestion({
       if (transitioningRef.current || completedRef.current) return;
       clearTimer();
       hapticLight();
+      if (shownAtRef.current !== null) latRef.current[currentIdxRef.current] = Math.round(performance.now() - shownAtRef.current);
       answersRef.current[currentIdxRef.current] = option;
       setSelectedOption(option);
 
@@ -142,6 +146,7 @@ export function RafagaEmojiQuestion({
 
   useEffect(() => {
     if (phase !== "active" || completedRef.current || transitioning) return;
+    shownAtRef.current = performance.now();
     setSubProgress(100);
     const start = Date.now();
     const dur = secondsPerItem * 1000;

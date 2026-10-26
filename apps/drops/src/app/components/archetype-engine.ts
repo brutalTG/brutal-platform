@@ -62,7 +62,7 @@ export interface ScoringConfig {
 
 // --- User answer types ---
 
-export type UserAnswer =
+export type UserAnswer = (
   | { type: "choice"; selectedIndex: number; latencyMs?: number }
   | { type: "slider"; value: number; latencyMs?: number }
   | { type: "ranking"; order: string[]; latencyMs?: number }
@@ -75,7 +75,11 @@ export type UserAnswer =
   | { type: "hot_take"; selectedIndex: number; latencyMs?: number }
   | { type: "timeout"; latencyMs?: number }
   | { type: "voice"; audio: Blob | null; mime: string; speechMs?: number; latencyMs?: number; committed?: "truth" | "lie"; decisionMs?: number }
-  | { type: "mayor_menor"; multiplier: number; busted: boolean; steps: number; latencyMs?: number };
+  | { type: "mayor_menor"; multiplier: number; busted: boolean; steps: number; latencyMs?: number }
+) & {
+  /** Detalle fino para la señal (latencia por ítem, toques, correcciones, apuesta, salidas de la app). */
+  meta?: Record<string, unknown>;
+};
 
 // --- Engine ---
 

@@ -11,6 +11,17 @@ type Saved = { url: string; nickname: string };
 
 const keyOf = (code: string) => `brutal_join_${code}`;
 
+/** Id anónimo de este navegador, para contar aperturas sin contar dos veces a la misma persona. */
+function clientId() {
+  try {
+    let id = localStorage.getItem("brutal_client");
+    if (!id) { id = crypto.randomUUID(); localStorage.setItem("brutal_client", id); }
+    return id;
+  } catch {
+    return null;
+  }
+}
+
 function readSaved(code: string): Saved | null {
   try {
     const raw = localStorage.getItem(keyOf(code));
@@ -36,7 +47,11 @@ export default function GroupJoin() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => { setSaved(readSaved(code)); }, [code]);
+  useEffect(() => {
+    setSaved(readSaved(code));
+    // Embudo: abrió el link. Si falla, no importa.
+    fetch(`${API_BASE}/join/open`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code, client: clientId() }), keepalive: true }).catch(() => {});
+  }, [code]);
 
   async function enter() {
     const nick = nickname.trim();
@@ -47,7 +62,7 @@ export default function GroupJoin() {
       const res = await fetch(`${API_BASE}/join`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code, nickname: nick }),
+        body: JSON.stringify({ code, nickname: nick, client: clientId() }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.url) throw new Error(data.message || "No pudimos entrar. Probá de nuevo.");

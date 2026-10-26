@@ -6,7 +6,7 @@ interface RankingQuestionProps {
   actionHint: string;
   text: string;
   options: string[];
-  onConfirm: (rankedOrder: string[]) => void;
+  onConfirm: (rankedOrder: string[], detail: { tap_ms: number[]; undos: number }) => void;
 }
 
 function AnimatedOption({
@@ -60,6 +60,10 @@ export function RankingQuestion({
   onConfirm,
 }: RankingQuestionProps) {
   const [ranked, setRanked] = useState<string[]>([]);
+  // Cuándo eligió cada puesto (ms desde que apareció la carta) y cuántas veces se arrepintió.
+  const shownAt = useRef(performance.now());
+  const taps = useRef<number[]>([]);
+  const undos = useRef(0);
 
   const unranked = options.filter((opt) => !ranked.includes(opt));
   const allRanked = ranked.length === options.length;
@@ -67,11 +71,13 @@ export function RankingQuestion({
   const handleSelect = (option: string) => {
     if (ranked.includes(option)) return;
     hapticLight();
+    taps.current = [...taps.current.slice(0, ranked.length), Math.round(performance.now() - shownAt.current)];
     setRanked((prev) => [...prev, option]);
   };
 
   const handleUnselect = (option: string) => {
     hapticLight();
+    undos.current += 1;
     setRanked((prev) => prev.filter((o) => o !== option));
   };
 
@@ -140,7 +146,7 @@ export function RankingQuestion({
       <ActionButton
         label="Confirmar orden"
         disabled={!allRanked}
-        onClick={() => allRanked && onConfirm(ranked)}
+        onClick={() => allRanked && onConfirm(ranked, { tap_ms: taps.current, undos: undos.current })}
         variant="pill"
       />
     </div>

@@ -9,7 +9,7 @@ interface SliderQuestionProps {
   max?: number;
   labelLeft?: string;
   labelRight?: string;
-  onConfirm: (value: number) => void;
+  onConfirm: (value: number, detail: { first_touch_ms: number | null; changes: number; min_seen: number; max_seen: number }) => void;
 }
 
 function QuestionSlider({ value, onChange, min = 0, max = 10, labelLeft = "Nada", labelRight = "Totalmente" }: { value: number; onChange: (val: number) => void; min?: number; max?: number; labelLeft?: string; labelRight?: string }) {
@@ -177,6 +177,17 @@ export function SliderQuestion({
 }: SliderQuestionProps) {
   const range = max - min;
   const [sliderValue, setSliderValue] = useState(Math.round(range / 2) + min);
+  // Cómo llegó al número: cuándo lo tocó por primera vez, cuántas veces cambió y entre qué valores anduvo.
+  const shownAt = useRef(performance.now());
+  const track = useRef({ first_touch_ms: null as number | null, changes: 0, min_seen: Math.round(range / 2) + min, max_seen: Math.round(range / 2) + min });
+  const onSlide = (v: number) => {
+    const t = track.current;
+    if (t.first_touch_ms === null) t.first_touch_ms = Math.round(performance.now() - shownAt.current);
+    if (v !== sliderValue) t.changes += 1;
+    t.min_seen = Math.min(t.min_seen, v);
+    t.max_seen = Math.max(t.max_seen, v);
+    setSliderValue(v);
+  };
 
   return (
     <div className="flex flex-col flex-1 gap-8">
@@ -187,13 +198,13 @@ export function SliderQuestion({
 
       {/* Slider */}
       <div className="w-full">
-        <QuestionSlider value={sliderValue} onChange={setSliderValue} min={min} max={max} labelLeft={labelLeft} labelRight={labelRight} />
+        <QuestionSlider value={sliderValue} onChange={onSlide} min={min} max={max} labelLeft={labelLeft} labelRight={labelRight} />
       </div>
 
       {/* Confirmar Button */}
       <ActionButton
         label="Confirmar"
-        onClick={() => onConfirm(sliderValue)}
+        onClick={() => onConfirm(sliderValue, { ...track.current })}
         variant="pill"
       />
     </div>
