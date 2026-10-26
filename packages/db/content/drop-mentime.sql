@@ -15,10 +15,10 @@ where not exists (select 1 from economy.seasons where status = 'active');
 -- Cada carta: etiqueta única, formato, contenido tal como lo espera el reproductor, premio.
 create temp table mentime_cards (pos int, label text, format text, card_type text, timer_s int, cash numeric, tickets int, content jsonb) on commit drop;
 insert into mentime_cards values
-  (0, 'mentime-01-llamas', 'choice_hybrid', 'culture', 10, 0, 20, '{
-    "text": "Mataste a alguien sin querer. Son las 3 de la mañana. ¿A quién llamás primero?",
-    "options": ["A mamá 📞", "A mi mejor amigo 🤫", "A ChatGPT 🤖", "A nadie. Lo resuelvo solo 🧹"],
-    "reaction": "Buen cómplice."
+  (0, 'mentime-01-prestamo', 'choice', 'culture', 12, 0, 20, '{
+    "text": "Le prestaste 200 lucas a un amigo hace un año. Se compró una moto. Nunca te las devolvió. ¿Se las pedís?",
+    "options": ["Se las pido, y si se ofende, chau", "No. La di por perdida. Y a él también"],
+    "reaction": "Las dos salidas cuestan un amigo."
   }'),
   (1, 'mentime-02-viejos', 'hot_take', 'culture', 8, 0, 20, '{
     "text": "TUS VIEJOS TE PAGAN MÁS COSAS DE LAS QUE CONTÁS.",
@@ -29,18 +29,18 @@ insert into mentime_cards values
     "promptBold": "¿LO HACÉS? 😈 sí · 😇 no",
     "secondsPerItem": 3,
     "items": [
-      {"text": "Subir historia por un muerto que te caía mal.", "optionA": "😈", "optionB": "😇"},
       {"text": "Leer el celular de tu pareja mientras duerme.", "optionA": "😈", "optionB": "😇"},
-      {"text": "Decir que estás en terapia para zafar de un plan.", "optionA": "😈", "optionB": "😇"},
-      {"text": "Usar la SUBE de jubilado de tu abuela.", "optionA": "😈", "optionB": "😇"},
-      {"text": "Que ChatGPT escriba tu mensaje de pésame.", "optionA": "😈", "optionB": "😇"},
-      {"text": "Votar a alguien que te da vergüenza y decir que votaste en blanco.", "optionA": "😈", "optionB": "😇"}
+      {"text": "Seguir con la obra social de tu viejo después de los 25 con un papel trucho.", "optionA": "😈", "optionB": "😇"},
+      {"text": "Pedirles plata \"para la facultad\" y gastarla en un viaje.", "optionA": "😈", "optionB": "😇"},
+      {"text": "Cobrar un laburo que hizo entera la IA.", "optionA": "😈", "optionB": "😇"},
+      {"text": "Irte del grupo de la familia sin avisar.", "optionA": "😈", "optionB": "😇"},
+      {"text": "Votar en blanco y decir que votaste lo mismo que tus amigos.", "optionA": "😈", "optionB": "😇"}
     ]
   }'),
-  (3, 'mentime-04-match', 'choice', 'culture', 10, 0.25, 0, '{
-    "text": "Match. Es un 10. Hablan bárbaro. ¿Qué te lo baja más?",
-    "options": ["Vota lo contrario que vos", "Tiene Android", "Vive en Laferrere"],
-    "reaction": "Elegiste tu prejuicio favorito."
+  (3, 'mentime-04-estado', 'choice', 'culture', 15, 0.25, 0, '{
+    "text": "Un contacto de tu viejo te consigue un cargo en el Estado: el doble de lo que ganás, sin ir casi nunca. Nadie se entera de cómo entraste.",
+    "options": ["Acepto", "Acepto y renuncio cuando consiga algo mejor", "No acepto"],
+    "reaction": "Acá se separan los que hablan de los que firman."
   }'),
   (4, 'mentime-05-la-maquina', 'dead_drop', 'dead_drop', 0, 0, 0, '{
     "firstLine": "Ahora hablás.",
@@ -56,12 +56,13 @@ insert into mentime_cards values
     "text": "Decime cuánta plata perdiste apostando en el último año. Con número.",
     "speak": true, "answerType": "number", "maxSeconds": 15, "detector": true
   }'),
-  (6, 'mentime-07-ia', 'hot_take', 'culture', 8, 0, 20, '{
-    "text": "TU ÚLTIMO MENSAJE IMPORTANTE LO ESCRIBIÓ UNA IA.",
-    "options": ["Y salió mejor", "Nunca haría eso"]
+  (6, 'mentime-07-ia', 'choice', 'culture', 12, 0, 20, '{
+    "text": "Tu jefe te da un aumento por un informe que hizo entera la IA. ¿Le decís?",
+    "options": ["No. Y uso más IA", "Sí. Me pagan por pensar"],
+    "reaction": "Registrado."
   }'),
   (7, 'mentime-08-voto', 'voice', 'culture', 40, 0.25, 0, '{
-    "text": "Decime a quién votaste la última vez, y si hoy lo volverías a votar.",
+    "text": "Decime a quién votaste la última vez, y a quién de tu familia nunca se lo contaste.",
     "speak": true, "answerType": "open", "maxSeconds": 15, "detector": true
   }'),
   (8, 'mentime-09-fin-de-mes', 'ranking', 'culture', 25, 0.25, 0, '{
@@ -73,10 +74,10 @@ insert into mentime_cards values
     "min": 0, "max": 60, "labelLeft": "Ni uno", "labelRight": "60+",
     "reaction": "Sesenta es \"para siempre\" en esta encuesta."
   }'),
-  (10, 'mentime-11-familia', 'choice', 'culture', 10, 0.25, 0, '{
-    "text": "Se publica en el grupo de tu familia UNA de las dos. Elegí.",
-    "options": ["Tu tiempo de pantalla de esta semana", "Tu última búsqueda de Google"],
-    "reaction": "Elegiste la que creés que duele menos."
+  (10, 'mentime-11-hermano', 'choice', 'culture', 15, 0.25, 0, '{
+    "text": "Tu hermano de 16 te pide que le abras una cuenta de apuestas a tu nombre. Si no, la abre con un DNI trucho.",
+    "options": ["Se la abro y lo vigilo", "No. Que se arregle"],
+    "reaction": "No había opción buena. Esa era la idea."
   }'),
   (11, 'mentime-12-amigo', 'voice', 'culture', 40, 0.25, 0, '{
     "text": "Nombrá al amigo que sacarías del grupo si nadie se enterara. Y decí por qué.",
@@ -87,12 +88,13 @@ insert into mentime_cards values
     "ladder": [1.5, 2, 3], "secondsPerCard": 12
   }'),
   (13, 'mentime-14-prediccion', 'prediction_bet', 'culture', 18, 0, 20, '{
-    "text": "Los que jugaron antes que vos: ¿en qué pregunta le mintieron más a la máquina?",
-    "optionA": "En la plata de las apuestas", "optionB": "En el voto", "maxTickets": 50
+    "text": "En cinco años, la mayoría de tu grupo de amigos…",
+    "optionA": "Sigue en Argentina", "optionB": "Ya se fue", "maxTickets": 50
   }'),
-  (14, 'mentime-15-casa', 'hot_take', 'culture', 8, 0, 20, '{
-    "text": "NUNCA VAS A TENER CASA PROPIA.",
-    "options": ["Ya lo acepté", "Ni en pedo"]
+  (14, 'mentime-15-depto', 'choice', 'culture', 15, 0, 20, '{
+    "text": "Te dan un departamento a tu nombre HOY. A cambio firmás que no te vas del país por diez años. ¿Firmás?",
+    "options": ["Firmo", "No firmo"],
+    "reaction": "La máquina ya sabía."
   }');
 
 insert into drops.questions (format, label, content, card_type, timer_s, status, tags, reward_cash_usd, reward_tickets)
@@ -118,7 +120,8 @@ select 'mentime', 'MENTIME QUE ME GUSTA', 'draft', (select id from economy.seaso
       'mode', 'terminal', 'buttonText', 'ENTRO',
       'staticLines', jsonb_build_array('> DROP 001 · MENTIME QUE ME GUSTA', '> 15 cartas · 4 minutos', '> Paga hasta US$ 1,75 + Golden Tickets', '> Hay una máquina adentro'),
       'typewriterLines', jsonb_build_array(
-        '> Vas a contestar cosas que no le contás a nadie.',
+        '> Quince situaciones que ya viviste o vas a vivir.',
+        '> Ninguna tiene salida limpia.',
         '> Tres veces vas a hablar.',
         '> Una vez vas a mentir.',
         '> Nadie se va a enterar.',
@@ -129,18 +132,18 @@ select 'mentime', 'MENTIME QUE ME GUSTA', 'draft', (select id from economy.seaso
       'title', E'Inclasificable',
       'description', 'Ni santo ni cínico. La máquina te va a seguir mirando.',
       'archetypes', jsonb_build_array(
-        jsonb_build_object('id', 'santo', 'title', E'Santo de\nInstagram', 'description', 'Todo 😇, todo "me pago todo", todo "nunca haría eso". Nadie te cree. Ni vos.', 'formula', jsonb_build_object('postureo', 1.0, 'cinismo', -0.5)),
-        jsonb_build_object('id', 'cinico', 'title', E'Cínico\nfuncional', 'description', 'Lo hacés, lo sabés y lo decís. Lo único que te falta es el remordimiento.', 'formula', jsonb_build_object('cinismo', 1.0, 'postureo', -0.5)),
+        jsonb_build_object('id', 'santo', 'title', E'Santo de\nInstagram', 'description', 'No aceptás, no firmás, le decís la verdad al jefe. Nadie te cree. Ni vos.', 'formula', jsonb_build_object('postureo', 1.0, 'cinismo', -0.5)),
+        jsonb_build_object('id', 'cinico', 'title', E'Cínico\nfuncional', 'description', 'Aceptás, cobrás, no le pedís la plata al amigo. Lo único que te falta es el remordimiento.', 'formula', jsonb_build_object('cinismo', 1.0, 'postureo', -0.5)),
         jsonb_build_object('id', 'wifi', 'title', E'Desesperación\ncon wifi', 'description', 'Te cortan la plata y durás una semana. Pero tenés un plan. Siempre tenés un plan.', 'formula', jsonb_build_object('caos', 1.0)),
-        jsonb_build_object('id', 'mama', 'title', E'El que llama\na mamá', 'description', 'A las 3 de la mañana, con un cuerpo en el living, igual sabés a quién llamar.', 'formula', jsonb_build_object('dependencia', 1.0, 'caos', -0.3))),
+        jsonb_build_object('id', 'familia', 'title', E'Hijo de\nfamilia', 'description', 'Te pagan, te prestan, te consiguen el cargo, te dan el depto. Y vos firmás.', 'formula', jsonb_build_object('dependencia', 1.0, 'caos', -0.3))),
       'scoring', jsonb_build_object(
         'choiceScoring', jsonb_build_array(
-          jsonb_build_object('questionIndex', 0, 'optionScores', jsonb_build_array(jsonb_build_object('dependencia', 2), jsonb_build_object('dependencia', 1), jsonb_build_object('caos', 2), jsonb_build_object('cinismo', 1, 'caos', 1))),
+          jsonb_build_object('questionIndex', 0, 'optionScores', jsonb_build_array(jsonb_build_object('cinismo', 1), jsonb_build_object('caos', 1, 'postureo', 1))),
           jsonb_build_object('questionIndex', 1, 'optionScores', jsonb_build_array(jsonb_build_object('cinismo', 1, 'dependencia', 1), jsonb_build_object('postureo', 2))),
-          jsonb_build_object('questionIndex', 3, 'optionScores', jsonb_build_array(jsonb_build_object('cinismo', 1), jsonb_build_object('postureo', 1), jsonb_build_object('cinismo', 1))),
+          jsonb_build_object('questionIndex', 3, 'optionScores', jsonb_build_array(jsonb_build_object('cinismo', 2, 'dependencia', 1), jsonb_build_object('cinismo', 1, 'caos', 1), jsonb_build_object('postureo', 2))),
           jsonb_build_object('questionIndex', 6, 'optionScores', jsonb_build_array(jsonb_build_object('cinismo', 1, 'caos', 1), jsonb_build_object('postureo', 2))),
-          jsonb_build_object('questionIndex', 10, 'optionScores', jsonb_build_array(jsonb_build_object('postureo', 1), jsonb_build_object('cinismo', 1))),
-          jsonb_build_object('questionIndex', 14, 'optionScores', jsonb_build_array(jsonb_build_object('cinismo', 1), jsonb_build_object('postureo', 1, 'caos', 1)))),
+          jsonb_build_object('questionIndex', 10, 'optionScores', jsonb_build_array(jsonb_build_object('cinismo', 1, 'caos', 1), jsonb_build_object('postureo', 1))),
+          jsonb_build_object('questionIndex', 14, 'optionScores', jsonb_build_array(jsonb_build_object('dependencia', 2), jsonb_build_object('caos', 1, 'postureo', 1)))),
         'rafagaScoring', jsonb_build_array(jsonb_build_object('questionIndex', 2, 'majorityA', jsonb_build_object('cinismo', 2), 'majorityB', jsonb_build_object('postureo', 2))),
         'sliderScoring', jsonb_build_array(jsonb_build_object('questionIndex', 9, 'ranges', jsonb_build_array(
           jsonb_build_object('min', 0, 'max', 7, 'scores', jsonb_build_object('caos', 2, 'dependencia', 1)),
