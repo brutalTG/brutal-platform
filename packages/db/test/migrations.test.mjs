@@ -133,3 +133,36 @@ test('el panel guarda el orden de un Drop de una vez, sin chocar posiciones', as
   assert.equal(left.rows[0].n, 1);
   await assert.rejects(save([q[1], q[1]]), /dos veces/);
 });
+
+test('amigos: esquema propio con RLS y biblioteca inicial', async () => {
+  const db = await freshDb();
+  const rls = await db.query(`select count(*)::int as n from pg_tables where schemaname = 'amigos' and not rowsecurity`);
+  assert.equal(rls.rows[0].n, 0, 'toda tabla de amigos tiene RLS');
+  const lib = await db.query(`select count(*)::int as n from amigos.questions where origin = 'house' and status = 'active'`);
+  assert.ok(lib.rows[0].n >= 10);
+  const app = await db.query(`select name from core.apps where slug = 'amigos'`);
+  assert.equal(app.rows[0].name, 'Amigos de mierda');
+});
+
+test('amigos: reglas del juego en la base', async () => {
+  const db = await freshDb();
+  const id = await node(db, '+5491100000020', adultBirth);
+  const p = (await db.query(`select pseudonym_id from core.node_pseudonyms where node_id = $1`, [id])).rows[0].pseudonym_id;
+  const g = (await db.query(`insert into amigos.groups (code, name, founder_pseudonym_id) values ('K7Q2M', 'LOSPIBES', $1) returning id, number`, [p])).rows[0];
+  assert.equal(g.number, 1);
+  await assert.rejects(db.query(`insert into amigos.groups (code, name, founder_pseudonym_id) values ('K7Q2M', 'OTRO', $1)`, [p]), /unique|duplicate/i);
+  await assert.rejects(db.query(`insert into amigos.groups (code, name, founder_pseudonym_id) values ('IIIII', 'X', $1)`, [p]), /check/i);
+  const fede = (await db.query(`insert into amigos.members (group_id, roster_name, pseudonym_id, position, status) values ($1, 'Fede', $2, 0, 'active') returning id`, [g.id, p])).rows[0].id;
+  const lu = (await db.query(`insert into amigos.members (group_id, roster_name, position) values ($1, 'Lu', 1) returning id`, [g.id])).rows[0].id;
+  await assert.rejects(db.query(`insert into amigos.members (group_id, roster_name, position) values ($1, 'lu', 2)`, [g.id]), /unique|duplicate/i);
+  const q = (await db.query(`select id from amigos.questions limit 1`)).rows[0].id;
+  await assert.rejects(db.query(`insert into amigos.rounds (group_id, season, day, local_date, status) values ($1, 1, 1, current_date, 'open')`, [g.id]), /check/i);
+  const r = (await db.query(`insert into amigos.rounds (group_id, season, day, local_date, question_id, status) values ($1, 1, 1, current_date, $2, 'open') returning id`, [g.id, q])).rows[0].id;
+  await assert.rejects(db.query(`insert into amigos.bets (round_id, bettor_member_id, target_member_id, guess) values ($1, $2, $2, 'a')`, [r, fede]), /check/i);
+  await db.query(`insert into amigos.bets (round_id, bettor_member_id, target_member_id, guess) values ($1, $2, $3, 'a')`, [r, fede, lu]);
+  await db.query(`insert into amigos.points (round_id, member_id, reason, points) values ($1, $2, 'bet', 10)`, [r, fede]);
+  const s = await db.query(`select roster_name, points from amigos.standings where group_id = $1 order by position`, [g.id]);
+  assert.deepEqual(s.rows.map((x) => [x.roster_name, x.points]), [['Fede', 10], ['Lu', 0]]);
+  await assert.rejects(db.query(`insert into amigos.questions (prompt, option_a, option_b, origin) values ('Pregunta nacional', 'A', 'B', 'national')`), /check/i);
+  await assert.rejects(db.query(`insert into amigos.questions (prompt, option_a, option_b, tone) values ('Pregunta de señal', 'A', 'B', 'signal')`), /check/i);
+});

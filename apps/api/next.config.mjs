@@ -2,6 +2,11 @@
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // Las imágenes del juego necesitan la tipografía en el servidor.
+  outputFileTracingIncludes: {
+    '/amigos/**': ['./assets/fonts/**'],
+    '/internal/amigos/**': ['./assets/fonts/**'],
+  },
   async headers() {
     return [{
       source: '/:path*',

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard, FlaskConical, Users, Layers, Coins, MessageSquare, Settings2, ScrollText, Blocks, DoorOpen, ChartColumn, FileText, Lightbulb,
+  LayoutDashboard, FlaskConical, Users, Layers, Coins, MessageSquare, Settings2, ScrollText, Blocks, DoorOpen, ChartColumn, FileText, Lightbulb, Flame,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -18,6 +18,7 @@ export function Sidebar({ counts }: { counts: { attention?: number; bitacora?: n
         { href: '/', label: 'Hoy', icon: <LayoutDashboard />, badge: counts.attention },
         { href: '/estudios', label: 'Estudios', icon: <Lightbulb /> },
         { href: '/experimentos', label: 'Experimentos', icon: <FlaskConical /> },
+        { href: '/amigos', label: 'Amigos de mierda', icon: <Flame /> },
         { href: '/herramientas', label: 'Caja de herramientas', icon: <Blocks /> },
         { href: '/onboarding', label: 'Onboarding', icon: <DoorOpen /> },
       ],
@@ -82,7 +83,7 @@ export function Sidebar({ counts }: { counts: { attention?: number; bitacora?: n
 export function MobileNav() {
   const path = usePathname();
   const items = [
-    ['/', 'Hoy'], ['/estudios', 'Estudios'], ['/experimentos', 'Experimentos'], ['/herramientas', 'Herramientas'], ['/onboarding', 'Onboarding'],
+    ['/', 'Hoy'], ['/estudios', 'Estudios'], ['/experimentos', 'Experimentos'], ['/amigos', 'Amigos'], ['/herramientas', 'Herramientas'], ['/onboarding', 'Onboarding'],
     ['/resultados', 'Resultados'], ['/informes', 'Informes'], ['/drops', 'Campo'], ['/nodos', 'Nodos'],
     ['/recompensas', 'Recompensas'], ['/mensajes', 'Mensajes'], ['/sistema', 'Sistema'], ['/bitacora', 'Bitácora'],
   ];
