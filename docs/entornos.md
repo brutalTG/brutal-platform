@@ -21,11 +21,16 @@ Mientras la cuenta esté en el plan gratuito no hay entornos personalizados. Se 
 Así cada entorno tiene sus propias variables y no hay forma de que test lea claves de producción.
 Las URLs `*.vercel.app` quedan detrás del login de Vercel; solo los dominios `brutal.lat` son públicos.
 
-| App | Proyecto test | Dominio test | Proyecto producción |
-| --- | --- | --- | --- |
-| panel | `brutal-panel-test` | `test-panel.brutal.lat` | pendiente |
-| api | `brutal-api-test` | `test-api.brutal.lat` | pendiente |
-| pressure | `brutal-pressure-test` | `test-pressure.brutal.lat` | pendiente |
+| App | Proyecto test | Dominio test | Proyecto producción | Dominio producción |
+| --- | --- | --- | --- | --- |
+| panel | `brutal-panel-test` | `test-panel.brutal.lat` | `brutal-panel` | `panel.brutal.lat` |
+| api | `brutal-api-test` | `test-api.brutal.lat` | `brutal-api` | `api.brutal.lat` |
+| pressure | `brutal-pressure-test` | `test-pressure.brutal.lat` | `brutal-pressure` | `pressure.brutal.lat` |
+| drops | `brutal-drops-test` | `test-drops.brutal.lat` | `brutal-drops` | `drops.brutal.lat` |
+| amigos | — | — | `brutal-amigos` | `amigos.brutal.lat` |
+
+El gateway de WhatsApp de AMIGOS DE MIERDA (`apps/wa-gateway`) corre fuera de Vercel, en Render, como
+Background Worker con disco en `/data`. Ver `apps/wa-gateway/README.md`.
 
 Los proyectos de test tienen como rama de producción `main` en Vercel, así que un push a `test` arma una vista previa
 que no toca el dominio. Para publicar en el dominio de test, Claude crea un despliegue de producción de la rama `test`
@@ -65,6 +70,10 @@ Se completan a medida que cada app se porta. Los valores nunca van en este repo.
 ### Variables del juego (pressure)
 
 `NEXT_PUBLIC_API_URL`. No tiene claves.
+
+### Variables del reproductor (drops)
+
+`VITE_API_URL` (la URL del API terminada en `/drops`). No tiene claves.
 
 ### Limpiar test
 
