@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+  Sistema visual del panel.
+  Neutros apenas fríos, un primario negro (marca BRUTAL), azul solo para el foco,
+  y cuatro colores de estado que nunca se usan como decoración.
+*/
+:root {
+  --bg: 246 246 248;
+  --surface: 255 255 255;
+  --sunken: 241 241 244;
+  --border: 228 228 233;
+  --border-strong: 205 205 213;
+  --fg: 17 17 20;
+  --fg-2: 74 74 85;
+  --fg-3: 118 118 130;
+  --primary: 17 17 20;
+  --primary-fg: 255 255 255;
+  --focus: 47 107 255;
+  --success: 20 128 74;
+  --success-bg: 232 245 238;
+  --warning: 161 92 0;
+  --warning-bg: 255 244 224;
+  --danger: 196 40 28;
+  --danger-bg: 253 236 234;
+  --info: 31 95 191;
+  --info-bg: 232 240 253;
+  --envtest: 245 179 1;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: 12 12 15;
+    --surface: 21 21 26;
+    --sunken: 16 16 20;
+    --border: 42 42 50;
+    --border-strong: 60 60 70;
+    --fg: 242 242 245;
+    --fg-2: 180 180 192;
+    --fg-3: 132 132 143;
+    --primary: 242 242 245;
+    --primary-fg: 17 17 20;
+    --focus: 102 145 255;
+    --success: 74 196 128;
+    --success-bg: 20 48 33;
+    --warning: 240 170 70;
+    --warning-bg: 56 40 12;
+    --danger: 245 110 98;
+    --danger-bg: 60 22 20;
+    --info: 120 165 255;
+    --info-bg: 22 36 64;
+    --envtest: 245 179 1;
+    color-scheme: dark;
+  }
+}
+
+@layer base {
+  html, body { height: 100%; }
+  body {
+    @apply bg-bg text-fg font-sans text-base antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+  :focus-visible { outline: 2px solid rgb(var(--focus)); outline-offset: 2px; }
+  ::selection { background: rgb(var(--focus) / 0.2); }
+  .tabular { font-variant-numeric: tabular-nums; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
