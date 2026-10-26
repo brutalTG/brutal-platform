@@ -145,7 +145,7 @@ export async function serverStartSession(dropId: string): Promise<string | null>
     const res = await fetchWithRetry(`${API_BASE}/sessions/start`, {
       method: "POST",
       headers: authHeaders(),
-      body: JSON.stringify({ drop_id: dropId }),
+      body: JSON.stringify({ drop_id: dropId, device: { userAgent: navigator.userAgent, width: window.innerWidth, height: window.innerHeight } }),
     });
 
     if (!res) return null;
