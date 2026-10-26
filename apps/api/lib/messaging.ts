@@ -5,6 +5,7 @@ import { newCode, sha256 } from './crypto';
 import { command, render, sendText, type Inbound } from './whatsapp';
 import { createDropsLink } from './drops';
 import { selectAudience, type Audience, type Candidate } from './launch-rules';
+import { isGuestPhone } from './drops-game';
 
 const cfg = () => ({ mode: env.whatsappMode, endpoint: env.watiEndpoint, token: env.watiToken, channel: env.watiChannel });
 
@@ -57,6 +58,8 @@ export async function sendToContact(contact: { id: string; phone: string; nodeId
 /** Al cobrar un Drop: lo ganado y el link al perfil, por WhatsApp. Solo si el contacto no se dio de baja. */
 export async function queueDropResult(nodeId: string, vars: { drop: string; usd: number; tickets: number; verdict: 'caught' | 'escaped' | null; link: string }) {
   const node = await must(from('core', 'nodes').select('phone_e164').eq('id', nodeId).single(), 'nodo') as { phone_e164: string };
+  // Jugadores del link de grupo: no tienen WhatsApp cargado, no hay a quién avisarle.
+  if (isGuestPhone(node.phone_e164)) return null;
   const existing = await must(from('messaging', 'contacts').select('id, opted_out_at').eq('node_id', nodeId).maybeSingle(), 'contacto') as { id: string; opted_out_at: string | null } | null;
   if (existing?.opted_out_at) return null;
   const contactId = existing?.id ?? await contactFor(node.phone_e164, nodeId);

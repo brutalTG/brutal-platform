@@ -4,7 +4,7 @@ import { from, must } from './db';
 import { newCode, sha256, signToken, verifyToken } from './crypto';
 import { HttpError } from './http';
 import {
-  applyDetector, birthDateFromAge, computeClaim, consistencyOf, detectorConfig, detectorOutcome, detectorReason, displayReward, hiloStep, hiloView, HILO_LADDER, multiplierFor, normalizeWallet, observationOf, parseLocation, POLICY,
+  applyDetector, birthDateFromAge, cleanNickname, computeClaim, guestPhone, joinConfig, consistencyOf, detectorConfig, detectorOutcome, detectorReason, displayReward, hiloStep, hiloView, HILO_LADDER, multiplierFor, normalizeWallet, observationOf, parseLocation, POLICY,
   resolveReward, sessionMultiplier, type AnswerBody, type DetectorItem, type DetectorResult, type Hand, type HiloAction, type VoiceAnswer,
 } from './drops-game';
 import { countFillers, parseAnswer } from './game';
@@ -73,6 +73,36 @@ export async function accessFrom(req: Request, purpose?: 'onboarding' | 'drop'):
   const a = accessOf(link);
   if (purpose && a.purpose !== purpose) throw new HttpError(403, 'wrong_purpose', 'This link is for a different part of BRUTAL');
   return a;
+}
+
+// ---------- Link de grupo: un link, muchos jugadores ----------
+/**
+ * Entra alguien por el link del grupo con su apodo. Se crea un nodo de prueba (teléfono inventado +999…,
+ * canal `grupo:<drop>`) y se le da su link personal al Drop. Sin onboarding: solo el apodo.
+ */
+export async function joinGroup(b: { code?: unknown; nickname?: unknown }) {
+  const code = String(b.code ?? '').trim().toLowerCase();
+  const nickname = cleanNickname(b.nickname);
+  if (!nickname) throw new HttpError(400, 'bad_nickname', 'Poné un apodo de 2 a 20 letras.');
+  const live = await must(from('drops', 'drops').select('id, slug, name, config').eq('status', 'live'), 'drops en juego') as any[];
+  const d = live.find((x) => joinConfig(x.config?.join)?.code === code);
+  const cfg = d ? joinConfig(d.config.join)! : null;
+  if (!d || !cfg) throw new HttpError(404, 'invalid_link', 'Este link no existe o ya cerró.');
+  if (!cfg.open) throw new HttpError(410, 'closed', 'Este Drop ya cerró.');
+  const channel = `grupo:${d.slug}`;
+  const { count } = await from('core', 'nodes').select('id', { count: 'exact', head: true }).eq('acquisition_channel', channel);
+  if ((count ?? 0) >= cfg.max) throw new HttpError(410, 'full', 'Ya entraron todos los lugares de este Drop.');
+  let nodeId: string | null = null;
+  for (let i = 0; i < 3 && !nodeId; i++) {
+    const { data, error } = await from('core', 'nodes').insert({
+      phone_e164: guestPhone(), status: 'active', nickname, acquisition_channel: channel, last_active_at: new Date().toISOString(),
+    }).select('id').single();
+    if (!error) nodeId = (data as any).id;
+    else if (!/duplicate/i.test(error.message)) throw new Error(`nodo de grupo: ${error.message}`);
+  }
+  if (!nodeId) throw new Error('nodo de grupo: no se pudo crear');
+  const link = await createDropsLink(nodeId, { purpose: 'drop', dropSlug: d.slug, hours: 72 });
+  return { ok: true, url: link.url, code: link.code, drop: d.name, nickname };
 }
 
 // ---------- Nodo ----------

@@ -255,3 +255,32 @@ export function applyDetector(tickets: number, result: DetectorResult | null | u
   if (!result) return tickets;
   return Math.max(0, tickets + (Number(result.tickets) || 0));
 }
+
+// ---------- Link de grupo ----------
+// Un solo link para muchos: cada uno pone un apodo y queda como un nodo de prueba separado.
+// Los nodos de grupo llevan un teléfono inventado (+999…) para no confundirse con números reales.
+
+export type JoinConfig = { code: string; open: boolean; max: number };
+
+export function joinConfig(raw: unknown): JoinConfig | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const code = String(r.code ?? '').trim().toLowerCase();
+  if (!/^[a-z0-9-]{3,40}$/.test(code)) return null;
+  const max = Number(r.max);
+  return { code, open: r.open !== false, max: Number.isFinite(max) && max > 0 ? Math.min(500, Math.floor(max)) : 50 };
+}
+
+/** Apodo de una persona del grupo: 2 a 20 caracteres visibles, sin saltos de línea. */
+export function cleanNickname(raw: unknown) {
+  const s = String(raw ?? '').replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 20);
+  return s.length >= 2 ? s : null;
+}
+
+export const GUEST_PREFIX = '+999';
+export function guestPhone(rand: () => number = Math.random) {
+  let digits = '';
+  for (let i = 0; i < 11; i++) digits += Math.floor(rand() * 10);
+  return `${GUEST_PREFIX}${digits}`;
+}
+export const isGuestPhone = (phone: string | null | undefined) => Boolean(phone && phone.startsWith(GUEST_PREFIX));

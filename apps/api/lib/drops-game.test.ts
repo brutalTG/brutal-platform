@@ -120,3 +120,21 @@ test('la máquina suma o resta tickets, nunca deja negativo', () => {
   assert.deepEqual(detectorConfig({ lies: 2, winTickets: '100', loseTickets: -3 }), { lies: 2, winTickets: 100, loseTickets: 50 });
   assert.equal(detectorConfig(null), null);
 });
+
+// ---------- Link de grupo ----------
+import { cleanNickname, guestPhone, isGuestPhone, joinConfig } from './drops-game.ts';
+
+test('link de grupo: configuración, apodo y teléfono inventado', () => {
+  assert.deepEqual(joinConfig({ code: 'Mentime', max: 30 }), { code: 'mentime', open: true, max: 30 });
+  assert.deepEqual(joinConfig({ code: 'mentime', open: false }), { code: 'mentime', open: false, max: 50 });
+  assert.equal(joinConfig({ code: 'a b' }), null);
+  assert.equal(joinConfig(null), null);
+  assert.equal(cleanNickname('  Juan   Cruz \n'), 'Juan Cruz');
+  assert.equal(cleanNickname('x'), null);
+  assert.equal(cleanNickname('a'.repeat(40))?.length, 20);
+  const p = guestPhone(() => 0.5);
+  assert.equal(p, '+99955555555555');
+  assert.match(p, /^\+[1-9][0-9]{7,14}$/, 'pasa la regla de teléfonos de la base');
+  assert.ok(isGuestPhone(p));
+  assert.ok(!isGuestPhone('+5491155550000'));
+});

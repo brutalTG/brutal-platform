@@ -5,6 +5,7 @@ import { createBrowserRouter, RouterProvider, useRouteError } from "react-router
 const SurveyApp = lazy(() => import("./components/SurveyApp"));
 const OnboardingApp = lazy(() => import("./components/onboarding/OnboardingApp"));
 const LinkRedeem = lazy(() => import("./components/LinkRedeem"));
+const GroupJoin = lazy(() => import("./components/GroupJoin"));
 
 function RouteLoading() {
   return (
@@ -68,6 +69,7 @@ function CrashScreen() {
 
 const router = createBrowserRouter([
   { path: "/a/:code", Component: () => <Suspense fallback={<RouteLoading />}><LinkRedeem /></Suspense>, errorElement: <CrashScreen /> },
+  { path: "/j/:code", Component: () => <Suspense fallback={<RouteLoading />}><GroupJoin /></Suspense>, errorElement: <CrashScreen /> },
   { path: "/entrar", Component: OnboardingRoute, errorElement: <CrashScreen /> },
   { path: "/*", Component: SurveyRoute, errorElement: <CrashScreen /> },
 ]);

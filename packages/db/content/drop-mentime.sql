@@ -115,6 +115,7 @@ select 'mentime', 'MENTIME QUE ME GUSTA', 'draft', (select id from economy.seaso
     'timeoutMessage', 'Brutal eligió por vos.',
     'multiplierCheckpoints', jsonb_build_object('3', jsonb_build_object('multiplier', 1.25, 'label', 'x1.25'), '9', jsonb_build_object('multiplier', 1.5, 'label', 'x1.5')),
     'detector', jsonb_build_object('lies', 1, 'winTickets', 150, 'loseTickets', 50),
+    'join', jsonb_build_object('code', 'mentime', 'open', true, 'max', 50),
     'voice', jsonb_build_object('voice_id', 'QK4xDwo9ESPHA4JNUpX3', 'fallback_voice_id', 'N6aRe3hk1YqaHDtQpTAH', 'model', 'eleven_flash_v2_5'),
     'splash', jsonb_build_object(
       'mode', 'terminal', 'buttonText', 'ENTRO',
