@@ -76,3 +76,47 @@ test('voz y mayor o menor como observación', () => {
   const g = observationOf('mayor_menor', {}, { hilo: { status: 'stood', multiplier: 3, steps: 3, cards: [], decisions: [] } });
   assert.equal(g.text, 'se plantó en x3');
 });
+
+// ---------- La máquina dentro del Drop ----------
+import { applyDetector, detectorBudget, detectorConfig, detectorOutcome, detectorReason, DEFAULT_DETECTOR } from './drops-game.ts';
+
+const item = (position: number, committed: 'truth' | 'lie', f: Partial<{ decision_ms: number; onset_ms: number; speech_ms: number; fillers: number }> = {}) =>
+  ({ position, committed, decision_ms: 900, onset_ms: 600, speech_ms: 9000, fillers: 0, ...f });
+
+test('la máquina acusa la carta donde más dudó y acierta', () => {
+  const r = detectorOutcome([item(1, 'truth'), item(2, 'lie', { decision_ms: 4200, speech_ms: 3000 }), item(3, 'truth')], DEFAULT_DETECTOR, 'partida');
+  assert.ok(r);
+  assert.deepEqual(r.accused, [2]);
+  assert.equal(r.verdict, 'caught');
+  assert.equal(r.tickets, -50);
+  assert.equal(r.reason.position, 2);
+  assert.match(detectorReason(r, (p) => `la ${p}`), /En la 2 /);
+});
+
+test('si la mentira pasó desapercibida, zafó y cobra el bonus', () => {
+  const r = detectorOutcome([item(1, 'truth', { decision_ms: 5000 }), item(2, 'lie'), item(3, 'truth')], DEFAULT_DETECTOR, 'partida');
+  assert.ok(r);
+  assert.deepEqual(r.accused, [1]);
+  assert.equal(r.verdict, 'escaped');
+  assert.equal(r.tickets, 150);
+});
+
+test('la misma partida se acusa siempre igual, y con una sola carta no hay máquina', () => {
+  const items = [item(1, 'truth'), item(2, 'lie'), item(3, 'truth')];
+  assert.deepEqual(detectorOutcome(items, DEFAULT_DETECTOR, 'x')?.accused, detectorOutcome(items, DEFAULT_DETECTOR, 'x')?.accused);
+  assert.equal(detectorOutcome([item(1, 'lie')], DEFAULT_DETECTOR), null);
+});
+
+test('presupuesto de mentiras: una en tres', () => {
+  assert.deepEqual(detectorBudget(3, 1, []), { remainingLies: 1, remainingItems: 3, mustLie: false, mustTell: false });
+  assert.deepEqual(detectorBudget(3, 1, ['truth', 'truth']), { remainingLies: 1, remainingItems: 1, mustLie: true, mustTell: false });
+  assert.deepEqual(detectorBudget(3, 1, ['lie']), { remainingLies: 0, remainingItems: 2, mustLie: false, mustTell: true });
+});
+
+test('la máquina suma o resta tickets, nunca deja negativo', () => {
+  assert.equal(applyDetector(100, { tickets: 150 } as any), 250);
+  assert.equal(applyDetector(20, { tickets: -50 } as any), 0);
+  assert.equal(applyDetector(20, null), 20);
+  assert.deepEqual(detectorConfig({ lies: 2, winTickets: '100', loseTickets: -3 }), { lies: 2, winTickets: 100, loseTickets: 50 });
+  assert.equal(detectorConfig(null), null);
+});

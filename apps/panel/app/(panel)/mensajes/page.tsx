@@ -5,6 +5,7 @@ import { Badge, Card, CardHeader, EmptyState, ErrorNotice, PageHeader, Table, TD
 import { panelEnv } from '@/lib/env';
 import { SimulateButton } from '@/components/forms/simulate';
 import { TemplateButton } from '@/components/forms/template';
+import { QueuedMessageActions } from '@/components/forms/queued-message';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Mensajes' };
@@ -24,7 +25,7 @@ export default async function MensajesPage() {
   const [tQ, mQ, cQ, health] = await Promise.all([
     from('messaging', 'templates').select('*').order('key'),
     from('messaging', 'messages').select('id, contact_id, direction, purpose, status, body, created_at, error_message').order('created_at', { ascending: false }).limit(200),
-    from('messaging', 'contacts').select('id, phone_e164, node_id, opted_out_at, last_inbound_at').order('last_inbound_at', { ascending: false, nullsFirst: false }).limit(30),
+    from('messaging', 'contacts').select('id, phone_e164, node_id, opted_out_at, last_inbound_at').order('last_inbound_at', { ascending: false, nullsFirst: false }).limit(60),
     apiHealth(),
   ]);
   const error = explain(tQ.error) ?? explain(mQ.error) ?? explain(cQ.error);
@@ -34,6 +35,8 @@ export default async function MensajesPage() {
   const contacts = (cQ.data ?? []) as { id: string; phone_e164: string; node_id: string | null; opted_out_at: string | null; last_inbound_at: string | null }[];
   const mode = health?.whatsapp;
   const test = panelEnv() === 'test';
+  const phoneOf = new Map(contacts.map((c) => [c.id, c.phone_e164]));
+  const queued = msgs.filter((m) => m.direction === 'out' && m.status === 'queued' && m.body && !m.purpose?.startsWith('amigos'));
 
   return (
     <>
@@ -43,10 +46,30 @@ export default async function MensajesPage() {
         meta={
           mode === 'wati' ? <Badge tone="success">Conectado a WATI: los mensajes son reales</Badge>
           : mode === 'mock' ? <Badge tone="warning">Simulado: el bot responde acá, no sale nada</Badge>
+          : mode === 'disabled' ? <Badge tone="warning">Sin número conectado: los mensajes quedan en cola para mandarlos a mano</Badge>
           : <Badge tone="danger">No pude consultar el estado del bot</Badge>
         }
         actions={test ? <SimulateButton realMode={mode === 'wati'} /> : undefined}
       />
+
+      {queued.length > 0 && (
+        <Card className="mb-6">
+          <CardHeader title={`Para mandar a mano (${queued.length})`} description="WhatsApp está apagado. Cada uno abre WhatsApp con el texto listo; cuando lo mandaste, marcalo." />
+          <ul className="divide-y divide-border">
+            {queued.map((m) => (
+              <li key={m.id} className="flex flex-col gap-2 px-4 py-3">
+                <div className="flex flex-wrap items-center gap-2 text-sm">
+                  <span className="tabular font-medium text-fg">{fmt.phone(phoneOf.get(m.contact_id) ?? '')}</span>
+                  <Badge tone="neutral" dot={false}>{m.purpose}</Badge>
+                  <span className="text-fg-3">{fmt.ago(m.created_at)}</span>
+                </div>
+                <p className="max-w-xl whitespace-pre-line rounded-md bg-sunken px-3 py-2 text-sm text-fg">{m.body}</p>
+                <QueuedMessageActions id={m.id} phone={phoneOf.get(m.contact_id) ?? ''} body={m.body ?? ''} />
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       <Card>
         <CardHeader title="Conversaciones" description="Las 30 más recientes. El bot solo le responde a números invitados." />

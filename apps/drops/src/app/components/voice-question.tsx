@@ -10,7 +10,10 @@ import { hapticMedium } from "./haptics";
 import { API_BASE } from "./api-base";
 import { userAuthHeaders } from "./access-context";
 
-type Done = { audio: Blob | null; mime: string; speechMs: number; latencyMs: number };
+type Done = { audio: Blob | null; mime: string; speechMs: number; latencyMs: number; committed?: "truth" | "lie"; decisionMs?: number };
+
+/** Carta de la máquina: qué puede marcar el jugador en esta carta. */
+export type DetectorBudget = { mustLie: boolean; mustTell: boolean; remainingLies: number; remainingItems: number };
 
 function pickMime() {
   const options = ["audio/webm;codecs=opus", "audio/mp4", "audio/webm", "audio/ogg;codecs=opus"];
@@ -38,21 +41,34 @@ async function say(text: string) {
   }
 }
 
-export function VoiceQuestion({ actionHint, text, speak = true, maxSeconds = 20, optionA, optionB, answerType, onDone }: {
+export function VoiceQuestion({ actionHint, text, speak = true, maxSeconds = 20, optionA, optionB, answerType, detector, budget, onDone }: {
   actionHint: string; text: string; speak?: boolean; maxSeconds?: number; optionA?: string; optionB?: string; answerType?: string;
+  /** Carta de la máquina: antes de hablar marca en secreto verdad o mentira. */
+  detector?: boolean; budget?: DetectorBudget;
   onDone: (d: Done) => void;
 }) {
-  const [phase, setPhase] = useState<"ready" | "speaking" | "recording" | "denied" | "sending">(speak ? "speaking" : "ready");
+  // Carta de la máquina: después de escuchar, primero decide ("commit") y recién entonces aparece el micrófono.
+  const [phase, setPhase] = useState<"ready" | "speaking" | "commit" | "recording" | "denied" | "sending">(speak ? "speaking" : detector ? "commit" : "ready");
   const [level, setLevel] = useState(0);
   const [left, setLeft] = useState(maxSeconds);
   const shownAt = useRef(performance.now());
   const rec = useRef<{ stop: () => void } | null>(null);
+  const committed = useRef<{ value: "truth" | "lie"; decisionMs: number } | null>(null);
 
   useEffect(() => {
     let alive = true;
-    if (speak) say(text).finally(() => { if (alive) { setPhase((p) => (p === "speaking" ? "ready" : p)); shownAt.current = performance.now(); } });
+    if (speak) say(text).finally(() => { if (alive) { setPhase((p) => (p === "speaking" ? (detector ? "commit" : "ready") : p)); shownAt.current = performance.now(); } });
     return () => { alive = false; rec.current?.stop(); };
-  }, [speak, text]);
+  }, [speak, text, detector]);
+
+  function commit(value: "truth" | "lie") {
+    hapticMedium();
+    committed.current = { value, decisionMs: Math.round(performance.now() - shownAt.current) };
+    setPhase("ready");
+  }
+
+  const finish = (d: Omit<Done, "committed" | "decisionMs">) =>
+    onDone(committed.current ? { ...d, committed: committed.current.value, decisionMs: committed.current.decisionMs } : d);
 
   async function start() {
     hapticMedium();
@@ -99,7 +115,7 @@ export function VoiceQuestion({ actionHint, text, speak = true, maxSeconds = 20,
         stream.getTracks().forEach((t) => t.stop());
         ctx.close().catch(() => {});
         const audio = chunks.length ? new Blob(chunks, { type: mr.mimeType || mime || "audio/webm" }) : null;
-        onDone({ audio, mime: mr.mimeType || mime, speechMs: Math.round(speechMs), latencyMs });
+        finish({ audio, mime: mr.mimeType || mime, speechMs: Math.round(speechMs), latencyMs });
       };
       mr.stop();
     };
@@ -125,6 +141,29 @@ export function VoiceQuestion({ actionHint, text, speak = true, maxSeconds = 20,
 
         {phase === "speaking" && <p className="mb-4 font-['Fira_Code'] text-sm" style={{ color: "var(--dynamic-bg, #000)", opacity: 0.6 }}>Escuchá…</p>}
 
+        {phase === "commit" && (
+          <div className="flex w-full flex-col items-center gap-3">
+            <p className="font-['Fira_Code'] text-xs uppercase tracking-[0.2em]" style={{ color: "var(--dynamic-bg, #000)", opacity: 0.7 }}>
+              {budget?.mustLie ? "Te queda la mentira. Es esta." : budget?.mustTell ? "Ya mentiste. Esta va con la verdad." : "Antes de hablar, decidí en secreto"}
+            </p>
+            <div className="flex w-full gap-2">
+              {!budget?.mustLie && (
+                <button onClick={() => commit("truth")} className="flex-1 rounded-2xl px-3 py-4 font-['Roboto'] text-base font-bold uppercase active:scale-95"
+                  style={{ backgroundColor: "var(--dynamic-bg, #000)", color: "var(--dynamic-fg, #fff)" }}>Verdad</button>
+              )}
+              {!budget?.mustTell && (
+                <button onClick={() => commit("lie")} className="flex-1 rounded-2xl px-3 py-4 font-['Roboto'] text-base font-bold uppercase active:scale-95"
+                  style={{ border: "2px solid var(--dynamic-bg, #000)", color: "var(--dynamic-bg, #000)" }}>Mentira</button>
+              )}
+            </div>
+            {!budget?.mustLie && !budget?.mustTell && budget && (
+              <p className="font-['Fira_Code'] text-[11px]" style={{ color: "var(--dynamic-bg, #000)", opacity: 0.6 }}>
+                {budget.remainingLies === 1 ? "Te queda 1 mentira" : `Te quedan ${budget.remainingLies} mentiras`} en {budget.remainingItems} cartas.
+              </p>
+            )}
+          </div>
+        )}
+
         {phase === "ready" && (
           <button onClick={start} className="mb-2 flex size-24 items-center justify-center rounded-full active:scale-95" style={{ backgroundColor: "var(--dynamic-bg, #000)", color: "var(--dynamic-fg, #fff)" }} aria-label="Tocá y hablá">
             <Mic size={40} />
@@ -146,11 +185,11 @@ export function VoiceQuestion({ actionHint, text, speak = true, maxSeconds = 20,
         {phase === "denied" && (
           <div className="flex w-full flex-col items-center gap-3">
             <p className="text-center font-['Roboto'] text-sm" style={{ color: "var(--dynamic-bg, #000)" }}>No pudimos usar el micrófono. Habilitalo en el navegador o seguí sin responder esta.</p>
-            <ActionButton label="Seguir" onClick={() => onDone({ audio: null, mime: "", speechMs: 0, latencyMs: Math.round(performance.now() - shownAt.current) })} />
+            <ActionButton label="Seguir" onClick={() => finish({ audio: null, mime: "", speechMs: 0, latencyMs: Math.round(performance.now() - shownAt.current) })} />
           </div>
         )}
       </DuotoneCard>
-      <p className="text-center font-['Fira_Code'] text-[11px] opacity-60">Tu respuesta queda grabada.</p>
+      <p className="text-center font-['Fira_Code'] text-[11px] opacity-60">{detector ? "La máquina escucha. Nadie más." : "Tu respuesta queda grabada."}</p>
     </div>
   );
 }

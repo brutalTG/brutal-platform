@@ -27,7 +27,7 @@ import { MediaReactionQuestion } from "./media-reaction-question";
 import { DeadDropScreen } from "./dead-drop-screen";
 import { resolveDeadDrop } from "./dead-drop-resolver";
 import { RafagaBurstQuestion } from "./rafaga-burst-question";
-import { VoiceQuestion } from "./voice-question";
+import { VoiceQuestion, type DetectorBudget } from "./voice-question";
 import { MayorMenorQuestion } from "./mayor-menor-question";
 
 interface Props {
@@ -39,11 +39,13 @@ interface Props {
   /** For media_reaction: setters needed for inline handler */
   setResultConfig: (cfg: { percentage: number; text: string }) => void;
   setScreen: (s: string) => void;
+  /** Carta de la máquina: qué le queda por mentir. */
+  detectorBudget?: DetectorBudget;
 }
 
 export function QuestionRenderer({
   question: q, questionIndex, pipeline, reactionText,
-  advanceWithMultiplierCheck, setResultConfig, setScreen,
+  advanceWithMultiplierCheck, setResultConfig, setScreen, detectorBudget,
 }: Props) {
   const actionHint = getActionHint(q);
 
@@ -150,11 +152,13 @@ export function QuestionRenderer({
         answerType={q.answerType}
         optionA={q.optionA}
         optionB={q.optionB}
-        onDone={({ audio, mime, speechMs, latencyMs }) => {
+        detector={q.detector === true}
+        budget={detectorBudget}
+        onDone={({ audio, mime, speechMs, latencyMs, committed, decisionMs }) => {
           if (!pipeline.acquireLock()) return;
           pipeline.markFirstAnswered();
           pipeline.captureLatency();
-          pipeline.submitStandard({ type: "voice", audio, mime, speechMs, latencyMs });
+          pipeline.submitStandard({ type: "voice", audio, mime, speechMs, latencyMs, committed, decisionMs });
         }}
       />
     );

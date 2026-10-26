@@ -4,12 +4,13 @@ import { from, must } from './db';
 import { newCode, sha256, signToken, verifyToken } from './crypto';
 import { HttpError } from './http';
 import {
-  birthDateFromAge, computeClaim, consistencyOf, displayReward, hiloStep, hiloView, HILO_LADDER, multiplierFor, normalizeWallet, observationOf, parseLocation, POLICY,
-  resolveReward, sessionMultiplier, type AnswerBody, type Hand, type HiloAction, type VoiceAnswer,
+  applyDetector, birthDateFromAge, computeClaim, consistencyOf, detectorConfig, detectorOutcome, detectorReason, displayReward, hiloStep, hiloView, HILO_LADDER, multiplierFor, normalizeWallet, observationOf, parseLocation, POLICY,
+  resolveReward, sessionMultiplier, type AnswerBody, type DetectorItem, type DetectorResult, type Hand, type HiloAction, type VoiceAnswer,
 } from './drops-game';
-import { parseAnswer } from './game';
+import { countFillers, parseAnswer } from './game';
 import { db } from './db';
 import { stt, tts, wordFeatures } from './elevenlabs';
+import { queueDropResult } from './messaging';
 
 // API del reproductor de Drops (traído del sandbox). Mismo contrato que el servidor viejo,
 // sobre la base nueva: nodos en core, señal en signal.observations, tickets y plata en economy.ledger.
@@ -132,6 +133,7 @@ function playableDrop(d: DropRow, cards: DQ[], node: Node) {
     multiplierCheckpoints: cfg.multiplierCheckpoints ?? {},
     reveal: cfg.reveal ?? { title: '', description: '', archetypes: [] },
     ...(cfg.splash ? { splash: cfg.splash } : {}),
+    ...(detectorConfig(cfg.detector) ? { detector: detectorConfig(cfg.detector) } : {}),
     questions: cards.map((c) => {
       const q = c.questions;
       const { profileEnrichment: _p, minorReward: _m, reward: _r, ...content } = q.content ?? {};
@@ -291,6 +293,7 @@ export async function completeSession(a: Access, body: { session_id?: string; ar
   const passed = traps.filter((x) => x.trap_correct).length;
   const lat = answers.map((x) => x.latency_ms).filter((x) => typeof x === 'number');
   const now = new Date();
+  const detector = await runDetector(s.id, d, cards);
   await must(from('drops', 'sessions').update({
     status: 'completed', completed_at: now.toISOString(), total_ms: Math.max(0, now.getTime() - Date.parse(s.started_at)),
     multiplier: sessionMultiplier(multiplierFor(d.config?.multiplierCheckpoints, answers.length),
@@ -298,8 +301,36 @@ export async function completeSession(a: Access, body: { session_id?: string; ar
     traps_passed: passed, traps_failed: traps.length - passed,
     avg_latency_ms: lat.length ? Math.round(lat.reduce((p, c) => p + c, 0) / lat.length) : null,
     consistency: consistencyOf(answers), archetype: body.archetype_result ?? null, bic_scores: body.bic_scores ?? null,
+    detector,
   }).eq('id', s.id).eq('status', 'started'), 'cerrar sesión');
-  return { ok: true, trap_score: `${passed}/${traps.length}` };
+  return { ok: true, trap_score: `${passed}/${traps.length}`, detector };
+}
+
+// ---------- La máquina: acusa al cerrar la partida ----------
+const ORDINAL = ['la primera', 'la segunda', 'la tercera', 'la cuarta', 'la quinta', 'la sexta'];
+
+/** Lee las cartas de la máquina de esta partida y decide. Sin cartas de la máquina: null. */
+async function runDetector(sessionId: string, d: DropRow, cards: DQ[]): Promise<(DetectorResult & { text: string; lie_labels: string[] }) | null> {
+  const cfg = detectorConfig(d.config?.detector);
+  const positions = cards.map((c, i) => (c.questions.format === 'voice' && c.questions.content?.detector === true ? i : -1)).filter((i) => i >= 0);
+  if (!cfg || positions.length < 2) return null;
+  const rows = await must(from('signal', 'observations').select('position, value').eq('session_id', sessionId).eq('kind', 'voice').in('position', positions), 'cartas de la máquina') as any[];
+  const items: DetectorItem[] = [];
+  for (const r of rows.sort((a, b) => a.position - b.position)) {
+    const v = r.value ?? {};
+    if (v.committed !== 'truth' && v.committed !== 'lie') continue;
+    items.push({
+      position: positions.indexOf(r.position) + 1, committed: v.committed,
+      decision_ms: Number.isFinite(Number(v.decision_ms)) ? Number(v.decision_ms) : null,
+      onset_ms: Number.isFinite(Number(v.first_word_ms)) ? Number(v.first_word_ms) : null,
+      speech_ms: Number.isFinite(Number(v.speech_ms)) ? Number(v.speech_ms) : null,
+      fillers: countFillers(String(v.transcript ?? '')),
+    });
+  }
+  const r = detectorOutcome(items, cfg, sessionId);
+  if (!r) return null;
+  const label = (p: number) => ORDINAL[p - 1] ?? `la ${p}`;
+  return { ...r, text: detectorReason(r, label), lie_labels: r.lies.map(label) };
 }
 
 /** Acredita lo ganado en el Drop. Idempotente: dos veces no paga dos veces. */
@@ -307,14 +338,16 @@ export async function claimDrop(a: Access, body: { dropId?: string; drop_id?: st
   const slug = body.dropId ?? body.drop_id;
   if (!slug) throw new HttpError(400, 'drop_required', 'Retiros de plata: todavía se piden por WhatsApp.');
   const node = await nodeOf(a.nodeId);
-  const d = await must(from('drops', 'drops').select('id, slug, season_id, config').eq('slug', slug).maybeSingle(), 'drop') as any;
+  const d = await must(from('drops', 'drops').select('id, slug, name, season_id, config').eq('slug', slug).maybeSingle(), 'drop') as any;
   if (!d) throw new HttpError(404, 'session_not_found', 'Session not found');
-  const s = await sessionOf(node.pseudonym_id, d.id);
+  const s = await must(from('drops', 'sessions').select('id, status, position, multiplier, claimed_at, started_at, detector').eq('pseudonym_id', node.pseudonym_id).eq('drop_id', d.id).maybeSingle(), 'sesión') as any;
   if (!s) throw new HttpError(404, 'session_not_found', 'Session not found');
   if (s.claimed_at) return { ok: true, alreadyClaimed: true };
   if (s.status !== 'completed') throw new HttpError(409, 'not_completed', 'Session is not completed');
   const answers = await must(from('drops', 'answers').select('position, reward_currency, reward_value, reward_granted, trap_correct, questions(content)').eq('session_id', s.id), 'respuestas') as any[];
-  const total = computeClaim(answers.map((x) => ({ ...x, reward_value: Number(x.reward_value), penalty: Number(x.questions?.content?.penalty) || 0 })), Number(s.multiplier) || 1);
+  const base = computeClaim(answers.map((x) => ({ ...x, reward_value: Number(x.reward_value), penalty: Number(x.questions?.content?.penalty) || 0 })), Number(s.multiplier) || 1);
+  // Lo que dio la máquina se suma después del multiplicador: es un premio fijo, no se multiplica.
+  const total = { usd: base.usd, tickets: applyDetector(base.tickets, s.detector) };
   const season = d.season_id ?? (await must(from('economy', 'seasons').select('id').eq('status', 'active').maybeSingle(), 'temporada') as any)?.id ?? null;
   if (a.test) {
     // Prueba: muestra lo que hubiera cobrado, sin acreditar nada.
@@ -334,6 +367,11 @@ export async function claimDrop(a: Access, body: { dropId?: string; drop_id?: st
   }
   await from('drops', 'sessions').update({ claimed_at: new Date().toISOString() }).eq('id', s.id).is('claimed_at', null);
   const usd = node.is_minor ? 0 : total.usd;
+  // Aviso por WhatsApp con lo ganado y el link al perfil. Si falla, la partida igual quedó cobrada.
+  try {
+    const link = await createDropsLink(node.id, { purpose: 'drop', destination: 'profile', hours: 168 });
+    await queueDropResult(node.id, { drop: d.name ?? slug, usd, tickets: total.tickets, verdict: s.detector?.verdict ?? null, link: link.url });
+  } catch (e) { console.error('aviso de resultado', e); }
   return { ok: true, alreadyClaimed: false, credited: { usd, coins: usd, tickets: total.tickets } };
 }
 
@@ -503,6 +541,13 @@ export async function recordVoice(a: Access, form: FormData) {
       transcript, stated: parsed.kind, number: 'value' in parsed ? (parsed as any).value : null, audio_path: path ? `${DROPS_AUDIO}/${path}` : null,
       speech_ms: Number(form.get('speech_ms')) || null, words: wf.words, first_word_ms: wf.first_word_ms,
     };
+  }
+  // Carta de la máquina: la marca secreta (verdad o mentira) y cuánto tardó en decidirla.
+  if (q.content?.detector === true) {
+    const committed = String(form.get('committed') ?? '');
+    if (committed !== 'truth' && committed !== 'lie') throw new HttpError(400, 'committed_required', 'Falta marcar verdad o mentira');
+    const decision = Number(form.get('decision_ms'));
+    voice = { ...(voice ?? { transcript: '', stated: null, number: null, audio_path: null, speech_ms: null, words: 0, first_word_ms: null }), committed, decision_ms: Number.isFinite(decision) && decision >= 0 ? Math.round(decision) : null };
   }
   const r = await recordResponse(a, { session_id: sessionId, question_id: questionId, position_in_drop: position, latency_ms: latency, voice, multiplier_at_position: Number(form.get('multiplier_at_position')) || 1 });
   return { ...r, transcript: voice?.transcript ?? null };

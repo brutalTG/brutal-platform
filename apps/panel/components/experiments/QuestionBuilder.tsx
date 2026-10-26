@@ -664,6 +664,7 @@ function TypeSpecificFields({
             </div>
           )}
           <NumberField label="Máximo de segundos hablando" value={d.maxSeconds ?? 20} onChange={(v) => onChange({ maxSeconds: v } as any)} min={5} max={60} />
+          <ToggleField label="Carta de la máquina" description="Antes de hablar, el jugador marca en secreto si dice la verdad o miente. Con dos o más de estas en el Drop, la máquina acusa al final (reglas en la configuración del Drop: detector)." value={d.detector === true} onChange={(v) => onChange({ detector: v || undefined } as any)} />
           <p className="text-xs" style={{ color: "var(--p-text-faint)" }}>El jugador ve «Tu respuesta queda grabada». El audio se guarda en privado y se transcribe; en Resultados ves la frase y cómo se repartieron las respuestas.</p>
         </>
       );

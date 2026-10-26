@@ -15,6 +15,7 @@ import { ResultScreen } from "./result-screen";
 import { MultiplierUnlockScreen } from "./multiplier-unlock-screen";
 import { TrapFailScreen } from "./trap-fail-screen";
 import { RevealScreen } from "./reveal-screen";
+import { DetectorVerdictScreen } from "./detector-verdict-screen";
 import { SharedResultPage, parseSharedResult, buildShareUrl } from "./shared-result-page";
 import { ShareCard } from "./share-card";
 import { MicroReaction } from "./micro-reaction";
@@ -36,7 +37,8 @@ import { getNextDuotonePair } from "./color-generator";
 import { startSession as signalStartSession, finalizeSession, exportSessionJSON, updateCurrentPosition } from "./signal-store";
 import { computeDimensionsWithOptions, pickArchetype } from "./archetype-engine";
 import { getReferralLink } from "./referral";
-import { serverStartSession, uploadResponse, completeSession, uploadSession, waitForUpload, claimRewards } from "./session-uploader";
+import { serverStartSession, uploadResponse, completeSession, uploadSession, waitForUpload, claimRewards, type DetectorVerdict } from "./session-uploader";
+import type { DetectorBudget } from "./voice-question";
 import { fetchActiveDrop, fetchPreviewDrop } from "./drop-api";
 import { AccessNotice } from "./AccessNotice";
 import { API_BASE } from "./api-base";
@@ -363,6 +365,11 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
   const [pendingMultiplier, setPendingMultiplier] = useState<{ multiplier: number; label: string } | null>(null);
   const [trapPenaltyValue, setTrapPenaltyValue] = useState(0);
 
+  // --- La máquina (cartas de voz con detector) ---
+  const detectorPositions = useMemo(() => questions.map((q, i) => (q.type === "voice" && q.detector === true ? i : -1)).filter((i) => i >= 0), [questions]);
+  const hasDetector = Boolean(drop.detector) && detectorPositions.length >= 2;
+  const [detectorVerdict, setDetectorVerdict] = useState<DetectorVerdict | null | "pending">("pending");
+
   // --- Micro-reaction ---
   const [reactionText, setReactionText] = useState<string | null>(null);
   const reactionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -434,9 +441,9 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
       setQuestionIndex((i) => i + 1);
       setScreen("question");
     } else {
-      setScreen("reveal");
+      setScreen(hasDetector ? "verdict" : "reveal");
     }
-  }, [questionIndex, totalQuestions]);
+  }, [questionIndex, totalQuestions, hasDetector]);
 
   const advanceWithMultiplierCheck = useCallback(() => {
     const checkpoint = MULTIPLIER_CHECKPOINTS[questionIndex];
@@ -475,6 +482,50 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
     const dims = computeDimensionsWithOptions(answersRef.current, reveal.scoring, avgLatency, questionOptionsMap);
     return pickArchetype(dims, reveal.archetypes);
   }, [drop, questionOptionsMap]);
+
+  // Qué le queda por mentir en la carta de la máquina que tiene enfrente.
+  const detectorBudget = useMemo<DetectorBudget | undefined>(() => {
+    if (!hasDetector || !drop.detector) return undefined;
+    const committed = detectorPositions
+      .filter((p) => p < questionIndex)
+      .map((p) => answersRef.current[p])
+      .filter((a): a is Extract<UserAnswer, { type: "voice" }> => Boolean(a && a.type === "voice" && a.committed))
+      .map((a) => a.committed as "truth" | "lie");
+    const used = committed.filter((c) => c === "lie").length;
+    const remainingLies = Math.max(0, drop.detector.lies - used);
+    const remainingItems = Math.max(0, detectorPositions.length - committed.length);
+    return { remainingLies, remainingItems, mustLie: remainingLies > 0 && remainingLies >= remainingItems, mustTell: remainingLies <= 0 };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasDetector, drop.detector, detectorPositions, questionIndex]);
+
+  // Cierra la partida en el servidor una sola vez (último upload + sesión). Devuelve el veredicto de la máquina.
+  const finalizeOnce = useCallback(() => {
+    if (sessionFinalizedRef.current) return null;
+    sessionFinalizedRef.current = true;
+    const lastIdx = totalQuestions - 1;
+    const lastAnswer = answersRef.current[lastIdx];
+    const lastQuestion = questions[lastIdx];
+    if (lastAnswer && lastQuestion && lastIdx > lastUploadedIndexRef.current) {
+      lastUploadedIndexRef.current = lastIdx;
+      uploadResponse(lastQuestion, lastIdx, lastAnswer, drop.id, currentMultiplier);
+    }
+    localStorage.setItem(`brutal_drop_completed_${drop.id}`, "true");
+    const archetype = computeArchetype();
+    const archetypeData = archetype ? { id: archetype.id, title: archetype.title } : undefined;
+    const session = finalizeSession(questions, getRecords(), { coins, tickets, multiplier: currentMultiplier }, archetypeData);
+    if (session) {
+      console.log("[BRUTAL] Session finalized:", exportSessionJSON(session));
+      uploadSession(session);
+    }
+    return completeSession({ archetype_result: archetypeData, bic_scores: session?.signalPairs || null, multiplier: currentMultiplier });
+  }, [totalQuestions, questions, drop.id, currentMultiplier, coins, tickets, computeArchetype]);
+
+  useEffect(() => {
+    if (screen !== "verdict") return;
+    const p = finalizeOnce();
+    if (!p) return;
+    p.then((r) => setDetectorVerdict(r.detector)).catch(() => setDetectorVerdict(null));
+  }, [screen, finalizeOnce]);
 
   // ====== SCREEN RENDERING ======
 
@@ -528,6 +579,10 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
     return <TrapFailScreen penaltyValue={trapPenaltyValue} onComplete={advanceWithMultiplierCheck} />;
   }
 
+  if (screen === "verdict") {
+    return <DetectorVerdictScreen verdict={detectorVerdict} onContinue={() => setScreen("reveal")} />;
+  }
+
   if (screen === "reveal") {
     const avgLatency = getAverageLatency();
     const instinctive = getInstinctiveCount();
@@ -537,38 +592,12 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
     const revealTitle = archetype ? archetype.title : drop.reveal.title;
     const revealDescription = archetype ? archetype.description : drop.reveal.description;
 
-    if (!sessionFinalizedRef.current) {
-      sessionFinalizedRef.current = true;
-
-      // Subir la última carta
-      const lastIdx = totalQuestions - 1;
-      const lastAnswer = answersRef.current[lastIdx];
-      const lastQuestion = questions[lastIdx];
-      if (lastAnswer && lastQuestion && lastIdx > lastUploadedIndexRef.current) {
-        lastUploadedIndexRef.current = lastIdx;
-        uploadResponse(lastQuestion, lastIdx, lastAnswer, drop.id, currentMultiplier);
-      }
-
-      // --- GUARDA EN MEMORIA QUE COMPLETÓ EL DROP ---
-      localStorage.setItem(`brutal_drop_completed_${drop.id}`, "true");
-
-      const archetypeData = archetype ? { id: archetype.id, title: archetype.title } : undefined;
-      const session = finalizeSession(questions, getRecords(), { coins, tickets, multiplier: currentMultiplier }, archetypeData);
-      if (session) {
-        console.log("[BRUTAL] Session finalized:", exportSessionJSON(session));
-        uploadSession(session);
-      }
-
-      completeSession({
-        archetype_result: archetypeData,
-        bic_scores: session?.signalPairs || null,
-        multiplier: currentMultiplier,
-      });
-    }
+    finalizeOnce();
+    const bonusTickets = detectorVerdict && detectorVerdict !== "pending" ? Number(detectorVerdict.tickets) || 0 : 0;
 
     const referralLink = getReferralLink();
     const shareUrl = buildShareUrl({ title: revealTitle, description: revealDescription, dropName: drop.name, latency: formatLatency(avgLatency), totalTime });
-    const finalTickets = Math.round(tickets * currentMultiplier);
+    const finalTickets = Math.max(0, Math.round(tickets * currentMultiplier) + bonusTickets);
 
     return (
       <RevealScreen
@@ -578,6 +607,7 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
         coins={coins}
         tickets={tickets}
         multiplier={currentMultiplier}
+        bonusTickets={bonusTickets}
         isMinor={isMinor}
         onClaim={() => { setScreen("profile"); }}
         onClaimRewards={async () => {
@@ -636,6 +666,7 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
         advanceWithMultiplierCheck={advanceWithMultiplierCheck}
         setResultConfig={setResultConfig}
         setScreen={setScreen as (s: string) => void}
+        detectorBudget={detectorBudget}
       />
     );
   }
@@ -710,6 +741,7 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
             advanceWithMultiplierCheck={advanceWithMultiplierCheck}
             setResultConfig={setResultConfig}
             setScreen={setScreen as (s: string) => void}
+            detectorBudget={detectorBudget}
           />
         </div>
       </div>
@@ -721,4 +753,4 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
   );
 }
 
-type ScreenType = "splash" | "countdown" | "question" | "result" | "timeout" | "confession_secret" | "multiplier" | "trap_fail" | "reveal" | "profile" | "leaderboard";
+type ScreenType = "splash" | "countdown" | "question" | "result" | "timeout" | "confession_secret" | "multiplier" | "trap_fail" | "verdict" | "reveal" | "profile" | "leaderboard";

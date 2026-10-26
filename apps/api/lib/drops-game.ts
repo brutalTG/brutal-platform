@@ -50,7 +50,11 @@ export function computeClaim(answers: AnswerRow[], multiplier: number) {
   return { usd, tickets: Math.floor(tickets * Math.max(1, Number(multiplier) || 1)) };
 }
 
-export type VoiceAnswer = { transcript: string; stated: string | null; number: number | null; audio_path: string | null; speech_ms: number | null; words: number; first_word_ms: number | null };
+export type VoiceAnswer = {
+  transcript: string; stated: string | null; number: number | null; audio_path: string | null; speech_ms: number | null; words: number; first_word_ms: number | null;
+  /** Carta de la máquina: qué marcó en secreto y cuánto tardó en decidirlo. */
+  committed?: 'truth' | 'lie'; decision_ms?: number | null;
+};
 export type HiloResult = { status: string; multiplier: number; steps: number; cards: number[]; decisions: string[] };
 
 export type AnswerBody = {
@@ -153,3 +157,101 @@ export function hiloView(h: Hand, ladder: number[] = HILO_LADDER) {
 /** Multiplicador final de la partida: checkpoints por avanzar × lo que se ganó en las manos de mayor o menor. */
 export const sessionMultiplier = (checkpoint: number, hands: { status: string; multiplier: number }[]) =>
   Math.round(hands.reduce((m, h) => (h.status === 'stood' ? m * Math.max(1, Number(h.multiplier) || 1) : m), checkpoint) * 100) / 100;
+
+// ---------- La máquina dentro del Drop ----------
+// Cartas de voz con `detector: true`: antes de hablar el jugador marca en secreto VERDAD o MENTIRA.
+// Tiene que mentir exactamente `lies` veces en el Drop. Al cerrar, la máquina acusa `lies` cartas
+// comparando cómo habló en cada una (dudó más, arrancó tarde, habló menos, rellenó). Si no acierta ninguna, zafó.
+
+export type DetectorConfig = { lies: number; winTickets: number; loseTickets: number };
+export const DEFAULT_DETECTOR: DetectorConfig = { lies: 1, winTickets: 150, loseTickets: 50 };
+
+export function detectorConfig(raw: unknown): DetectorConfig | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const n = (v: unknown, d: number) => (Number.isFinite(Number(v)) && Number(v) >= 0 ? Math.floor(Number(v)) : d);
+  return { lies: Math.max(1, n(r.lies, DEFAULT_DETECTOR.lies)), winTickets: n(r.winTickets, DEFAULT_DETECTOR.winTickets), loseTickets: n(r.loseTickets, DEFAULT_DETECTOR.loseTickets) };
+}
+
+export type DetectorItem = { position: number; committed: 'truth' | 'lie'; decision_ms: number | null; onset_ms: number | null; speech_ms: number | null; fillers: number };
+export type DetectorResult = {
+  lies: number[]; accused: number[]; caught: number; verdict: 'caught' | 'escaped';
+  reason: { position: number; kind: 'decision' | 'onset' | 'speech' | 'fillers'; value: number | null };
+  tickets: number;
+};
+
+const WEIGHTS = { decision: 1.2, onset: 1.0, speech: 0.5, fillers: 0.6 } as const;
+type Feature = keyof typeof WEIGHTS;
+const FEATURE_OF: Record<Feature, keyof DetectorItem> = { decision: 'decision_ms', onset: 'onset_ms', speech: 'speech_ms', fillers: 'fillers' };
+
+function zscores(items: DetectorItem[], f: keyof DetectorItem) {
+  const vals = items.map((i) => Number(i[f])).filter((v) => Number.isFinite(v));
+  const mean = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+  const sd = vals.length ? Math.sqrt(vals.reduce((a, b) => a + (b - mean) ** 2, 0) / vals.length) : 0;
+  return items.map((i) => { const v = Number(i[f]); return sd > 0 && Number.isFinite(v) ? (v - mean) / sd : 0; });
+}
+
+// Desempate estable: la misma partida acusa siempre igual.
+function jitter(seed: string, salt: number) {
+  let h = 2166136261;
+  for (const ch of `${seed}:${salt}`) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  return ((h >>> 0) % 1000) / 1e5;
+}
+
+/** Qué cartas acusa la máquina y cómo le fue al jugador. Hace falta al menos dos cartas para comparar. */
+export function detectorOutcome(items: DetectorItem[], cfg: DetectorConfig, seed = ''): DetectorResult | null {
+  if (items.length < 2) return null;
+  const z: Record<Feature, number[]> = {
+    decision: zscores(items, 'decision_ms'), onset: zscores(items, 'onset_ms'), fillers: zscores(items, 'fillers'),
+    // Mentir suele salir más corto: hablar menos que en el resto suma sospecha.
+    speech: zscores(items, 'speech_ms').map((v) => -v),
+  };
+  const scored = items.map((it, i) => {
+    let score = 0, top: Feature = 'decision', topVal = -Infinity;
+    for (const f of Object.keys(WEIGHTS) as Feature[]) {
+      const c = z[f][i] * WEIGHTS[f];
+      score += c;
+      if (c > topVal) { topVal = c; top = f; }
+    }
+    return { position: it.position, score: score + jitter(seed, it.position), reason: top, value: it[FEATURE_OF[top]] as number | null };
+  });
+  const howMany = Math.min(cfg.lies, items.length - 1);
+  const picks = [...scored].sort((a, b) => b.score - a.score).slice(0, howMany).sort((a, b) => a.position - b.position);
+  const lies = items.filter((i) => i.committed === 'lie').map((i) => i.position);
+  const caught = picks.filter((p) => lies.includes(p.position)).length;
+  const verdict = caught > 0 ? 'caught' : 'escaped';
+  const first = picks[0];
+  return {
+    lies, accused: picks.map((p) => p.position), caught, verdict,
+    reason: { position: first.position, kind: first.reason, value: first.value },
+    tickets: verdict === 'escaped' ? cfg.winTickets : -cfg.loseTickets,
+  };
+}
+
+const nf = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 1 });
+
+/** La acusación, en palabras. `label` es cómo se nombra la carta ("la segunda"). */
+export function detectorReason(r: DetectorResult, label: (position: number) => string) {
+  const { kind, value, position } = r.reason;
+  const at = label(position);
+  switch (kind) {
+    case 'decision': return value != null ? `En ${at} dudaste ${nf.format(value / 1000)} segundos antes de decidir.` : `En ${at} dudaste antes de decidir.`;
+    case 'onset': return value != null ? `En ${at} tardaste ${nf.format(value / 1000)} segundos en arrancar a hablar.` : `En ${at} arrancaste tarde.`;
+    case 'speech': return `En ${at} hablaste menos que en las otras.`;
+    case 'fillers': return `En ${at} rellenaste con "eh" y "este".`;
+  }
+}
+
+/** Cuántas mentiras le quedan y si en la próxima carta está obligado. */
+export function detectorBudget(total: number, lies: number, committed: ('truth' | 'lie')[]) {
+  const used = committed.filter((c) => c === 'lie').length;
+  const remainingLies = Math.max(0, lies - used);
+  const remainingItems = Math.max(0, total - committed.length);
+  return { remainingLies, remainingItems, mustLie: remainingLies > 0 && remainingLies >= remainingItems, mustTell: remainingLies <= 0 };
+}
+
+/** Tickets de la partida con lo que dio la máquina: nunca por debajo de cero. */
+export function applyDetector(tickets: number, result: DetectorResult | null | undefined) {
+  if (!result) return tickets;
+  return Math.max(0, tickets + (Number(result.tickets) || 0));
+}

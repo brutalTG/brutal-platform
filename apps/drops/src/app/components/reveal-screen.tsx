@@ -16,6 +16,8 @@ interface RevealScreenProps {
   coins: number;
   tickets: number;
   multiplier: number; // 1, 1.25, or 1.5
+  /** Lo que dio la máquina (se suma después del multiplicador; puede ser negativo). */
+  bonusTickets?: number;
   isMinor?: boolean;
   onClaim: () => void;
   /** Async function that claims rewards on the server — called before animation */
@@ -62,6 +64,7 @@ export function RevealScreen({
   coins,
   tickets,
   multiplier,
+  bonusTickets = 0,
   isMinor = false,
   onClaim,
   onClaimRewards,
@@ -84,8 +87,8 @@ export function RevealScreen({
     document.body.style.color = revealColors.fg;
   }, [revealColors]);
 
-  const finalTickets = Math.round(tickets * multiplier);
-  const hasMultiplier = multiplier > 1;
+  const finalTickets = Math.max(0, Math.round(tickets * multiplier) + bonusTickets);
+  const hasMultiplier = multiplier > 1 || bonusTickets !== 0;
 
   const formattedCoins = coins % 1 === 0 ? coins.toString() : coins.toFixed(2).replace(".", ",");
   const formattedTickets = displayTickets.toLocaleString("es-AR");
@@ -382,7 +385,7 @@ export function RevealScreen({
 
           {hasMultiplier && claimPhase === "done" && (
             <p className="font-['Fira_Code'] text-[11px] text-center -mt-1" style={{ color: "var(--dynamic-bg, #000)" }}>
-              Tickets: {tickets.toLocaleString("es-AR")} × {multiplier.toFixed(2).replace(/\.?0+$/, "")} = {finalTickets.toLocaleString("es-AR")}
+              Tickets: {tickets.toLocaleString("es-AR")} × {multiplier.toFixed(2).replace(/\.?0+$/, "")}{bonusTickets !== 0 ? ` ${bonusTickets > 0 ? "+" : "−"} ${Math.abs(bonusTickets)} (la máquina)` : ""} = {finalTickets.toLocaleString("es-AR")}
             </p>
           )}
 

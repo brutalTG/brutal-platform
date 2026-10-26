@@ -74,7 +74,7 @@ export type UserAnswer =
   | { type: "dead_drop"; latencyMs?: number }
   | { type: "hot_take"; selectedIndex: number; latencyMs?: number }
   | { type: "timeout"; latencyMs?: number }
-  | { type: "voice"; audio: Blob | null; mime: string; speechMs?: number; latencyMs?: number }
+  | { type: "voice"; audio: Blob | null; mime: string; speechMs?: number; latencyMs?: number; committed?: "truth" | "lie"; decisionMs?: number }
   | { type: "mayor_menor"; multiplier: number; busted: boolean; steps: number; latencyMs?: number };
 
 // --- Engine ---

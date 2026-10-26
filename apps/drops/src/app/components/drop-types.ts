@@ -266,6 +266,15 @@ export interface VoiceQuestion {
   optionB?: string;
   /** Máximo de segundos hablando (default: 20). */
   maxSeconds?: number;
+  /** Carta de la máquina: antes de hablar, el jugador marca en secreto si dice la verdad o miente. */
+  detector?: boolean;
+}
+
+/** La máquina del Drop: cuántas veces hay que mentirle y qué paga. */
+export interface DetectorConfig {
+  lies: number;
+  winTickets: number;
+  loseTickets: number;
 }
 
 /** Mayor o menor: juego de cartas que multiplica los Golden Tickets de la partida. */
@@ -324,6 +333,8 @@ export interface QuestionMeta {
     /** Text shown below percentage, e.g. "Opina igual que vos." */
     text: string;
   };
+  /** Micro-reacción propia de la carta (texto corto que flota después de responder). Sin esto, sale una del pozo. */
+  reaction?: string;
   /** Signal Pair ID — links two cards that should be read together for BIC analysis */
   signalPairId?: string;
   /** Card classification for analysis. Inferred from reward type if omitted. */
@@ -424,6 +435,9 @@ export interface Drop {
 
   /** Optional splash screen customization */
   splash?: SplashConfig;
+
+  /** Si el Drop tiene cartas de la máquina (voz con `detector: true`), sus reglas. */
+  detector?: DetectorConfig;
 
   /** Optional segment restriction — only users in these segments can access the drop */
   segmentIds?: string[];
