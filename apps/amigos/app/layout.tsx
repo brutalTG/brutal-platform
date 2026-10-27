@@ -19,7 +19,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Link href="/" className="logo">AMIGOS DE MIERDA</Link>
             <nav className="nav" aria-label="Secciones">
               <Link href="/#como">Cómo se juega</Link>
-              <Link href="/cartas">Cartas gratis</Link>
               <Link href="/#preguntas">Tus preguntas estúpidas</Link>
               <Link href="/#brutal">BRUTAL</Link>
             </nav>

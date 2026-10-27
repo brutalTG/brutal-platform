@@ -13,9 +13,9 @@ export type Card = { id: string; prompt: string; detail: string | null; option_a
 
 // Si el API no responde, la página igual muestra cartas.
 export const FALLBACK: Card[] = [
-  { id: 'f1', prompt: 'Podés saber con certeza si tus amigos te quieren o solo te aguantan.', detail: 'Después no podés fingir que no sabés.', option_a: 'Quiero saber', option_b: 'No quiero saber' },
+  { id: 'f1', prompt: 'Existe un grupo de WhatsApp de tus amigos sin vos. Te llega el link. Podés leerlo una sola vez.', detail: 'Después no podés hacer como que no lo leíste.', option_a: 'Lo leo', option_b: 'No lo abro' },
   { id: 'f2', prompt: 'Tu mejor amigo le está arruinando la vida a alguien que vos también querés. Te pide que no digas nada.', detail: null, option_a: 'Me callo', option_b: 'Hablo' },
-  { id: 'f3', prompt: 'Hay un botón. Lo apretás y tus viejos pierden todo, pero vos sos exactamente quien querés ser a los 40.', detail: 'No lo apretás y seguís con su plata sin saber nunca si lo que sos es tuyo.', option_a: 'Lo aprieto', option_b: 'No lo aprieto' },
+  { id: 'f3', prompt: 'Tu viejo te ofrece quedarte con la empresa familiar. Si decís que no, la vende y esa plata no te toca nunca.', detail: 'Si decís que sí, laburás con él todos los días hasta que se jubile. No se va a jubilar.', option_a: 'Me quedo con la empresa', option_b: 'Que la venda' },
   { id: 'f4', prompt: 'La beca en la mejor universidad del mundo. Condición: 10 años sin pisar Argentina.', detail: 'Ni casamientos, ni velorios. Ni el de tu viejo.', option_a: 'Me voy', option_b: 'Me quedo' },
   { id: 'f5', prompt: 'Tu pareja de 5 años: o nos casamos y tenemos un hijo este año, o cortamos. Tenés 24.', detail: null, option_a: 'Me caso', option_b: 'Corto' },
   { id: 'f6', prompt: 'Uno de este grupo va a ser millonario y el resto no. Podés elegir que no sea nadie.', detail: null, option_a: 'Que sea uno', option_b: 'Que no sea nadie' },
