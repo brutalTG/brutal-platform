@@ -23,6 +23,7 @@ import { ProfileScreen } from "./profile-screen";
 import { LeaderboardScreen } from "./leaderboard-screen";
 
 // --- Extracted modules ---
+import { preloadVoices } from "./voice-cache";
 import { StoryProgressBar, TimerBar, PlayingBadge, StatPills } from "./SurveyHeader";
 import { QuestionRenderer } from "./QuestionRenderer";
 import { useAnswerPipeline } from "./useAnswerPipeline";
@@ -466,6 +467,18 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
     advanceWithMultiplierCheck,
   });
 
+  // La voz de la máquina se baja entera apenas arranca la partida: cuando llega la carta, suena al instante.
+  const voicesLoaded = useRef(false);
+  useEffect(() => {
+    if (screen !== "question" || voicesLoaded.current) return;
+    voicesLoaded.current = true;
+    preloadVoices(questions.flatMap((q) => {
+      if (q.type === "voice" && q.speak !== false) return [q.text];
+      if (q.type === "dead_drop" && q.machine && q.speakText) return [q.speakText];
+      return [];
+    }));
+  }, [screen, questions]);
+
   // --- Latency tracking ---
   useEffect(() => {
     if (screen === "question" && currentQuestion) {
@@ -656,7 +669,8 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
   // ====== QUESTION SCREEN ======
   if (screen !== "question" || !currentQuestion) return null;
 
-  if (FULLSCREEN_TYPES.has(currentQuestion.type)) {
+  // Las cartas de la máquina van a pantalla completa, con el polígrafo arriba.
+  if (FULLSCREEN_TYPES.has(currentQuestion.type) || (currentQuestion.type === "voice" && currentQuestion.detector === true)) {
     return (
       <QuestionRenderer
         question={currentQuestion}

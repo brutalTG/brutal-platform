@@ -179,7 +179,8 @@ export const sessionMultiplier = (checkpoint: number, hands: { status: string; m
 // ---------- La máquina dentro del Drop ----------
 // Cartas de voz con `detector: true`: antes de hablar el jugador marca en secreto VERDAD o MENTIRA.
 // Tiene que mentir exactamente `lies` veces en el Drop. Al cerrar, la máquina acusa `lies` cartas
-// comparando cómo habló en cada una (dudó más, arrancó tarde, habló menos, rellenó). Si no acierta ninguna, zafó.
+// comparando cómo habló en cada una (dudó más, arrancó tarde, habló menos, rellenó).
+// Te agarra si encuentra TODAS tus mentiras; si se le escapa al menos una, zafaste.
 
 export type DetectorConfig = { lies: number; winTickets: number; loseTickets: number };
 export const DEFAULT_DETECTOR: DetectorConfig = { lies: 1, winTickets: 150, loseTickets: 50 };
@@ -237,7 +238,7 @@ export function detectorOutcome(items: DetectorItem[], cfg: DetectorConfig, seed
   const picks = [...scored].sort((a, b) => b.score - a.score).slice(0, howMany).sort((a, b) => a.position - b.position);
   const lies = items.filter((i) => i.committed === 'lie').map((i) => i.position);
   const caught = picks.filter((p) => lies.includes(p.position)).length;
-  const verdict = caught > 0 ? 'caught' : 'escaped';
+  const verdict = lies.length > 0 && caught >= lies.length ? 'caught' : 'escaped';
   const first = picks[0];
   return {
     lies, accused: picks.map((p) => p.position), caught, verdict,
@@ -258,6 +259,29 @@ export function detectorReason(r: DetectorResult, label: (position: number) => s
     case 'speech': return `En ${at} hablaste menos que en las otras.`;
     case 'fillers': return `En ${at} rellenaste con "eh" y "este".`;
   }
+}
+
+const ORDINAL = ['la primera', 'la segunda', 'la tercera', 'la cuarta', 'la quinta', 'la sexta'];
+
+/** Cómo se nombra una carta de la máquina en el veredicto: su `detectorLabel` ("la del famoso") o, si no tiene, el orden. */
+export function detectorLabel(content: { detectorLabel?: unknown } | null | undefined, position: number) {
+  const own = typeof content?.detectorLabel === 'string' ? content.detectorLabel.trim() : '';
+  return own || (ORDINAL[position - 1] ?? `la ${position}`);
+}
+
+/** Lo que la máquina dice en una carta del veredicto. */
+export type DetectorCard = { position: number; text: string; label: string; said: string; lied: boolean; accused: boolean };
+export type DetectorVerdictOut = DetectorResult & { text: string; lie_labels: string[]; cards: DetectorCard[] };
+
+/** Los únicos textos que la voz de BRUTAL puede decir en un Drop: las cartas de voz y la presentación de la máquina. */
+export function voiceScript(cards: { format: string; content?: Record<string, any> | null }[]) {
+  const out: string[] = [];
+  for (const c of cards) {
+    const content = c.content ?? {};
+    if (c.format === 'voice' && content.speak !== false && content.text) out.push(String(content.text));
+    if (c.format === 'dead_drop' && content.machine === true && typeof content.speakText === 'string' && content.speakText) out.push(content.speakText);
+  }
+  return out;
 }
 
 /** Cuántas mentiras le quedan y si en la próxima carta está obligado. */

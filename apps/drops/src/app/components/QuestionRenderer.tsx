@@ -25,6 +25,7 @@ import { HotTakeQuestion } from "./hot-take-question";
 import { HotTakeVisualQuestion } from "./hot-take-visual-question";
 import { MediaReactionQuestion } from "./media-reaction-question";
 import { DeadDropScreen } from "./dead-drop-screen";
+import { MachineIntroScreen } from "./machine-intro-screen";
 import { resolveDeadDrop } from "./dead-drop-resolver";
 import { RafagaBurstQuestion } from "./rafaga-burst-question";
 import { VoiceQuestion, type DetectorBudget } from "./voice-question";
@@ -53,6 +54,19 @@ export function QuestionRenderer({
 
   if (q.type === "dead_drop") {
     pipeline.storeOnly(questionIndex, { type: "dead_drop", latencyMs: 0 });
+    if (q.machine) {
+      return (
+        <MachineIntroScreen
+          key={questionIndex}
+          title={q.title ?? q.firstLine}
+          lines={q.lines ?? []}
+          rules={q.rules}
+          speakText={q.speakText}
+          button={q.button}
+          onComplete={advanceWithMultiplierCheck}
+        />
+      );
+    }
     const resolved = resolveDeadDrop(q);
     return (
       <DeadDropScreen

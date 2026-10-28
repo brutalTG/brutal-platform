@@ -87,6 +87,13 @@ export interface DeadDropQuestion {
   lastLines: string[];
   /** Optional hourly variations. Key = hour range "HH-HH" (24h). Overrides default content. */
   hourVariations?: DeadDropVariation[];
+  /** Placa de la máquina: polígrafo arriba, la máquina habla, reglas y botón. Usa title/lines/rules/speakText/button. */
+  machine?: boolean;
+  title?: string;
+  lines?: string[];
+  rules?: string[];
+  speakText?: string;
+  button?: string;
 }
 
 export interface DeadDropVariation {

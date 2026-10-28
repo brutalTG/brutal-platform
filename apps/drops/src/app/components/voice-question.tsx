@@ -7,8 +7,8 @@ import { useEffect, useRef, useState } from "react";
 import { Mic, Square } from "lucide-react";
 import { DuotoneCard, CardTitle, ActionButton } from "./brutal-ui";
 import { hapticMedium } from "./haptics";
-import { API_BASE } from "./api-base";
-import { userAuthHeaders } from "./access-context";
+import { say } from "./voice-cache";
+import { Polygraph, type PolygraphHandle } from "./polygraph";
 
 type Done = { audio: Blob | null; mime: string; speechMs: number; latencyMs: number; committed?: "truth" | "lie"; decisionMs?: number };
 
@@ -18,27 +18,6 @@ export type DetectorBudget = { mustLie: boolean; mustTell: boolean; remainingLie
 function pickMime() {
   const options = ["audio/webm;codecs=opus", "audio/mp4", "audio/webm", "audio/ogg;codecs=opus"];
   return options.find((m) => typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported?.(m)) ?? "";
-}
-
-async function say(text: string) {
-  try {
-    const res = await fetch(`${API_BASE}/tts`, { method: "POST", headers: userAuthHeaders(), body: JSON.stringify({ text }) });
-    if (!res.ok) throw new Error(String(res.status));
-    const url = URL.createObjectURL(await res.blob());
-    const el = new Audio(url);
-    await new Promise<void>((resolve) => { el.onended = () => resolve(); el.onerror = () => resolve(); el.play().catch(() => resolve()); });
-    URL.revokeObjectURL(url);
-  } catch {
-    if (typeof speechSynthesis === "undefined") return;
-    await new Promise<void>((resolve) => {
-      const u = new SpeechSynthesisUtterance(text);
-      u.lang = "es-AR";
-      const t = setTimeout(resolve, 2000 + text.length * 80);
-      u.onend = () => { clearTimeout(t); resolve(); };
-      u.onerror = () => { clearTimeout(t); resolve(); };
-      speechSynthesis.speak(u);
-    });
-  }
 }
 
 export function VoiceQuestion({ actionHint, text, speak = true, maxSeconds = 20, optionA, optionB, answerType, detector, budget, onDone }: {
@@ -54,6 +33,7 @@ export function VoiceQuestion({ actionHint, text, speak = true, maxSeconds = 20,
   const shownAt = useRef(performance.now());
   const rec = useRef<{ stop: () => void } | null>(null);
   const committed = useRef<{ value: "truth" | "lie"; decisionMs: number } | null>(null);
+  const poly = useRef<PolygraphHandle>(null);
 
   useEffect(() => {
     let alive = true;
@@ -64,6 +44,7 @@ export function VoiceQuestion({ actionHint, text, speak = true, maxSeconds = 20,
   function commit(value: "truth" | "lie") {
     hapticMedium();
     committed.current = { value, decisionMs: Math.round(performance.now() - shownAt.current) };
+    poly.current?.jolt(value === "lie" ? 0.7 : 0.25);
     setPhase("ready");
   }
 
@@ -101,6 +82,7 @@ export function VoiceQuestion({ actionHint, text, speak = true, maxSeconds = 20,
       if (rms > 0.02) speechMs += now - last;
       last = now;
       setLevel(Math.min(1, rms * 8));
+      poly.current?.setLevel(Math.min(1, rms * 8));
       const remaining = Math.max(0, maxSeconds - (now - began) / 1000);
       setLeft(Math.ceil(remaining));
       if (remaining <= 0) return stop();
@@ -110,6 +92,7 @@ export function VoiceQuestion({ actionHint, text, speak = true, maxSeconds = 20,
       if (finished) return;
       finished = true;
       cancelAnimationFrame(raf);
+      poly.current?.setLevel(0);
       setPhase("sending");
       mr.onstop = () => {
         stream.getTracks().forEach((t) => t.stop());
@@ -126,6 +109,81 @@ export function VoiceQuestion({ actionHint, text, speak = true, maxSeconds = 20,
   }
 
   const options = answerType === "choice" && optionA && optionB ? [optionA, optionB] : null;
+
+  if (detector) {
+    // Carta de la máquina: pantalla completa, el polígrafo arriba (mitad de la pantalla) y la pregunta abajo.
+    const ink = "#F2F2F2";
+    return (
+      <div className="fixed inset-0 flex justify-center overflow-hidden bg-[#050505] font-['Roboto']" style={{ color: ink }}>
+        <div className="flex h-dvh w-full max-w-[420px] flex-col">
+          <div className="relative w-full shrink-0" style={{ height: "50dvh" }}>
+            <Polygraph ref={poly} fill={0.98} label="La máquina te está midiendo" />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16" style={{ background: "linear-gradient(to bottom, rgba(5,5,5,0), #050505)" }} />
+            <p className="pointer-events-none absolute inset-x-0 font-['Silkscreen'] text-[13px] tracking-wide" style={{ top: "calc(var(--tg-safe-top, 0px) + 16px)", left: 20, textShadow: "0 1px 8px rgba(0,0,0,.8)" }}>
+              BRUTAL////////////////
+            </p>
+          </div>
+
+          <div className="flex flex-1 flex-col items-center px-6 pt-3 text-center" style={{ paddingBottom: "calc(var(--tg-safe-bottom, 0px) + 20px)" }}>
+            <h2 className="text-[24px] font-bold leading-tight">{text}</h2>
+            <div className="flex-1" />
+
+            {phase === "speaking" && <p className="font-['Fira_Code'] text-sm opacity-60">La máquina pregunta…</p>}
+
+            {phase === "commit" && (
+              <div className="flex w-full flex-col items-center gap-3">
+                <p className="font-['Fira_Code'] text-xs uppercase tracking-[0.2em] opacity-70">
+                  {budget?.mustLie ? "Te queda una mentira. Es esta." : budget?.mustTell ? "Ya mentiste todo. Esta va con la verdad." : "Antes de hablar, decidí en secreto"}
+                </p>
+                <div className="flex w-full gap-2">
+                  {!budget?.mustLie && (
+                    <button onClick={() => commit("truth")} className="h-[56px] flex-1 rounded-2xl text-base font-bold uppercase active:scale-95" style={{ backgroundColor: ink, color: "#050505" }}>Verdad</button>
+                  )}
+                  {!budget?.mustTell && (
+                    <button onClick={() => commit("lie")} className="h-[56px] flex-1 rounded-2xl text-base font-bold uppercase active:scale-95" style={{ backgroundColor: "#FF0040", color: "#fff" }}>Mentira</button>
+                  )}
+                </div>
+                {!budget?.mustLie && !budget?.mustTell && budget && (
+                  <p className="font-['Fira_Code'] text-[11px] opacity-60">
+                    {budget.remainingLies === 1 ? "Te queda 1 mentira" : `Te quedan ${budget.remainingLies} mentiras`} en {budget.remainingItems} preguntas.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {phase === "ready" && (
+              <>
+                <button onClick={start} className="mb-2 flex size-20 items-center justify-center rounded-full active:scale-95" style={{ backgroundColor: ink, color: "#050505" }} aria-label="Tocá y hablá">
+                  <Mic size={34} />
+                </button>
+                <p className="font-['Fira_Code'] text-sm">Tocá y hablá</p>
+              </>
+            )}
+
+            {phase === "recording" && (
+              <>
+                <button onClick={() => rec.current?.stop()} className="mb-2 flex size-20 items-center justify-center rounded-full" style={{ backgroundColor: ink, color: "#050505", boxShadow: `0 0 0 ${6 + level * 22}px rgba(242,242,242,.18)`, transition: "box-shadow 80ms linear" }} aria-label="Listo">
+                  <Square size={28} fill="currentColor" />
+                </button>
+                <p className="font-['Fira_Code'] text-sm">Te escucho · {left}s · tocá para terminar</p>
+              </>
+            )}
+
+            {phase === "sending" && <p className="font-['Fira_Code'] text-sm">Listo.</p>}
+
+            {phase === "denied" && (
+              <div className="flex w-full flex-col items-center gap-3">
+                <p className="text-sm">No pudimos usar el micrófono. Habilitalo en el navegador o seguí sin responder esta.</p>
+                <button onClick={() => finish({ audio: null, mime: "", speechMs: 0, latencyMs: Math.round(performance.now() - shownAt.current) })} className="h-[52px] w-full rounded-full font-bold" style={{ backgroundColor: ink, color: "#050505" }}>Seguir</button>
+              </div>
+            )}
+
+            <p className="mt-4 font-['Fira_Code'] text-[11px] opacity-50">La máquina escucha. Nadie más.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col flex-1 gap-6">

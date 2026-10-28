@@ -1,5 +1,5 @@
 -- DROP 001 · MENTIME QUE ME GUSTA
--- Versión 2 (28/10): dieciocho cartas sin objeto de estudio: brutal, border, con la máquina adentro. Primera prueba con gente real.
+-- Versión 2 (28/10): dieciocho cartas sin objeto de estudio. La máquina en bloque: placa + tres preguntas por voz seguidas, dos mentiras: brutal, border, con la máquina adentro. Primera prueba con gente real.
 -- Idempotente: se puede correr de nuevo (las cartas se identifican por etiqueta, el Drop por slug).
 -- No es una migración: es contenido. Se carga con OK de Nacho.
 
@@ -43,57 +43,56 @@ insert into mentime_cards values
     "reaction": "Acá se separan los que hablan de los que firman."
   }'),
   (4, 'mentime-05-la-maquina', 'dead_drop', 'dead_drop', 0, 0, 0, '{
-    "firstLine": "Ahora hablás.",
-    "codeLines": [
-      "> la máquina te hace 3 preguntas",
-      "> en 2 decís la verdad",
-      "> en 1 mentís. vos elegís cuál",
-      "> ella elige a quién no le cree"
-    ],
-    "lastLines": ["Si zafás: +150 tickets.", "Si te agarra, te lo va a decir en la cara."]
+    "machine": true,
+    "firstLine": "¿Creés que le podés mentir a una IA?", "codeLines": [], "lastLines": [],
+    "title": "¿CREÉS QUE LE PODÉS MENTIR A UNA IA?",
+    "lines": ["Te voy a hacer tres preguntas.", "Podés mentir dos veces.", "Veamos si te da."],
+    "rules": ["> Antes de cada respuesta elegís en secreto: verdad o mentira.", "> Mentís en dos de las tres.", "> Si se me escapa una: +150 tickets. Si te agarro las dos: −50."],
+    "speakText": "¿Creés que le podés mentir a una IA? Podés mentir dos veces. Veamos si te da.",
+    "button": "PROBEMOS"
   }'),
   (5, 'mentime-06-famoso', 'voice', 'culture', 55, 0.25, 0, '{
     "text": "Elegí un famoso argentino para que nos represente en el mundo, y uno que deportarías.",
-    "speak": true, "answerType": "open", "maxSeconds": 15, "detector": true
+    "detectorLabel": "la del famoso", "speak": true, "answerType": "open", "maxSeconds": 15, "detector": true
   }'),
-  (6, 'mentime-09-fin-de-mes', 'ranking', 'culture', 35, 0.25, 0, '{
+  (8, 'mentime-09-fin-de-mes', 'ranking', 'culture', 35, 0.25, 0, '{
     "text": "No llegás a fin de mes. Ordená lo que cortás primero.",
     "options": ["Terapia", "Gimnasio", "Streaming", "Salidas", "Apuestas"]
   }'),
-  (7, 'mentime-08-ia-veinte', 'choice', 'culture', 24, 0, 20, '{
+  (9, 'mentime-08-ia-veinte', 'choice', 'culture', 24, 0, 20, '{
     "text": "Te contratan para armar una IA que hace el laburo de veinte personas de una oficina. Ganás muy bien, pero ellos se quedan sin laburo. ¿Aceptás?",
     "options": ["Acepto", "No acepto"]
   }'),
-  (8, 'mentime-09b-ia-familiar', 'choice', 'culture', 16, 0, 20, '{
+  (10, 'mentime-09b-ia-familiar', 'choice', 'culture', 16, 0, 20, '{
     "text": "Y si uno de esos veinte fuera un familiar o un amigo tuyo, ¿cambiás tu respuesta?",
     "options": ["Sí, cambio", "No, me mantengo"],
     "reaction": "Registrado."
   }'),
-  (9, 'mentime-10-marcha', 'voice', 'culture', 55, 0.25, 0, '{
+  (6, 'mentime-10-marcha', 'voice', 'culture', 55, 0.25, 0, '{
     "text": "Te pagan por ir a una marcha. ¿A cuál vas y a cuál no vas ni muerto?",
-    "speak": true, "answerType": "open", "maxSeconds": 15, "detector": true
+    "detectorLabel": "la de la marcha", "speak": true, "answerType": "open", "maxSeconds": 15, "detector": true
   }'),
-  (10, 'mentime-10-dias', 'slider', 'culture', 22, 0.25, 0, '{
+  (11, 'mentime-10-dias', 'slider', 'culture', 22, 0.25, 0, '{
     "text": "Si tus viejos te cortan la plata HOY, ¿cuántos días durás?",
     "min": 0, "max": 60, "labelLeft": "Ni uno", "labelRight": "60+",
     "reaction": "Sesenta es \"para siempre\" en esta encuesta."
   }'),
-  (11, 'mentime-12-quien-sube', 'choice', 'culture', 26, 0.25, 0, '{
+  (12, 'mentime-12-quien-sube', 'choice', 'culture', 26, 0.25, 0, '{
     "text": "Vos hacés el mejor laburo del equipo, pero tu jefe te cae mal. Tu compañero labura menos, pero va a todos los after y el jefe lo adora. ¿Quién sube?",
     "options": ["Yo", "Él"]
   }'),
-  (12, 'mentime-13-after', 'choice', 'culture', 14, 0, 20, '{
+  (13, 'mentime-13-after', 'choice', 'culture', 14, 0, 20, '{
     "text": "¿Empezarías a ir a los after?",
     "options": ["Desde mañana", "Ni en pedo"],
     "reaction": "La máquina anotó."
   }'),
-  (13, 'mentime-13-mayor-menor', 'mayor_menor', 'culture', 75, 0, 0, '{
+  (14, 'mentime-13-mayor-menor', 'mayor_menor', 'culture', 75, 0, 0, '{
     "text": "¿Te la jugás? Multiplicá tus tickets o perdelos.",
     "ladder": [1.5, 2, 3], "secondsPerCard": 14
   }'),
-  (14, 'mentime-15-ia-reemplazo', 'voice', 'culture', 55, 0.25, 0, '{
+  (7, 'mentime-15-ia-reemplazo', 'voice', 'culture', 55, 0.25, 0, '{
     "text": "Decí qué parte de tu laburo ya podría hacer una IA, y por qué todavía no te reemplazaron.",
-    "speak": true, "answerType": "open", "maxSeconds": 15, "detector": true
+    "detectorLabel": "la de la IA", "speak": true, "answerType": "open", "maxSeconds": 15, "detector": true
   }'),
   (15, 'mentime-15-depto', 'choice', 'culture', 20, 0, 20, '{
     "text": "Te dan un departamento a tu nombre HOY. A cambio firmás que no te vas del país por diez años. ¿Firmás?",
@@ -125,8 +124,8 @@ insert into drops.drops (slug, name, status, season_id, config)
 select 'mentime', 'MENTIME QUE ME GUSTA', 'draft', (select id from economy.seasons where status = 'active'),
   jsonb_build_object(
     'timeoutMessage', 'Brutal eligió por vos.',
-    'multiplierCheckpoints', jsonb_build_object('2', jsonb_build_object('multiplier', 1.25, 'label', 'x1.25'), '9', jsonb_build_object('multiplier', 1.5, 'label', 'x1.5')),
-    'detector', jsonb_build_object('lies', 1, 'winTickets', 150, 'loseTickets', 50),
+    'multiplierCheckpoints', jsonb_build_object('2', jsonb_build_object('multiplier', 1.25, 'label', 'x1.25'), '10', jsonb_build_object('multiplier', 1.5, 'label', 'x1.5')),
+    'detector', jsonb_build_object('lies', 2, 'winTickets', 150, 'loseTickets', 50),
     'join', jsonb_build_object('code', 'mentime', 'open', true, 'max', 50),
     'voice', jsonb_build_object('voice_id', 'QK4xDwo9ESPHA4JNUpX3', 'fallback_voice_id', 'N6aRe3hk1YqaHDtQpTAH', 'model', 'eleven_flash_v2_5'),
     'splash', jsonb_build_object(
@@ -136,7 +135,7 @@ select 'mentime', 'MENTIME QUE ME GUSTA', 'draft', (select id from economy.seaso
         '> Dieciocho situaciones que ya viviste o vas a vivir.',
         '> Ninguna tiene salida limpia.',
         '> Tres veces vas a hablar.',
-        '> Una vez vas a mentir.',
+        '> Dos veces vas a mentir.',
         '> Nadie se va a enterar.',
         '> Excepto la máquina.',
         '',
@@ -154,14 +153,14 @@ select 'mentime', 'MENTIME QUE ME GUSTA', 'draft', (select id from economy.seaso
           jsonb_build_object('questionIndex', 0, 'optionScores', jsonb_build_array(jsonb_build_object('cinismo', 1), jsonb_build_object('caos', 1, 'postureo', 1))),
           jsonb_build_object('questionIndex', 1, 'optionScores', jsonb_build_array(jsonb_build_object('cinismo', 2), jsonb_build_object('postureo', 2))),
           jsonb_build_object('questionIndex', 3, 'optionScores', jsonb_build_array(jsonb_build_object('cinismo', 2, 'dependencia', 1), jsonb_build_object('cinismo', 1, 'caos', 1), jsonb_build_object('postureo', 2))),
-          jsonb_build_object('questionIndex', 7, 'optionScores', jsonb_build_array(jsonb_build_object('cinismo', 2), jsonb_build_object('postureo', 2))),
-          jsonb_build_object('questionIndex', 8, 'optionScores', jsonb_build_array(jsonb_build_object('dependencia', 1, 'postureo', 1), jsonb_build_object('cinismo', 1))),
-          jsonb_build_object('questionIndex', 11, 'optionScores', jsonb_build_array(jsonb_build_object('postureo', 1), jsonb_build_object('cinismo', 1))),
-          jsonb_build_object('questionIndex', 12, 'optionScores', jsonb_build_array(jsonb_build_object('cinismo', 1, 'caos', 1), jsonb_build_object('postureo', 1))),
+          jsonb_build_object('questionIndex', 9, 'optionScores', jsonb_build_array(jsonb_build_object('cinismo', 2), jsonb_build_object('postureo', 2))),
+          jsonb_build_object('questionIndex', 10, 'optionScores', jsonb_build_array(jsonb_build_object('dependencia', 1, 'postureo', 1), jsonb_build_object('cinismo', 1))),
+          jsonb_build_object('questionIndex', 12, 'optionScores', jsonb_build_array(jsonb_build_object('postureo', 1), jsonb_build_object('cinismo', 1))),
+          jsonb_build_object('questionIndex', 13, 'optionScores', jsonb_build_array(jsonb_build_object('cinismo', 1, 'caos', 1), jsonb_build_object('postureo', 1))),
           jsonb_build_object('questionIndex', 15, 'optionScores', jsonb_build_array(jsonb_build_object('dependencia', 2), jsonb_build_object('caos', 1, 'postureo', 1)))),
         'rafagaScoring', jsonb_build_array(jsonb_build_object('questionIndex', 2, 'majorityA', jsonb_build_object('cinismo', 2), 'majorityB', jsonb_build_object('postureo', 2))),
         'sliderScoring', jsonb_build_array(
-          jsonb_build_object('questionIndex', 10, 'ranges', jsonb_build_array(
+          jsonb_build_object('questionIndex', 11, 'ranges', jsonb_build_array(
             jsonb_build_object('min', 0, 'max', 7, 'scores', jsonb_build_object('caos', 2, 'dependencia', 1)),
             jsonb_build_object('min', 8, 'max', 30, 'scores', jsonb_build_object('dependencia', 1)),
             jsonb_build_object('min', 31, 'max', 60, 'scores', jsonb_build_object('postureo', 1)))),
@@ -169,7 +168,7 @@ select 'mentime', 'MENTIME QUE ME GUSTA', 'draft', (select id from economy.seaso
             jsonb_build_object('min', 0, 'max', 10, 'scores', jsonb_build_object('cinismo', 1)),
             jsonb_build_object('min', 11, 'max', 30, 'scores', jsonb_build_object('caos', 1)),
             jsonb_build_object('min', 31, 'max', 50, 'scores', jsonb_build_object('caos', 2))))),
-        'rankingScoring', jsonb_build_array(jsonb_build_object('questionIndex', 6, 'firstPlaceScores', jsonb_build_array(
+        'rankingScoring', jsonb_build_array(jsonb_build_object('questionIndex', 8, 'firstPlaceScores', jsonb_build_array(
           jsonb_build_object('caos', 1, 'cinismo', 1), jsonb_build_object('dependencia', 1), jsonb_build_object('postureo', 1), jsonb_build_object('dependencia', 1), jsonb_build_object('postureo', 2)))))))
 on conflict (slug) do update set name = excluded.name, config = excluded.config, season_id = excluded.season_id;
 

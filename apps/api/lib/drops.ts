@@ -4,8 +4,8 @@ import { from, must } from './db';
 import { newCode, sha256, signToken, verifyToken } from './crypto';
 import { HttpError } from './http';
 import {
-  applyDetector, birthDateFromAge, cleanNickname, computeClaim, guestPhone, joinConfig, consistencyOf, detectorConfig, detectorOutcome, detectorReason, displayReward, hiloStep, hiloView, HILO_LADDER, multiplierFor, normalizeWallet, observationOf, parseLocation, POLICY,
-  resolveReward, sessionMultiplier, type AnswerBody, type DetectorItem, type DetectorResult, type Hand, type HiloAction, type VoiceAnswer,
+  applyDetector, birthDateFromAge, cleanNickname, computeClaim, guestPhone, joinConfig, consistencyOf, detectorConfig, detectorLabel, detectorOutcome, detectorReason, voiceScript, displayReward, hiloStep, hiloView, HILO_LADDER, multiplierFor, normalizeWallet, observationOf, parseLocation, POLICY,
+  resolveReward, sessionMultiplier, type AnswerBody, type DetectorItem, type DetectorResult, type DetectorVerdictOut, type Hand, type HiloAction, type VoiceAnswer,
 } from './drops-game';
 import { countFillers, parseAnswer } from './game';
 import { db } from './db';
@@ -350,20 +350,22 @@ export async function completeSession(a: Access, body: { session_id?: string; ar
 }
 
 // ---------- La máquina: acusa al cerrar la partida ----------
-const ORDINAL = ['la primera', 'la segunda', 'la tercera', 'la cuarta', 'la quinta', 'la sexta'];
 
 /** Lee las cartas de la máquina de esta partida y decide. Sin cartas de la máquina: null. */
-async function runDetector(sessionId: string, d: DropRow, cards: DQ[]): Promise<(DetectorResult & { text: string; lie_labels: string[] }) | null> {
+async function runDetector(sessionId: string, d: DropRow, cards: DQ[]): Promise<DetectorVerdictOut | null> {
   const cfg = detectorConfig(d.config?.detector);
   const positions = cards.map((c, i) => (c.questions.format === 'voice' && c.questions.content?.detector === true ? i : -1)).filter((i) => i >= 0);
   if (!cfg || positions.length < 2) return null;
   const rows = await must(from('signal', 'observations').select('position, value').eq('session_id', sessionId).eq('kind', 'voice').in('position', positions), 'cartas de la máquina') as any[];
   const items: DetectorItem[] = [];
+  const said = new Map<number, string>();
   for (const r of rows.sort((a, b) => a.position - b.position)) {
     const v = r.value ?? {};
     if (v.committed !== 'truth' && v.committed !== 'lie') continue;
+    const position = positions.indexOf(r.position) + 1;
+    said.set(position, String(v.transcript ?? '').trim());
     items.push({
-      position: positions.indexOf(r.position) + 1, committed: v.committed,
+      position, committed: v.committed,
       decision_ms: Number.isFinite(Number(v.decision_ms)) ? Number(v.decision_ms) : null,
       onset_ms: Number.isFinite(Number(v.first_word_ms)) ? Number(v.first_word_ms) : null,
       speech_ms: Number.isFinite(Number(v.speech_ms)) ? Number(v.speech_ms) : null,
@@ -372,8 +374,16 @@ async function runDetector(sessionId: string, d: DropRow, cards: DQ[]): Promise<
   }
   const r = detectorOutcome(items, cfg, sessionId);
   if (!r) return null;
-  const label = (p: number) => ORDINAL[p - 1] ?? `la ${p}`;
-  return { ...r, text: detectorReason(r, label), lie_labels: r.lies.map(label) };
+  // Cada carta se nombra por lo que se preguntó ("la del famoso"), no por su número: nadie se acuerda cuál fue la segunda.
+  const contentAt = (p: number) => cards[positions[p - 1]]?.questions.content ?? {};
+  const label = (p: number) => detectorLabel(contentAt(p), p);
+  return {
+    ...r, text: detectorReason(r, label), lie_labels: r.lies.map(label),
+    cards: items.map((it) => ({
+      position: it.position, text: String(contentAt(it.position).text ?? ''), label: label(it.position),
+      said: said.get(it.position) ?? '', lied: it.committed === 'lie', accused: r.accused.includes(it.position),
+    })),
+  };
 }
 
 /** Acredita lo ganado en el Drop. Idempotente: dos veces no paga dos veces. */
@@ -602,7 +612,7 @@ export async function dropTts(a: Access, b: { text?: string }) {
   if (!text || text.length > 400) throw new HttpError(400, 'bad_text', 'bad text');
   const d = await dropFor(a);
   if (!d) throw new HttpError(404, 'no_active_drop', 'No active drop');
-  const voiced = (await cardsOf(d.id)).filter((c) => c.questions.format === 'voice' && c.questions.content?.speak !== false).map((c) => String(c.questions.content?.text ?? ''));
+  const voiced = voiceScript((await cardsOf(d.id)).map((c) => ({ format: c.questions.format, content: c.questions.content })));
   if (!voiced.includes(text)) throw new HttpError(403, 'not_in_script', 'not in script');
   const exp = await must(from('pressure', 'experiments').select('definition').order('created_at', { ascending: false }).limit(1).maybeSingle(), 'voz') as any;
   const voice = d.config?.voice ?? exp?.definition?.voice;

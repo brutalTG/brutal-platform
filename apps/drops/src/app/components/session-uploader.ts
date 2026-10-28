@@ -282,6 +282,8 @@ export interface DetectorVerdict {
   text: string;
   lie_labels: string[];
   tickets: number;
+  /** Cada carta de la máquina: qué se preguntó, qué dijo, si mintió y si lo acusó. */
+  cards?: { position: number; text: string; label: string; said: string; lied: boolean; accused: boolean }[];
 }
 
 export type CompleteResult = { ok: boolean; detector: DetectorVerdict | null };

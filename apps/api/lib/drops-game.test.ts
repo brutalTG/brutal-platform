@@ -78,7 +78,7 @@ test('voz y mayor o menor como observación', () => {
 });
 
 // ---------- La máquina dentro del Drop ----------
-import { applyDetector, detectorBudget, detectorConfig, detectorOutcome, detectorReason, DEFAULT_DETECTOR } from './drops-game.ts';
+import { applyDetector, detectorBudget, detectorConfig, detectorLabel, detectorOutcome, detectorReason, voiceScript, DEFAULT_DETECTOR } from './drops-game.ts';
 
 const item = (position: number, committed: 'truth' | 'lie', f: Partial<{ decision_ms: number; onset_ms: number; speech_ms: number; fillers: number }> = {}) =>
   ({ position, committed, decision_ms: 900, onset_ms: 600, speech_ms: 9000, fillers: 0, ...f });
@@ -105,6 +105,38 @@ test('la misma partida se acusa siempre igual, y con una sola carta no hay máqu
   const items = [item(1, 'truth'), item(2, 'lie'), item(3, 'truth')];
   assert.deepEqual(detectorOutcome(items, DEFAULT_DETECTOR, 'x')?.accused, detectorOutcome(items, DEFAULT_DETECTOR, 'x')?.accused);
   assert.equal(detectorOutcome([item(1, 'lie')], DEFAULT_DETECTOR), null);
+});
+
+const TWO = { ...DEFAULT_DETECTOR, lies: 2 };
+
+test('dos mentiras en tres: te agarra solo si encuentra las dos', () => {
+  const both = detectorOutcome([item(1, 'lie', { decision_ms: 4000 }), item(2, 'truth'), item(3, 'lie', { onset_ms: 3000 })], TWO, 'p');
+  assert.ok(both);
+  assert.deepEqual(both.accused, [1, 3]);
+  assert.equal(both.caught, 2);
+  assert.equal(both.verdict, 'caught');
+  const one = detectorOutcome([item(1, 'lie', { decision_ms: 4000 }), item(2, 'truth', { onset_ms: 3000 }), item(3, 'lie')], TWO, 'p');
+  assert.ok(one);
+  assert.deepEqual(one.accused, [1, 2]);
+  assert.equal(one.caught, 1);
+  assert.equal(one.verdict, 'escaped');
+  assert.equal(one.tickets, 150);
+});
+
+test('las cartas de la máquina se nombran por lo que preguntan', () => {
+  assert.equal(detectorLabel({ detectorLabel: 'la del famoso' }, 1), 'la del famoso');
+  assert.equal(detectorLabel({}, 2), 'la segunda');
+  assert.equal(detectorLabel(null, 9), 'la 9');
+});
+
+test('la voz solo dice las cartas de voz y la presentación de la máquina', () => {
+  assert.deepEqual(voiceScript([
+    { format: 'voice', content: { text: 'Decí algo.' } },
+    { format: 'voice', content: { text: 'Callada.', speak: false } },
+    { format: 'dead_drop', content: { machine: true, speakText: '¿Creés que le podés mentir a una IA?' } },
+    { format: 'dead_drop', content: { speakText: 'Esta no.' } },
+    { format: 'choice', content: { text: 'Tampoco.' } },
+  ]), ['Decí algo.', '¿Creés que le podés mentir a una IA?']);
 });
 
 test('presupuesto de mentiras: una en tres', () => {
