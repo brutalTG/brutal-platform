@@ -248,25 +248,25 @@ select 'mentime', 'MENTIME QUE ME GUSTA', 'draft', (select id from economy.seaso
         jsonb_build_object('id', 'familia', 'title', E'Hijo de\nfamilia', 'description', 'Te pagan, te prestan, te consiguen el cargo, te dan el depto. Y vos firmás.', 'formula', jsonb_build_object('dependencia', 1.0, 'caos', -0.3))),
       'scoring', jsonb_build_object(
         'choiceScoring', jsonb_build_array(
-          jsonb_build_object('questionIndex', 0, 'optionScores', jsonb_build_array(jsonb_build_object('cinismo', 1), jsonb_build_object('caos', 1, 'postureo', 1))),
-          jsonb_build_object('questionIndex', 1, 'optionScores', jsonb_build_array(jsonb_build_object('cinismo', 2), jsonb_build_object('postureo', 2))),
-          jsonb_build_object('questionIndex', 3, 'optionScores', jsonb_build_array(jsonb_build_object('cinismo', 2, 'dependencia', 1), jsonb_build_object('cinismo', 1, 'caos', 1), jsonb_build_object('postureo', 2))),
-          jsonb_build_object('questionIndex', 7, 'optionScores', jsonb_build_array(jsonb_build_object('cinismo', 2), jsonb_build_object('postureo', 2))),
-          jsonb_build_object('questionIndex', 8, 'optionScores', jsonb_build_array(jsonb_build_object('dependencia', 1, 'postureo', 1), jsonb_build_object('cinismo', 1))),
-          jsonb_build_object('questionIndex', 12, 'optionScores', jsonb_build_array(jsonb_build_object('postureo', 1), jsonb_build_object('cinismo', 1))),
-          jsonb_build_object('questionIndex', 13, 'optionScores', jsonb_build_array(jsonb_build_object('cinismo', 1, 'caos', 1), jsonb_build_object('postureo', 1))),
-          jsonb_build_object('questionIndex', 15, 'optionScores', jsonb_build_array(jsonb_build_object('dependencia', 2), jsonb_build_object('caos', 1, 'postureo', 1)))),
-        'rafagaScoring', jsonb_build_array(jsonb_build_object('questionIndex', 2, 'majorityA', jsonb_build_object('cinismo', 2), 'majorityB', jsonb_build_object('postureo', 2))),
+          jsonb_build_object('questionIndex', 0, 'questionLabel', 'mentime-01-prestamo', 'optionScores', jsonb_build_array(jsonb_build_object('cinismo', 1), jsonb_build_object('caos', 1, 'postureo', 1))),
+          jsonb_build_object('questionIndex', 1, 'questionLabel', 'mentime-02-laburo-fiesta', 'optionScores', jsonb_build_array(jsonb_build_object('cinismo', 2), jsonb_build_object('postureo', 2))),
+          jsonb_build_object('questionIndex', 3, 'questionLabel', 'mentime-04-estado', 'optionScores', jsonb_build_array(jsonb_build_object('cinismo', 2, 'dependencia', 1), jsonb_build_object('cinismo', 1, 'caos', 1), jsonb_build_object('postureo', 2))),
+          jsonb_build_object('questionIndex', 7, 'questionLabel', 'mentime-08-ia-veinte', 'optionScores', jsonb_build_array(jsonb_build_object('cinismo', 2), jsonb_build_object('postureo', 2))),
+          jsonb_build_object('questionIndex', 8, 'questionLabel', 'mentime-09b-ia-familiar', 'optionScores', jsonb_build_array(jsonb_build_object('dependencia', 1, 'postureo', 1), jsonb_build_object('cinismo', 1))),
+          jsonb_build_object('questionIndex', 12, 'questionLabel', 'mentime-12-quien-sube', 'optionScores', jsonb_build_array(jsonb_build_object('postureo', 1), jsonb_build_object('cinismo', 1))),
+          jsonb_build_object('questionIndex', 13, 'questionLabel', 'mentime-13-after', 'optionScores', jsonb_build_array(jsonb_build_object('cinismo', 1, 'caos', 1), jsonb_build_object('postureo', 1))),
+          jsonb_build_object('questionIndex', 15, 'questionLabel', 'mentime-15-depto', 'optionScores', jsonb_build_array(jsonb_build_object('dependencia', 2), jsonb_build_object('caos', 1, 'postureo', 1)))),
+        'rafagaScoring', jsonb_build_array(jsonb_build_object('questionIndex', 2, 'questionLabel', 'mentime-03-nadie-se-entera', 'majorityA', jsonb_build_object('cinismo', 2), 'majorityB', jsonb_build_object('postureo', 2))),
         'sliderScoring', jsonb_build_array(
-          jsonb_build_object('questionIndex', 10, 'ranges', jsonb_build_array(
+          jsonb_build_object('questionIndex', 10, 'questionLabel', 'mentime-10-dias', 'ranges', jsonb_build_array(
             jsonb_build_object('min', 0, 'max', 7, 'scores', jsonb_build_object('caos', 2, 'dependencia', 1)),
             jsonb_build_object('min', 8, 'max', 30, 'scores', jsonb_build_object('dependencia', 1)),
             jsonb_build_object('min', 31, 'max', 60, 'scores', jsonb_build_object('postureo', 1)))),
-          jsonb_build_object('questionIndex', 17, 'ranges', jsonb_build_array(
+          jsonb_build_object('questionIndex', 17, 'questionLabel', 'mentime-17-jogging', 'ranges', jsonb_build_array(
             jsonb_build_object('min', 0, 'max', 10, 'scores', jsonb_build_object('cinismo', 1)),
             jsonb_build_object('min', 11, 'max', 30, 'scores', jsonb_build_object('caos', 1)),
             jsonb_build_object('min', 31, 'max', 50, 'scores', jsonb_build_object('caos', 2))))),
-        'rankingScoring', jsonb_build_array(jsonb_build_object('questionIndex', 6, 'firstPlaceScores', jsonb_build_array(
+        'rankingScoring', jsonb_build_array(jsonb_build_object('questionIndex', 6, 'questionLabel', 'mentime-09-fin-de-mes', 'firstPlaceScores', jsonb_build_array(
           jsonb_build_object('caos', 1, 'cinismo', 1), jsonb_build_object('dependencia', 1), jsonb_build_object('postureo', 1), jsonb_build_object('dependencia', 1), jsonb_build_object('postureo', 2)))))))
 on conflict (slug) do update set name = excluded.name, config = excluded.config, season_id = excluded.season_id;
 

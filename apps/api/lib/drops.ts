@@ -183,6 +183,8 @@ function playableDrop(d: DropRow, cards: DQ[], node: Node) {
       const reward = displayReward(resolveReward(rewardOf(c), node.is_minor));
       return {
         questionId: q.id,
+        // La etiqueta identifica la carta aunque cambie de lugar o se apaguen otras (las reglas del perfil la usan).
+        ...(q.label ? { label: q.label } : {}),
         type: q.format,
         ...content,
         timer: q.format === 'dead_drop' ? 0 : content.timer ?? q.timer_s ?? 15,

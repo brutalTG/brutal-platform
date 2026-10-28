@@ -678,23 +678,54 @@ function TypeSpecificFields({
         </>
       );
 
-    case "mayor_menor":
+    case "mayor_menor": {
+      const mode = (d as any).mode ?? "ladder";
       return (
         <>
-          <TextField label="Texto de arriba (opcional)" value={d.text ?? ""} onChange={(v) => onChange({ text: v || undefined } as any)} placeholder="¿La que sigue es mayor o menor?" />
-          <TextField
-            label="Escalera de multiplicadores"
-            value={(d.ladder ?? [1.5, 2, 3, 5, 10]).join(", ")}
-            onChange={(v) => {
-              const ladder = v.split(",").map((x) => Number(x.trim().replace(",", "."))).filter((x) => Number.isFinite(x) && x > 1).slice(0, 8);
-              onChange({ ladder: ladder.length ? ladder : undefined } as any);
-            }}
-            placeholder="1.5, 2, 3, 5, 10"
+          <SelectField
+            label="Tipo de mano"
+            value={mode}
+            onChange={(v) => onChange({ mode: v === "ladder" ? undefined : v } as any)}
+            options={[
+              { value: "ladder", label: "Escalera: cada acierto sube el multiplicador, te plantás cuando querés" },
+              { value: "multiplier", label: "Multiplicador: una carta, si acierta se activa el primer escalón" },
+              { value: "double", label: "Doble o nada: una carta, duplica o borra los tickets que lleva" },
+            ]}
           />
+          <TextField label="Texto de arriba (opcional)" value={d.text ?? ""} onChange={(v) => onChange({ text: v || undefined } as any)} placeholder={mode === "double" ? "¿Doble o nada?" : mode === "multiplier" ? "Acertá y activás x1.5" : "¿La que sigue es mayor o menor?"} />
+          {mode !== "double" && (
+            <TextField
+              label={mode === "multiplier" ? "Multiplicador que se activa" : "Escalera de multiplicadores"}
+              value={(d.ladder ?? (mode === "multiplier" ? [1.5] : [1.5, 2, 3, 5, 10])).join(", ")}
+              onChange={(v) => {
+                const ladder = v.split(",").map((x) => Number(x.trim().replace(",", "."))).filter((x) => Number.isFinite(x) && x > 1).slice(0, mode === "multiplier" ? 1 : 8);
+                onChange({ ladder: ladder.length ? ladder : undefined } as any);
+              }}
+              placeholder={mode === "multiplier" ? "1.5" : "1.5, 2, 3, 5, 10"}
+            />
+          )}
+          {mode !== "ladder" && (
+            <TextField
+              label="Primera carta entre (opcional)"
+              value={Array.isArray((d as any).firstCard) ? (d as any).firstCard.join(" y ") : ""}
+              onChange={(v) => {
+                const n = v.split(/[^0-9]+/).map(Number).filter((x) => x >= 1 && x <= 13);
+                onChange({ firstCard: n.length >= 2 ? [Math.min(n[0], n[1]), Math.max(n[0], n[1])] : undefined } as any);
+              }}
+              placeholder="6 y 9: así la apuesta es pareja"
+            />
+          )}
           <NumberField label="Segundos para decidir cada carta" value={d.secondsPerCard ?? 15} onChange={(v) => onChange({ secondsPerCard: v } as any)} min={5} max={60} />
-          <p className="text-xs" style={{ color: "var(--p-text-faint)" }}>Cada acierto sube un escalón; errar lo pierde; plantarse lo asegura. Multiplica los Golden Tickets de toda la partida. Las cartas las reparte el servidor.</p>
+          <p className="text-xs" style={{ color: "var(--p-text-faint)" }}>
+            {mode === "double"
+              ? "Doble o nada: si acierta, duplica los tickets que lleva hasta esta carta; si erra, los pierde. Puede pasar. No toca la plata."
+              : mode === "multiplier"
+                ? "Si acierta, el multiplicador se aplica a todos los Golden Tickets de la partida. Si erra, no pierde nada."
+                : "Cada acierto sube un escalón; errar lo pierde; plantarse lo asegura. Multiplica los Golden Tickets de toda la partida."}{" "}Las cartas las reparte el servidor.
+          </p>
         </>
       );
+    }
 
     case "confesionario":
       return (

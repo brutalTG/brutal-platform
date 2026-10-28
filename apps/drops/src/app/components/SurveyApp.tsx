@@ -36,7 +36,7 @@ import {
 import { markQuestionRendered, getAverageLatency, getInstinctiveCount, getDoubtCount, getTotalTime, formatLatency, resetRecords, getRecords } from "./latency-tracker";
 import { getNextDuotonePair } from "./color-generator";
 import { startSession as signalStartSession, finalizeSession, exportSessionJSON, updateCurrentPosition } from "./signal-store";
-import { computeDimensionsWithOptions, pickArchetype } from "./archetype-engine";
+import { computeDimensionsWithOptions, pickArchetype, resolveScoring } from "./archetype-engine";
 import { getReferralLink } from "./referral";
 import { serverStartSession, uploadResponse, completeSession, uploadSession, waitForUpload, claimRewards, type DetectorVerdict } from "./session-uploader";
 import type { DetectorBudget } from "./voice-question";
@@ -502,9 +502,10 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
     const reveal = drop.reveal;
     if (!reveal.archetypes || !reveal.scoring || reveal.archetypes.length === 0) return null;
     const avgLatency = getAverageLatency();
-    const dims = computeDimensionsWithOptions(answersRef.current, reveal.scoring, avgLatency, questionOptionsMap);
+    const scoring = resolveScoring(reveal.scoring, questions.map((q) => q.label));
+    const dims = computeDimensionsWithOptions(answersRef.current, scoring, avgLatency, questionOptionsMap);
     return pickArchetype(dims, reveal.archetypes);
-  }, [drop, questionOptionsMap]);
+  }, [drop, questions, questionOptionsMap]);
 
   // Qué le queda por mentir en la carta de la máquina que tiene enfrente.
   const detectorBudget = useMemo<DetectorBudget | undefined>(() => {

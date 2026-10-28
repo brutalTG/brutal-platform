@@ -20,23 +20,31 @@ export interface Archetype {
 
 export interface ChoiceScoringRule {
   questionIndex: number;
+  /** Etiqueta de la carta. Si está, manda sobre questionIndex: la carta se encuentra aunque cambie de lugar. */
+  questionLabel?: string;
   /** Score per option index */
   optionScores: DimensionScores[];
 }
 
 export interface SliderScoringRule {
   questionIndex: number;
+  /** Etiqueta de la carta. Si está, manda sobre questionIndex: la carta se encuentra aunque cambie de lugar. */
+  questionLabel?: string;
   ranges: { min: number; max: number; scores: DimensionScores }[];
 }
 
 export interface RankingScoringRule {
   questionIndex: number;
+  /** Etiqueta de la carta. Si está, manda sobre questionIndex: la carta se encuentra aunque cambie de lugar. */
+  questionLabel?: string;
   /** Scores for whichever option is ranked first */
   firstPlaceScores: DimensionScores[];
 }
 
 export interface RafagaScoringRule {
   questionIndex: number;
+  /** Etiqueta de la carta. Si está, manda sobre questionIndex: la carta se encuentra aunque cambie de lugar. */
+  questionLabel?: string;
   /** Scores if majority chose option A */
   majorityA: DimensionScores;
   /** Scores if majority chose option B */
@@ -80,6 +88,26 @@ export type UserAnswer = (
   /** Detalle fino para la señal (latencia por ítem, toques, correcciones, apuesta, salidas de la app). */
   meta?: Record<string, unknown>;
 };
+
+// --- Reglas por etiqueta ---
+
+/**
+ * Las reglas pueden nombrar la carta por su etiqueta (`questionLabel`) en vez de por su posición.
+ * Acá se traducen a la posición que tiene la carta en esta partida; si la carta está apagada, la regla se descarta.
+ */
+export function resolveScoring(scoring: ScoringConfig, labels: (string | undefined)[]): ScoringConfig {
+  const at = (r: { questionIndex: number; questionLabel?: string }) =>
+    r.questionLabel ? labels.indexOf(r.questionLabel) : r.questionIndex;
+  const fix = <T extends { questionIndex: number; questionLabel?: string }>(rules?: T[]) =>
+    rules?.map((r) => ({ ...r, questionIndex: at(r) })).filter((r) => r.questionIndex >= 0);
+  return {
+    ...scoring,
+    choiceScoring: fix(scoring.choiceScoring),
+    sliderScoring: fix(scoring.sliderScoring),
+    rankingScoring: fix(scoring.rankingScoring),
+    rafagaScoring: fix(scoring.rafagaScoring),
+  };
+}
 
 // --- Engine ---
 

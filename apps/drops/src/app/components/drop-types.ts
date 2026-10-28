@@ -327,6 +327,8 @@ export type QuestionContent =
 export interface QuestionMeta {
   /** Server-side question UUID, injected at runtime by dbToPlayableDrop. */
   id?: string;
+  /** Etiqueta única de la carta (ej. "mentime-13-after"). Las reglas del perfil la usan para encontrarla. */
+  label?: string;
   /** Timer in seconds. Use 0 for dead_drop (no timer shown). */
   timer: number;
   /** Reward given on completion. Omit for no reward. */
