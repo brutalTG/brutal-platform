@@ -473,7 +473,7 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
     if (screen !== "question" || voicesLoaded.current) return;
     voicesLoaded.current = true;
     preloadVoices(questions.flatMap((q) => {
-      if (q.type === "voice" && q.speak !== false) return [q.text];
+      if (q.type === "voice" && q.speak !== false) return [q.speakText || q.text];
       if (q.type === "dead_drop" && q.machine && q.speakText) return [q.speakText];
       return [];
     }));

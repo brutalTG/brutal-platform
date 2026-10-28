@@ -48,12 +48,13 @@ insert into mentime_cards values
     "title": "¿CREÉS QUE LE PODÉS MENTIR A UNA IA?",
     "lines": ["Te voy a hacer tres preguntas.", "Podés mentir dos veces.", "Veamos si te da."],
     "rules": ["> Antes de cada respuesta elegís en secreto: verdad o mentira.", "> Mentís en dos de las tres.", "> Si se me escapa una: +150 tickets. Si te agarro las dos: −50."],
-    "speakText": "¿Creés que le podés mentir a una IA? Podés mentir dos veces. Veamos si te da.",
+    "speakText": "¿Creés que le podés mentir... a una i a? <break time=\"0.8s\" /> Podés mentir dos veces. <break time=\"0.5s\" /> Veamos si te da.",
     "button": "PROBEMOS"
   }'),
   (5, 'mentime-06-famoso', 'voice', 'culture', 55, 0.25, 0, '{
     "text": "Elegí un famoso argentino para que nos represente en el mundo, y uno que deportarías.",
-    "detectorLabel": "la del famoso", "speak": true, "answerType": "open", "maxSeconds": 15, "detector": true
+    "detectorLabel": "la del famoso", "speak": true,
+    "speakText": "Elegí un famoso argentíno... para que nos represente en el mundo. <break time=\"0.5s\" /> Y uno... que deportarías.", "answerType": "open", "maxSeconds": 15, "detector": true
   }'),
   (8, 'mentime-09-fin-de-mes', 'ranking', 'culture', 35, 0.25, 0, '{
     "text": "No llegás a fin de mes. Ordená lo que cortás primero.",
@@ -70,7 +71,8 @@ insert into mentime_cards values
   }'),
   (6, 'mentime-10-marcha', 'voice', 'culture', 55, 0.25, 0, '{
     "text": "Te pagan por ir a una marcha. ¿A cuál vas y a cuál no vas ni muerto?",
-    "detectorLabel": "la de la marcha", "speak": true, "answerType": "open", "maxSeconds": 15, "detector": true
+    "detectorLabel": "la de la marcha", "speak": true,
+    "speakText": "Te pagan por ir a una marcha. <break time=\"0.4s\" /> ¿A cuál vas? <break time=\"0.4s\" /> ¿Y a cuál no vas... ni muerto?", "answerType": "open", "maxSeconds": 15, "detector": true
   }'),
   (11, 'mentime-10-dias', 'slider', 'culture', 22, 0.25, 0, '{
     "text": "Si tus viejos te cortan la plata HOY, ¿cuántos días durás?",
@@ -92,7 +94,8 @@ insert into mentime_cards values
   }'),
   (7, 'mentime-15-ia-reemplazo', 'voice', 'culture', 55, 0.25, 0, '{
     "text": "Decí qué parte de tu laburo ya podría hacer una IA, y por qué todavía no te reemplazaron.",
-    "detectorLabel": "la de la IA", "speak": true, "answerType": "open", "maxSeconds": 15, "detector": true
+    "detectorLabel": "la de la IA", "speak": true,
+    "speakText": "Decí qué parte de tu laburo ya podría hacer una i a. <break time=\"0.5s\" /> Y por qué todavía... no te reemplazaron.", "answerType": "open", "maxSeconds": 15, "detector": true
   }'),
   (15, 'mentime-15-depto', 'choice', 'culture', 20, 0, 20, '{
     "text": "Te dan un departamento a tu nombre HOY. A cambio firmás que no te vas del país por diez años. ¿Firmás?",
@@ -127,7 +130,7 @@ select 'mentime', 'MENTIME QUE ME GUSTA', 'draft', (select id from economy.seaso
     'multiplierCheckpoints', jsonb_build_object('2', jsonb_build_object('multiplier', 1.25, 'label', 'x1.25'), '10', jsonb_build_object('multiplier', 1.5, 'label', 'x1.5')),
     'detector', jsonb_build_object('lies', 2, 'winTickets', 150, 'loseTickets', 50),
     'join', jsonb_build_object('code', 'mentime', 'open', true, 'max', 50),
-    'voice', jsonb_build_object('voice_id', 'QK4xDwo9ESPHA4JNUpX3', 'fallback_voice_id', 'N6aRe3hk1YqaHDtQpTAH', 'model', 'eleven_flash_v2_5'),
+    'voice', jsonb_build_object('voice_id', 'QK4xDwo9ESPHA4JNUpX3', 'fallback_voice_id', 'N6aRe3hk1YqaHDtQpTAH', 'model', 'eleven_multilingual_v2'),
     'splash', jsonb_build_object(
       'mode', 'terminal', 'buttonText', 'ENTRO',
       'staticLines', jsonb_build_array('> DROP 001 · MENTIME QUE ME GUSTA', '> 18 cartas · 5 minutos', '> Paga hasta US$ 1,75 + Golden Tickets', '> Hay una máquina adentro'),

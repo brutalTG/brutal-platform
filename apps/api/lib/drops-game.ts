@@ -273,12 +273,12 @@ export function detectorLabel(content: { detectorLabel?: unknown } | null | unde
 export type DetectorCard = { position: number; text: string; label: string; said: string; lied: boolean; accused: boolean };
 export type DetectorVerdictOut = DetectorResult & { text: string; lie_labels: string[]; cards: DetectorCard[] };
 
-/** Los únicos textos que la voz de BRUTAL puede decir en un Drop: las cartas de voz y la presentación de la máquina. */
+/** Los únicos textos que la voz de BRUTAL puede decir en un Drop: las cartas de voz (su `speakText` si lo tienen) y la presentación de la máquina. */
 export function voiceScript(cards: { format: string; content?: Record<string, any> | null }[]) {
   const out: string[] = [];
   for (const c of cards) {
     const content = c.content ?? {};
-    if (c.format === 'voice' && content.speak !== false && content.text) out.push(String(content.text));
+    if (c.format === 'voice' && content.speak !== false && (content.speakText || content.text)) out.push(String(content.speakText || content.text));
     if (c.format === 'dead_drop' && content.machine === true && typeof content.speakText === 'string' && content.speakText) out.push(content.speakText);
   }
   return out;

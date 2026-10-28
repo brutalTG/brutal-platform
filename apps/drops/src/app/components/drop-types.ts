@@ -267,6 +267,8 @@ export interface VoiceQuestion {
   text: string;
   /** La voz de BRUTAL la lee en voz alta (default: true). */
   speak?: boolean;
+  /** Lo que dice la voz si es distinto de lo que se ve: acentos marcados, pausas, palabras escritas como suenan. */
+  speakText?: string;
   /** Cómo se interpreta lo que dijo: libre, entre dos opciones, sí/no, de acuerdo o un número. */
   answerType?: "open" | "choice" | "yes_no" | "agree" | "number";
   optionA?: string;

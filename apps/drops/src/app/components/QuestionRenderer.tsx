@@ -161,6 +161,7 @@ export function QuestionRenderer({
         key={questionIndex}
         actionHint={actionHint}
         text={q.text}
+        speakText={q.speakText}
         speak={q.speak !== false}
         maxSeconds={q.maxSeconds ?? 20}
         answerType={q.answerType}

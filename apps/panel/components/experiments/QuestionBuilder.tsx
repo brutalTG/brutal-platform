@@ -645,6 +645,15 @@ function TypeSpecificFields({
         <>
           <TextField label="Pregunta" value={d.text} onChange={(v) => onChange({ text: v } as any)} multiline placeholder="Corta: se lee en voz alta y se contesta hablando." />
           <ToggleField label="La dice la voz de BRUTAL" description="Si está apagado, solo se lee en pantalla." value={d.speak !== false} onChange={(v) => onChange({ speak: v } as any)} />
+          {d.speak !== false && (
+            <TextField
+              label="Cómo lo dice la voz (opcional)"
+              value={(d as any).speakText ?? ""}
+              onChange={(v) => onChange({ speakText: v.trim() ? v : undefined } as any)}
+              multiline
+              placeholder={'Solo se escucha, no se ve. Tilde donde va el acento ("argentíno"), punto para cerrar, "..." o <break time="0.5s" /> para pausar, "i a" en vez de IA.'}
+            />
+          )}
           <SelectField
             label="Cómo se lee la respuesta"
             value={d.answerType ?? "open"}

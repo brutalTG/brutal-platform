@@ -133,10 +133,11 @@ test('la voz solo dice las cartas de voz y la presentación de la máquina', () 
   assert.deepEqual(voiceScript([
     { format: 'voice', content: { text: 'Decí algo.' } },
     { format: 'voice', content: { text: 'Callada.', speak: false } },
+    { format: 'voice', content: { text: 'Se ve así.', speakText: 'Se díce así.' } },
     { format: 'dead_drop', content: { machine: true, speakText: '¿Creés que le podés mentir a una IA?' } },
     { format: 'dead_drop', content: { speakText: 'Esta no.' } },
     { format: 'choice', content: { text: 'Tampoco.' } },
-  ]), ['Decí algo.', '¿Creés que le podés mentir a una IA?']);
+  ]), ['Decí algo.', 'Se díce así.', '¿Creés que le podés mentir a una IA?']);
 });
 
 test('presupuesto de mentiras: una en tres', () => {

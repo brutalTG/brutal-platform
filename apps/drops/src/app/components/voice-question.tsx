@@ -20,8 +20,8 @@ function pickMime() {
   return options.find((m) => typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported?.(m)) ?? "";
 }
 
-export function VoiceQuestion({ actionHint, text, speak = true, maxSeconds = 20, optionA, optionB, answerType, detector, budget, onDone }: {
-  actionHint: string; text: string; speak?: boolean; maxSeconds?: number; optionA?: string; optionB?: string; answerType?: string;
+export function VoiceQuestion({ actionHint, text, speakText, speak = true, maxSeconds = 20, optionA, optionB, answerType, detector, budget, onDone }: {
+  actionHint: string; text: string; speakText?: string; speak?: boolean; maxSeconds?: number; optionA?: string; optionB?: string; answerType?: string;
   /** Carta de la máquina: antes de hablar marca en secreto verdad o mentira. */
   detector?: boolean; budget?: DetectorBudget;
   onDone: (d: Done) => void;
@@ -37,9 +37,9 @@ export function VoiceQuestion({ actionHint, text, speak = true, maxSeconds = 20,
 
   useEffect(() => {
     let alive = true;
-    if (speak) say(text).finally(() => { if (alive) { setPhase((p) => (p === "speaking" ? (detector ? "commit" : "ready") : p)); shownAt.current = performance.now(); } });
+    if (speak) say(speakText || text).finally(() => { if (alive) { setPhase((p) => (p === "speaking" ? (detector ? "commit" : "ready") : p)); shownAt.current = performance.now(); } });
     return () => { alive = false; rec.current?.stop(); };
-  }, [speak, text, detector]);
+  }, [speak, text, speakText, detector]);
 
   function commit(value: "truth" | "lie") {
     hapticMedium();
