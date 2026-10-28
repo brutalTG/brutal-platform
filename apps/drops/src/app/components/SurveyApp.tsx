@@ -467,6 +467,16 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
     advanceWithMultiplierCheck,
   });
 
+  // Mayor o menor: doble o nada duplica o borra los tickets; las otras manos suman multiplicador.
+  const onHand = useCallback((r: { mode: "ladder" | "multiplier" | "double"; multiplier: number; busted: boolean; steps: number }) => {
+    if (r.mode === "double") {
+      if (r.busted) setTickets(0);
+      else if (r.multiplier > 1) setTickets((t) => t * 2);
+      return;
+    }
+    if (!r.busted && r.multiplier > 1) setCurrentMultiplier((m) => Math.round(m * r.multiplier * 100) / 100);
+  }, []);
+
   // La voz de la máquina se baja entera apenas arranca la partida: cuando llega la carta, suena al instante.
   const voicesLoaded = useRef(false);
   useEffect(() => {
@@ -681,6 +691,8 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
         setResultConfig={setResultConfig}
         setScreen={setScreen as (s: string) => void}
         detectorBudget={detectorBudget}
+        tickets={tickets}
+        onHand={onHand}
       />
     );
   }
@@ -756,6 +768,8 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
             setResultConfig={setResultConfig}
             setScreen={setScreen as (s: string) => void}
             detectorBudget={detectorBudget}
+            tickets={tickets}
+            onHand={onHand}
           />
         </div>
       </div>

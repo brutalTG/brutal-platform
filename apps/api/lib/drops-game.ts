@@ -39,14 +39,24 @@ export function multiplierFor(checkpoints: Record<string, { multiplier?: number 
 export type AnswerRow = { position: number; reward_currency: 'cash_usd' | 'tickets' | null; reward_value: number; reward_granted: boolean; trap_correct: boolean | null; penalty: number };
 
 /** Lo que se acredita al reclamar. Una trampa fallada resta tickets acumulados (nunca plata). El multiplicador solo multiplica tickets. */
-export function computeClaim(answers: AnswerRow[], multiplier: number) {
+/**
+ * Lo que cobra la partida. `doubles`: manos de doble o nada ya jugadas; cada una duplica (ganó) o borra (perdió)
+ * los tickets juntados ANTES de su posición. El multiplicador final se aplica después de todo.
+ */
+export function computeClaim(answers: AnswerRow[], multiplier: number, doubles: { position: number; won: boolean }[] = []) {
   let usd = 0, tickets = 0;
+  const pending = [...doubles].sort((x, y) => x.position - y.position);
+  const settle = (upTo: number) => {
+    while (pending.length && pending[0].position < upTo) { const d = pending.shift()!; tickets = d.won ? tickets * 2 : 0; }
+  };
   for (const a of [...answers].sort((x, y) => x.position - y.position)) {
+    settle(a.position);
     if (a.trap_correct === false) { tickets = Math.max(0, tickets - (Number(a.penalty) || 0)); continue; }
     if (!a.reward_granted) continue;
     if (a.reward_currency === 'cash_usd') usd = Math.round((usd + Number(a.reward_value)) * 100) / 100;
     else if (a.reward_currency === 'tickets') tickets += Number(a.reward_value);
   }
+  settle(Infinity);
   return { usd, tickets: Math.floor(tickets * Math.max(1, Number(multiplier) || 1)) };
 }
 
@@ -148,8 +158,8 @@ export type HiloAction = 'start' | 'higher' | 'lower' | 'stand';
 const okGuess = (cur: number, next: number, g: string) => (g === 'higher' ? next >= cur : next <= cur);
 
 /** Un paso de la mano. El servidor saca la carta; el teléfono solo ve la que tiene enfrente. Reintentos no sacan otra carta. */
-export function hiloStep(hand: Hand | null, action: HiloAction, ladder: number[] = HILO_LADDER, draw: () => number = () => 1 + Math.floor(Math.random() * 13), atStep?: number): Hand {
-  const h: Hand = hand ? { ...hand, cards: [...hand.cards], decisions: [...hand.decisions] } : { cards: [draw()], decisions: [], status: 'playing', multiplier: 1 };
+export function hiloStep(hand: Hand | null, action: HiloAction, ladder: number[] = HILO_LADDER, draw: () => number = () => 1 + Math.floor(Math.random() * 13), atStep?: number, firstDraw: () => number = draw): Hand {
+  const h: Hand = hand ? { ...hand, cards: [...hand.cards], decisions: [...hand.decisions] } : { cards: [firstDraw()], decisions: [], status: 'playing', multiplier: 1 };
   if (action === 'start' || h.status !== 'playing') return h;
   if (typeof atStep === 'number' && atStep < h.decisions.length) return h;
   if (action === 'stand') return { ...h, status: 'stood' };
@@ -172,7 +182,32 @@ export function hiloView(h: Hand, ladder: number[] = HILO_LADDER) {
   };
 }
 
-/** Multiplicador final de la partida: checkpoints por avanzar × lo que se ganó en las manos de mayor o menor. */
+/**
+ * Las manos de mayor o menor vienen en tres sabores (`content.mode`):
+ * - `ladder` (por defecto): escalera de multiplicadores, te plantás cuando querés.
+ * - `multiplier`: una sola carta; si acertás, se activa el multiplicador de la escalera (ej. x1.5) para toda la partida.
+ * - `double`: doble o nada; una sola carta; si acertás se duplican los tickets que llevás, si errás se pierden. Podés pasar.
+ */
+export type HiloMode = 'ladder' | 'multiplier' | 'double';
+export function hiloMode(content: { mode?: unknown } | null | undefined): HiloMode {
+  return content?.mode === 'double' || content?.mode === 'multiplier' ? content.mode : 'ladder';
+}
+/** Escalera de la mano según el modo: doble o nada siempre es x2 en un paso; multiplicador, un solo paso. */
+export function hiloLadder(content: { mode?: unknown; ladder?: unknown } | null | undefined): number[] {
+  const mode = hiloMode(content);
+  if (mode === 'double') return [2];
+  const raw = Array.isArray(content?.ladder) && content.ladder.length && content.ladder.every((x: unknown) => Number(x) > 1) ? content.ladder.map(Number).slice(0, 8) : HILO_LADDER;
+  return mode === 'multiplier' ? raw.slice(0, 1) : raw;
+}
+/** Primera carta: si la carta pide un rango (ej. [6, 9]), sale de ahí para que la apuesta sea pareja. */
+export function firstCardDraw(content: { firstCard?: unknown } | null | undefined, rnd: () => number = Math.random) {
+  const r = content?.firstCard;
+  const lo = Array.isArray(r) ? Math.max(1, Math.min(13, Math.round(Number(r[0])))) : 1;
+  const hi = Array.isArray(r) ? Math.max(lo, Math.min(13, Math.round(Number(r[1])))) : 13;
+  return () => lo + Math.floor(rnd() * (hi - lo + 1));
+}
+
+/** Multiplicador final de la partida: checkpoints por avanzar × lo que se ganó en las manos de mayor o menor (sin las de doble o nada). */
 export const sessionMultiplier = (checkpoint: number, hands: { status: string; multiplier: number }[]) =>
   Math.round(hands.reduce((m, h) => (h.status === 'stood' ? m * Math.max(1, Number(h.multiplier) || 1) : m), checkpoint) * 100) / 100;
 

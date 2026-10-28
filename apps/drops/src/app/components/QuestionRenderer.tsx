@@ -42,11 +42,15 @@ interface Props {
   setScreen: (s: string) => void;
   /** Carta de la máquina: qué le queda por mentir. */
   detectorBudget?: DetectorBudget;
+  /** Tickets que lleva el jugador (para doble o nada). */
+  tickets?: number;
+  /** Lo que dejó una mano de mayor o menor: duplica/borra tickets o activa un multiplicador. */
+  onHand?: (r: { mode: "ladder" | "multiplier" | "double"; multiplier: number; busted: boolean; steps: number }) => void;
 }
 
 export function QuestionRenderer({
   question: q, questionIndex, pipeline, reactionText,
-  advanceWithMultiplierCheck, setResultConfig, setScreen, detectorBudget,
+  advanceWithMultiplierCheck, setResultConfig, setScreen, detectorBudget, tickets = 0, onHand,
 }: Props) {
   const actionHint = getActionHint(q);
 
@@ -187,8 +191,11 @@ export function QuestionRenderer({
         position={questionIndex}
         questionId={(q as any).questionId || ""}
         secondsPerCard={q.secondsPerCard ?? 15}
+        mode={q.mode ?? "ladder"}
+        tickets={tickets}
         onDone={({ multiplier, busted, steps }) => {
           if (!pipeline.acquireLock()) return;
+          onHand?.({ mode: q.mode ?? "ladder", multiplier, busted, steps });
           pipeline.markFirstAnswered();
           const latencyMs = pipeline.captureLatency();
           pipeline.submitStandard({ type: "mayor_menor", multiplier, busted, steps, latencyMs });

@@ -186,3 +186,34 @@ test('el detalle fino se guarda dentro de la observación, saneado', () => {
   assert.equal(cleanMeta({ x: 'a'.repeat(5000) }), null);
   assert.equal((observationOf('choice', { options: ['Sí'] }, { choice_index: 0 }).value as any).meta, undefined);
 });
+
+// ---------- Mayor o menor: doble o nada y multiplicador ----------
+import { firstCardDraw, hiloLadder, hiloMode } from './drops-game.ts';
+
+const t = (position: number, value: number) => ({ position, reward_currency: 'tickets', reward_value: value, reward_granted: true, trap_correct: null, penalty: 0 });
+
+test('doble o nada duplica o borra lo que llevabas hasta ahí, y lo de después suma normal', () => {
+  const answers = [t(0, 20), t(1, 30), t(2, 0), t(3, 20)];
+  assert.equal(computeClaim(answers as any, 1, [{ position: 2, won: true }]).tickets, 120);
+  assert.equal(computeClaim(answers as any, 1, [{ position: 2, won: false }]).tickets, 20);
+  assert.equal(computeClaim(answers as any, 1.5, [{ position: 2, won: true }]).tickets, 180);
+  assert.equal(computeClaim(answers as any, 1, [{ position: 9, won: true }]).tickets, 140);
+  assert.equal(computeClaim(answers as any, 1).tickets, 70);
+});
+
+test('cada modo de mano tiene su escalera y su primera carta', () => {
+  assert.equal(hiloMode({ mode: 'double' }), 'double');
+  assert.equal(hiloMode({ mode: 'raro' }), 'ladder');
+  assert.deepEqual(hiloLadder({ mode: 'double', ladder: [5] }), [2]);
+  assert.deepEqual(hiloLadder({ mode: 'multiplier', ladder: [1.5, 2] }), [1.5]);
+  assert.deepEqual(hiloLadder({ ladder: [1.5, 2, 3] }), [1.5, 2, 3]);
+  assert.deepEqual(hiloLadder({ mode: 'multiplier' }), [1.5]);
+  assert.equal(firstCardDraw({ firstCard: [6, 9] }, () => 0)(), 6);
+  assert.equal(firstCardDraw({ firstCard: [6, 9] }, () => 0.999)(), 9);
+  assert.equal(firstCardDraw({}, () => 0.999)(), 13);
+  const h = hiloStep(null, 'start', [2], () => 3, undefined, () => 8);
+  assert.deepEqual(h.cards, [8]);
+  assert.equal(hiloStep(h, 'higher', [2], () => 10).multiplier, 2);
+  assert.equal(hiloStep(h, 'higher', [2], () => 2).status, 'busted');
+  assert.equal(hiloStep(h, 'stand', [2]).multiplier, 1);
+});

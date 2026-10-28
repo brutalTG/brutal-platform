@@ -4,7 +4,7 @@ import { from, must } from './db';
 import { newCode, sha256, signToken, verifyToken } from './crypto';
 import { HttpError } from './http';
 import {
-  applyDetector, birthDateFromAge, cleanNickname, computeClaim, guestPhone, joinConfig, consistencyOf, detectorConfig, detectorLabel, detectorOutcome, detectorReason, voiceScript, displayReward, hiloStep, hiloView, HILO_LADDER, multiplierFor, normalizeWallet, observationOf, parseLocation, POLICY,
+  applyDetector, birthDateFromAge, cleanNickname, computeClaim, guestPhone, joinConfig, consistencyOf, detectorConfig, detectorLabel, detectorOutcome, detectorReason, voiceScript, displayReward, firstCardDraw, hiloLadder, hiloMode, hiloStep, hiloView, multiplierFor, normalizeWallet, observationOf, parseLocation, POLICY,
   resolveReward, sessionMultiplier, type AnswerBody, type DetectorItem, type DetectorResult, type DetectorVerdictOut, type Hand, type HiloAction, type VoiceAnswer,
 } from './drops-game';
 import { countFillers, parseAnswer } from './game';
@@ -340,7 +340,8 @@ export async function completeSession(a: Access, body: { session_id?: string; ar
   await must(from('drops', 'sessions').update({
     status: 'completed', completed_at: now.toISOString(), total_ms: Math.max(0, now.getTime() - Date.parse(s.started_at)),
     multiplier: sessionMultiplier(multiplierFor(d.config?.multiplierCheckpoints, answers.length),
-      (await must(from('drops', 'hilo_hands').select('status, multiplier').eq('session_id', s.id), 'manos') as any[])),
+      (await must(from('drops', 'hilo_hands').select('status, multiplier, position').eq('session_id', s.id), 'manos') as any[])
+        .filter((h) => hiloMode(cards[h.position]?.questions.content) !== 'double')),
     traps_passed: passed, traps_failed: traps.length - passed,
     avg_latency_ms: lat.length ? Math.round(lat.reduce((p, c) => p + c, 0) / lat.length) : null,
     consistency: consistencyOf(answers), archetype: body.archetype_result ?? null, bic_scores: body.bic_scores ?? null,
@@ -398,7 +399,13 @@ export async function claimDrop(a: Access, body: { dropId?: string; drop_id?: st
   if (s.claimed_at) return { ok: true, alreadyClaimed: true };
   if (s.status !== 'completed') throw new HttpError(409, 'not_completed', 'Session is not completed');
   const answers = await must(from('drops', 'answers').select('position, reward_currency, reward_value, reward_granted, trap_correct, questions(content)').eq('session_id', s.id), 'respuestas') as any[];
-  const base = computeClaim(answers.map((x) => ({ ...x, reward_value: Number(x.reward_value), penalty: Number(x.questions?.content?.penalty) || 0 })), Number(s.multiplier) || 1);
+  // Doble o nada: cada mano jugada duplica o borra lo que se llevaba hasta ahí.
+  const cards = await cardsOf(d.id);
+  const hands = await must(from('drops', 'hilo_hands').select('status, multiplier, position').eq('session_id', s.id), 'manos') as any[];
+  const doubles = hands
+    .filter((h) => hiloMode(cards[h.position]?.questions.content) === 'double' && (h.status === 'busted' || (h.status === 'stood' && Number(h.multiplier) > 1)))
+    .map((h) => ({ position: Number(h.position), won: h.status !== 'busted' }));
+  const base = computeClaim(answers.map((x) => ({ ...x, reward_value: Number(x.reward_value), penalty: Number(x.questions?.content?.penalty) || 0 })), Number(s.multiplier) || 1, doubles);
   // Lo que dio la máquina se suma después del multiplicador: es un premio fijo, no se multiplica.
   const total = { usd: base.usd, tickets: applyDetector(base.tickets, s.detector) };
   const season = d.season_id ?? (await must(from('economy', 'seasons').select('id').eq('status', 'active').maybeSingle(), 'temporada') as any)?.id ?? null;
@@ -546,10 +553,10 @@ async function cardAt(a: Access, sessionId: string | undefined, position: number
 export async function dropHilo(a: Access, b: { session_id?: string; position?: number; question_id?: string; action?: string; at_step?: number }) {
   const action = (['start', 'higher', 'lower', 'stand'].includes(String(b.action)) ? b.action : 'start') as HiloAction;
   const { s, q } = await cardAt(a, b.session_id, b.position, b.question_id, 'mayor_menor');
-  const ladder = Array.isArray(q.content?.ladder) && q.content.ladder.every((x: unknown) => Number(x) > 1) ? q.content.ladder.map(Number).slice(0, 8) : HILO_LADDER;
+  const ladder = hiloLadder(q.content);
   const row = await must(from('drops', 'hilo_hands').select('cards, decisions, status, multiplier').eq('session_id', s.id).eq('position', b.position!).maybeSingle(), 'mano') as any;
   const current: Hand | null = row ? { cards: row.cards, decisions: row.decisions, status: row.status, multiplier: Number(row.multiplier) } : null;
-  const next = hiloStep(current, action, ladder, undefined, typeof b.at_step === 'number' ? b.at_step : undefined);
+  const next = hiloStep(current, action, ladder, undefined, typeof b.at_step === 'number' ? b.at_step : undefined, firstCardDraw(q.content));
   if (!row) {
     const { error } = await from('drops', 'hilo_hands').insert({ session_id: s.id, position: b.position, question_id: q.id, cards: next.cards, decisions: next.decisions, status: next.status, multiplier: next.multiplier });
     if (error) return dropHilo(a, { ...b, action: 'start' }); // otra pestaña la arrancó recién

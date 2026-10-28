@@ -294,6 +294,10 @@ export interface MayorMenorQuestion {
   ladder?: number[];
   /** Segundos para decidir cada carta (default: 15). */
   secondsPerCard?: number;
+  /** ladder: escalera (por defecto) · multiplier: una carta que activa un multiplicador · double: doble o nada con los tickets que llevás. */
+  mode?: "ladder" | "multiplier" | "double";
+  /** Rango de la primera carta, ej. [6, 9]. */
+  firstCard?: [number, number];
 }
 
 export type QuestionContent =
