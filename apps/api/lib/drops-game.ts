@@ -334,6 +334,17 @@ export function applyDetector(tickets: number, result: DetectorResult | null | u
 }
 
 // ---------- Link de grupo ----------
+// Origen: `?de=grupo1` en el link dice por dónde llegó cada uno. Los reenvíos usan `r-<código del que lo pasó>`.
+
+/** Etiqueta de origen tal como se guarda: minúsculas, letras, números, guion y guion bajo, hasta 40. */
+export function cleanSource(raw: unknown): string | null {
+  const s = String(raw ?? '').trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9_-]/g, '').slice(0, 40);
+  return s || null;
+}
+
+/** Código de reenvío de un jugador: sale de su id, no dice nada de él. */
+export const refSource = (nodeId: string) => `r-${nodeId.replace(/-/g, '').slice(0, 8)}`;
+
 // Un solo link para muchos: cada uno pone un apodo y queda como un nodo de prueba separado.
 // Los nodos de grupo llevan un teléfono inventado (+999…) para no confundirse con números reales.
 

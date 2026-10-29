@@ -24,6 +24,7 @@ import { LeaderboardScreen } from "./leaderboard-screen";
 
 // --- Extracted modules ---
 import { preloadVoices } from "./voice-cache";
+import { PassAlongButton, passAlongLink } from "./pass-along";
 import { StoryProgressBar, TimerBar, PlayingBadge, StatPills } from "./SurveyHeader";
 import { QuestionRenderer } from "./QuestionRenderer";
 import { useAnswerPipeline } from "./useAnswerPipeline";
@@ -619,7 +620,7 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
     finalizeOnce();
     const bonusTickets = detectorVerdict && detectorVerdict !== "pending" ? Number(detectorVerdict.tickets) || 0 : 0;
 
-    const referralLink = getReferralLink();
+    const referralLink = passAlongLink() ?? getReferralLink();
     const shareUrl = buildShareUrl({ title: revealTitle, description: revealDescription, dropName: drop.name, latency: formatLatency(avgLatency), totalTime });
     const finalTickets = Math.max(0, Math.round(tickets * currentMultiplier) + bonusTickets);
 
@@ -665,6 +666,7 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
             shareUrl={shareUrl}
           />
         }
+        passAlong={<PassAlongButton />}
       />
     );
   }

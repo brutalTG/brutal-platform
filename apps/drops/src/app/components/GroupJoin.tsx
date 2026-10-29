@@ -40,8 +40,16 @@ function forget(code: string) {
   try { localStorage.removeItem(keyOf(code)); } catch {}
 }
 
+/** Para "pasáselo a alguien" al final: el código del link y el de reenvío de este jugador. */
+export function saveShareInfo(code: string, ref: string | undefined) {
+  if (!ref) return;
+  try { localStorage.setItem("brutal_share", JSON.stringify({ code, ref })); } catch {}
+}
+
 export default function GroupJoin() {
   const code = (window.location.pathname.split("/").filter(Boolean)[1] ?? "").toLowerCase();
+  // De dónde llegó: ?de=grupo1, o r-xxxx si se lo pasó otro jugador.
+  const source = new URLSearchParams(window.location.search).get("de") || null;
   const [saved, setSaved] = useState<Saved | null>(null);
   const [nickname, setNickname] = useState("");
   const [sending, setSending] = useState(false);
@@ -49,8 +57,8 @@ export default function GroupJoin() {
 
   useEffect(() => {
     setSaved(readSaved(code));
-    // Embudo: abrió el link. Si falla, no importa.
-    fetch(`${API_BASE}/join/open`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code, client: clientId() }), keepalive: true }).catch(() => {});
+    // Embudo: abrió el link. Normalmente ya lo anotó index.html apenas llegó la página; si no, se anota acá.
+    if (!(window as any).__brutalOpenSent) fetch(`${API_BASE}/join/open`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code, client: clientId(), source }), keepalive: true }).catch(() => {});
   }, [code]);
 
   async function enter() {
@@ -62,11 +70,12 @@ export default function GroupJoin() {
       const res = await fetch(`${API_BASE}/join`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code, nickname: nick, client: clientId() }),
+        body: JSON.stringify({ code, nickname: nick, client: clientId(), source }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.url) throw new Error(data.message || "No pudimos entrar. Probá de nuevo.");
       save(code, { url: data.url, nickname: data.nickname ?? nick });
+      saveShareInfo(code, data.ref);
       window.location.replace(data.url);
     } catch (e) {
       setError(e instanceof Error ? e.message : "No pudimos entrar. Probá de nuevo.");

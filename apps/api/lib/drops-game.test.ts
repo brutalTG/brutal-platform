@@ -217,3 +217,15 @@ test('cada modo de mano tiene su escalera y su primera carta', () => {
   assert.equal(hiloStep(h, 'higher', [2], () => 2).status, 'busted');
   assert.equal(hiloStep(h, 'stand', [2]).multiplier, 1);
 });
+
+// ---------- Origen del link de grupo ----------
+import { cleanSource, refSource } from './drops-game.ts';
+
+test('origen del link: se limpia y el reenvío no expone al jugador', () => {
+  assert.equal(cleanSource(' Grupo 1 '), 'grupo-1');
+  assert.equal(cleanSource('juan.perez@mail'), 'juanperezmail');
+  assert.equal(cleanSource(''), null);
+  assert.equal(cleanSource(null), null);
+  assert.equal(cleanSource('x'.repeat(60))?.length, 40);
+  assert.equal(refSource('6b69c8ff-3173-416e-ab9f-afd8014815d6'), 'r-6b69c8ff');
+});

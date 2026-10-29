@@ -26,6 +26,8 @@ interface RevealScreenProps {
   onNotifyAndClose: () => void;
   /** Optional share card component rendered between metrics and bottom */
   shareCard?: React.ReactNode;
+  /** "Pasáselo a alguien": va debajo del botón de compartir. */
+  passAlong?: React.ReactNode;
 }
 
 // Coin icon SVG (from Figma)
@@ -70,6 +72,7 @@ export function RevealScreen({
   onClaimRewards,
   onNotifyAndClose,
   shareCard,
+  passAlong,
 }: RevealScreenProps) {
   const [claimPhase, setClaimPhase] = useState<"idle" | "claiming" | "multiplying" | "done">("idle");
   const [displayTickets, setDisplayTickets] = useState(tickets);
@@ -291,8 +294,9 @@ export function RevealScreen({
 
         {/* Optional share card */}
         {shareCard && (
-          <div className="mb-8 flex justify-center">
+          <div className="mb-8 flex flex-col items-center">
             {shareCard}
+            {passAlong}
           </div>
         )}
 

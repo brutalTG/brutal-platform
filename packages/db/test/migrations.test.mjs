@@ -166,3 +166,11 @@ test('amigos: reglas del juego en la base', async () => {
   await assert.rejects(db.query(`insert into amigos.questions (prompt, option_a, option_b, origin) values ('Pregunta nacional', 'A', 'B', 'national')`), /check/i);
   await assert.rejects(db.query(`insert into amigos.questions (prompt, option_a, option_b, tone) values ('Pregunta de señal', 'A', 'B', 'signal')`), /check/i);
 });
+
+test('link de grupo: el origen se guarda limpio y existe el evento de reenvío', async () => {
+  const db = await freshDb();
+  await db.query(`insert into drops.join_events (drop_slug, event, source) values ('mentime', 'shared', 'r-6b69c8ff')`);
+  await db.query(`insert into drops.join_events (drop_slug, event, source) values ('mentime', 'open', 'grupo1')`);
+  await assert.rejects(db.query(`insert into drops.join_events (drop_slug, event, source) values ('mentime', 'open', 'Grupo 1')`));
+  await assert.rejects(db.query(`insert into drops.join_events (drop_slug, event) values ('mentime', 'otro')`));
+});

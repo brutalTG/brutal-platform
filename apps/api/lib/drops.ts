@@ -4,7 +4,7 @@ import { from, must } from './db';
 import { newCode, sha256, signToken, verifyToken } from './crypto';
 import { HttpError } from './http';
 import {
-  applyDetector, birthDateFromAge, cleanNickname, computeClaim, guestPhone, joinConfig, consistencyOf, detectorConfig, detectorLabel, detectorOutcome, detectorReason, voiceScript, displayReward, firstCardDraw, hiloLadder, hiloMode, hiloStep, hiloView, multiplierFor, normalizeWallet, observationOf, parseLocation, POLICY,
+  applyDetector, birthDateFromAge, cleanNickname, cleanSource, refSource, computeClaim, guestPhone, joinConfig, consistencyOf, detectorConfig, detectorLabel, detectorOutcome, detectorReason, voiceScript, displayReward, firstCardDraw, hiloLadder, hiloMode, hiloStep, hiloView, multiplierFor, normalizeWallet, observationOf, parseLocation, POLICY,
   resolveReward, sessionMultiplier, type AnswerBody, type DetectorItem, type DetectorResult, type DetectorVerdictOut, type Hand, type HiloAction, type VoiceAnswer,
 } from './drops-game';
 import { countFillers, parseAnswer } from './game';
@@ -80,7 +80,7 @@ export async function accessFrom(req: Request, purpose?: 'onboarding' | 'drop'):
  * Entra alguien por el link del grupo con su apodo. Se crea un nodo de prueba (teléfono inventado +999…,
  * canal `grupo:<drop>`) y se le da su link personal al Drop. Sin onboarding: solo el apodo.
  */
-export async function joinGroup(b: { code?: unknown; nickname?: unknown; client?: unknown }) {
+export async function joinGroup(b: { code?: unknown; nickname?: unknown; client?: unknown; source?: unknown }) {
   const code = String(b.code ?? '').trim().toLowerCase();
   const nickname = cleanNickname(b.nickname);
   if (!nickname) throw new HttpError(400, 'bad_nickname', 'Poné un apodo de 2 a 20 letras.');
@@ -102,19 +102,29 @@ export async function joinGroup(b: { code?: unknown; nickname?: unknown; client?
   }
   if (!nodeId) throw new Error('nodo de grupo: no se pudo crear');
   const link = await createDropsLink(nodeId, { purpose: 'drop', dropSlug: d.slug, hours: 72 });
-  await from('drops', 'join_events').insert({ drop_slug: d.slug, event: 'joined', node_id: nodeId, client_id: clientId(b.client) });
-  return { ok: true, url: link.url, code: link.code, drop: d.name, nickname };
+  await from('drops', 'join_events').insert({ drop_slug: d.slug, event: 'joined', node_id: nodeId, client_id: clientId(b.client), source: cleanSource(b.source) });
+  return { ok: true, url: link.url, code: link.code, drop: d.name, nickname, ref: refSource(nodeId) };
 }
 
 const clientId = (raw: unknown) => { const s = String(raw ?? '').toLowerCase(); return /^[a-z0-9-]{8,64}$/.test(s) ? s : null; };
 
 /** Alguien abrió el link de grupo (todavía no puso apodo). Para el embudo. */
-export async function joinOpened(b: { code?: unknown; client?: unknown }, userAgent: string | null) {
+export async function joinOpened(b: { code?: unknown; client?: unknown; source?: unknown }, userAgent: string | null) {
   const code = String(b.code ?? '').trim().toLowerCase();
   const live = await must(from('drops', 'drops').select('slug, config').eq('status', 'live'), 'drops en juego') as any[];
   const d = live.find((x) => joinConfig(x.config?.join)?.code === code);
   if (!d) return { ok: false };
-  await from('drops', 'join_events').insert({ drop_slug: d.slug, event: 'open', client_id: clientId(b.client), user_agent: userAgent?.slice(0, 300) ?? null });
+  await from('drops', 'join_events').insert({ drop_slug: d.slug, event: 'open', client_id: clientId(b.client), user_agent: userAgent?.slice(0, 300) ?? null, source: cleanSource(b.source) });
+  return { ok: true };
+}
+
+/** Un jugador tocó "pasáselo a alguien". `source` es su código de reenvío. */
+export async function joinShared(b: { code?: unknown; client?: unknown; source?: unknown }) {
+  const code = String(b.code ?? '').trim().toLowerCase();
+  const live = await must(from('drops', 'drops').select('slug, config').eq('status', 'live'), 'drops en juego') as any[];
+  const d = live.find((x) => joinConfig(x.config?.join)?.code === code);
+  if (!d) return { ok: false };
+  await from('drops', 'join_events').insert({ drop_slug: d.slug, event: 'shared', client_id: clientId(b.client), source: cleanSource(b.source) });
   return { ok: true };
 }
 
