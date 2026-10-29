@@ -1,4 +1,4 @@
-import { BriefHead, Screen, Voices, Sources } from '@/components/brief';
+import { BriefHead, Screen, VoiceScreen, Voices, Sources } from '@/components/brief';
 
 export const meta = {
   slug: 'el-miedo-es-de-los-duenos',
@@ -30,7 +30,9 @@ export default function Brief() {
 
         <p>Después vino la voz, con la pregunta del principio: qué parte de tu trabajo ya podría hacer una inteligencia artificial, y por qué todavía no te reemplazaron. Las diez respuestas que llegaron enteras se parecen de un modo que no esperábamos.</p>
 
-        <Voices prompt="Decí qué parte de tu laburo ya podría hacer una IA, y por qué todavía no te reemplazaron." items={[
+        <VoiceScreen n={16} total={19} question="Decí qué parte de tu laburo ya podría hacer una IA, y por qué todavía no te reemplazaron." caption="La voz hace la pregunta en voz alta y da quince segundos. Se contesta hablando o escribiendo." />
+
+        <Voices items={[
           { quote: 'Nada. Soy reemplazable.', who: 'Miricleta' },
           { quote: 'No me reemplazaron porque no se dieron cuenta, creo. Pero ya hay avatares, influencers y demás.', who: 'Arto' },
           { quote: 'Casi todo lo podría hacer, y todavía no me rajaron. Podría ser un chat.', who: 'Alf' },

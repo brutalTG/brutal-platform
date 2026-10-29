@@ -25,11 +25,22 @@ export function Screen({ n, total, question, options, chosen, caption }: { n: nu
   );
 }
 
+/** Una pantalla en la que pregunta la voz y se contesta hablando o escribiendo. */
+export function VoiceScreen({ n, total, question, caption }: { n: number; total: number; question: string; caption?: string }) {
+  return (
+    <figure className="screen">
+      <div className="top"><span>Pantalla {n} de {total}</span><span>Pregunta la voz</span></div>
+      <p className="q">{question}</p>
+      <div className="btns"><span className="field">Escribí tu respuesta…</span><span className="hi">Prefiero mandar un audio</span></div>
+      {caption && <figcaption>{caption}</figcaption>}
+    </figure>
+  );
+}
+
 /** Lo que dijeron, con apodo. */
-export function Voices({ prompt, items }: { prompt?: string; items: { quote: string; who: string }[] }) {
+export function Voices({ items }: { items: { quote: string; who: string }[] }) {
   return (
     <div className="voices">
-      {prompt && <p className="voices-prompt"><span>La pregunta</span>{prompt}</p>}
       {items.map((v) => <div key={v.quote}><q>{v.quote}</q><span>{v.who}</span></div>)}
     </div>
   );
