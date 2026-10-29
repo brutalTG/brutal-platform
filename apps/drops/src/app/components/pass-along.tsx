@@ -44,7 +44,7 @@ export function PassAlongButton() {
     <button
       onClick={go}
       className="mt-3 h-[52px] w-full max-w-[290px] rounded-full border-2 font-['Roboto'] text-[16px] font-bold active:scale-[0.98]"
-      style={{ borderColor: "var(--dynamic-bg, #000)", color: "var(--dynamic-bg, #000)" }}
+      style={{ borderColor: "var(--dynamic-fg, #fff)", color: "var(--dynamic-fg, #fff)" }}
     >
       Pasáselo a alguien
     </button>
