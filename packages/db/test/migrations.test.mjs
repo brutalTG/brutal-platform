@@ -30,7 +30,7 @@ async function node(db, phone, birth) {
 test('todas las migraciones corren desde cero', async () => {
   const db = await freshDb();
   const { rows } = await db.query(`select count(*)::int as n from pg_tables where schemaname in ('core','signal','profile','economy','messaging','drops','pressure')`);
-  assert.equal(rows[0].n, 38);
+  assert.equal(rows[0].n, 39);
   const v = await db.query(`select count(*)::int as n from core.ops_kpis`);
   assert.equal(v.rows[0].n, 1);
   const rls = await db.query(`select count(*)::int as n from pg_tables where schemaname in ('core','signal','profile','economy','messaging','drops','pressure') and not rowsecurity`);
@@ -165,4 +165,12 @@ test('amigos: reglas del juego en la base', async () => {
   assert.deepEqual(s.rows.map((x) => [x.roster_name, x.points]), [['Fede', 10], ['Lu', 0]]);
   await assert.rejects(db.query(`insert into amigos.questions (prompt, option_a, option_b, origin) values ('Pregunta nacional', 'A', 'B', 'national')`), /check/i);
   await assert.rejects(db.query(`insert into amigos.questions (prompt, option_a, option_b, tone) values ('Pregunta de señal', 'A', 'B', 'signal')`), /check/i);
+});
+
+test('link de grupo: el origen se guarda limpio y existe el evento de reenvío', async () => {
+  const db = await freshDb();
+  await db.query(`insert into drops.join_events (drop_slug, event, source) values ('mentime', 'shared', 'r-6b69c8ff')`);
+  await db.query(`insert into drops.join_events (drop_slug, event, source) values ('mentime', 'open', 'grupo1')`);
+  await assert.rejects(db.query(`insert into drops.join_events (drop_slug, event, source) values ('mentime', 'open', 'Grupo 1')`));
+  await assert.rejects(db.query(`insert into drops.join_events (drop_slug, event) values ('mentime', 'otro')`));
 });

@@ -16,7 +16,11 @@ interface RevealScreenProps {
   coins: number;
   tickets: number;
   multiplier: number; // 1, 1.25, or 1.5
+  /** Lo que dio la máquina (se suma después del multiplicador; puede ser negativo). */
+  bonusTickets?: number;
   isMinor?: boolean;
+  /** Plata ganada que queda guardada hasta que confirme su edad. */
+  cashPending?: number;
   onClaim: () => void;
   /** Async function that claims rewards on the server — called before animation */
   onClaimRewards: () => Promise<boolean>;
@@ -24,6 +28,8 @@ interface RevealScreenProps {
   onNotifyAndClose: () => void;
   /** Optional share card component rendered between metrics and bottom */
   shareCard?: React.ReactNode;
+  /** "Pasáselo a alguien": va debajo del botón de compartir. */
+  passAlong?: React.ReactNode;
 }
 
 // Coin icon SVG (from Figma)
@@ -62,11 +68,14 @@ export function RevealScreen({
   coins,
   tickets,
   multiplier,
+  bonusTickets = 0,
   isMinor = false,
+  cashPending = 0,
   onClaim,
   onClaimRewards,
   onNotifyAndClose,
   shareCard,
+  passAlong,
 }: RevealScreenProps) {
   const [claimPhase, setClaimPhase] = useState<"idle" | "claiming" | "multiplying" | "done">("idle");
   const [displayTickets, setDisplayTickets] = useState(tickets);
@@ -84,8 +93,8 @@ export function RevealScreen({
     document.body.style.color = revealColors.fg;
   }, [revealColors]);
 
-  const finalTickets = Math.round(tickets * multiplier);
-  const hasMultiplier = multiplier > 1;
+  const finalTickets = Math.max(0, Math.round(tickets * multiplier) + bonusTickets);
+  const hasMultiplier = multiplier > 1 || bonusTickets !== 0;
 
   const formattedCoins = coins % 1 === 0 ? coins.toString() : coins.toFixed(2).replace(".", ",");
   const formattedTickets = displayTickets.toLocaleString("es-AR");
@@ -160,6 +169,13 @@ export function RevealScreen({
       setClaimPhase("done");
     }
   };
+
+  // Sin botón de cobrar: lo ganado se acredita solo al llegar a esta pantalla.
+  useEffect(() => {
+    const t = setTimeout(() => { handleClaim(); }, 700);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="h-dvh flex justify-center font-['Roboto'] overflow-hidden" style={{ backgroundColor: "var(--dynamic-bg, #000)" }}>
@@ -288,7 +304,7 @@ export function RevealScreen({
 
         {/* Optional share card */}
         {shareCard && (
-          <div className="mb-8 flex justify-center">
+          <div className="mb-8 flex flex-col items-center">
             {shareCard}
           </div>
         )}
@@ -350,6 +366,10 @@ export function RevealScreen({
             </div>
           )}
 
+          <p className="font-['Fira_Code'] text-[12px] font-bold uppercase tracking-[0.2em]" style={{ color: "var(--dynamic-bg, #000)" }}>
+            {claimPhase === "done" ? "Ganaste" : "Sumando lo que ganaste…"}
+          </p>
+
           {/* Reward pills */}
           <div className="flex gap-2 w-full max-w-[290px]">
             {/* USD / minor policy pill */}
@@ -382,56 +402,38 @@ export function RevealScreen({
 
           {hasMultiplier && claimPhase === "done" && (
             <p className="font-['Fira_Code'] text-[11px] text-center -mt-1" style={{ color: "var(--dynamic-bg, #000)" }}>
-              Tickets: {tickets.toLocaleString("es-AR")} × {multiplier.toFixed(2).replace(/\.?0+$/, "")} = {finalTickets.toLocaleString("es-AR")}
+              Tickets: {tickets.toLocaleString("es-AR")} × {multiplier.toFixed(2).replace(/\.?0+$/, "")}{bonusTickets !== 0 ? ` ${bonusTickets > 0 ? "+" : "−"} ${Math.abs(bonusTickets)} (la máquina)` : ""} = {finalTickets.toLocaleString("es-AR")}
             </p>
           )}
 
-          {/* Claim button → Cerrar button flow */}
-          {claimPhase === "done" ? (
-            <div className="flex flex-col items-center gap-3 w-full max-w-[290px]">
+          {cashPending > 0 && claimPhase === "done" && (
+            <p className="max-w-[290px] text-center font-['Roboto'] text-[13px] leading-snug" style={{ color: "var(--dynamic-bg, #000)" }}>
+              Los tickets ya son tuyos. La plata (US$ {cashPending.toFixed(2).replace(".", ",")}) queda guardada hasta que confirmes que sos mayor de edad.
+            </p>
+          )}
+
+          {/* CTA: invitar a otro. "Listo" lleva al perfil. */}
+          <div className="flex flex-col items-center gap-2 w-full max-w-[290px]">
+            {passAlong ?? (
               <button
                 onClick={onNotifyAndClose}
-                className="w-full h-[60px] rounded-full flex items-center justify-center select-none active:scale-[0.98] transition-all duration-150"
+                className="w-full h-[60px] rounded-full flex items-center justify-center select-none active:scale-[0.98]"
                 style={{ backgroundColor: "var(--dynamic-bg, #000)" }}
               >
-                <span className="font-['Roboto'] font-semibold text-[21px]" style={{ color: "var(--dynamic-fg, #fff)" }}>
-                  Cerrar
-                </span>
+                <span className="font-['Roboto'] font-semibold text-[21px]" style={{ color: "var(--dynamic-fg, #fff)" }}>Ver mi perfil</span>
               </button>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center gap-2 w-full max-w-[290px]">
-              <button
-                onClick={handleClaim}
-                disabled={claimPhase !== "idle"}
-                className="w-full h-[60px] rounded-full flex items-center justify-center select-none active:scale-[0.98] transition-all duration-150"
-                style={{
-                  backgroundColor: "var(--dynamic-bg, #000)",
-                  opacity: claimPhase === "claiming" ? 0.7 : 1,
-                  animation: claimPhase === "multiplying" ? "reveal-claim-success 600ms ease-out" : "none",
-                }}
-              >
-                {claimPhase === "claiming" ? (
-                  <span className="font-['Roboto'] font-semibold text-[21px] flex items-center gap-3" style={{ color: "var(--dynamic-fg, #fff)" }}>
-                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    Reclamando...
-                  </span>
-                ) : (
-                  <span className="font-['Roboto'] font-semibold text-[21px]" style={{ color: "var(--dynamic-fg, #fff)" }}>
-                    Reclamar todo
-                  </span>
-                )}
+            )}
+            {passAlong && (
+              <button onClick={onNotifyAndClose} className="mt-1 font-['Roboto'] text-[15px] font-semibold underline underline-offset-4" style={{ color: "var(--dynamic-bg, #000)" }}>
+                Ver mi perfil
               </button>
-              {claimError && (
-                <p className="font-['Fira_Code'] text-[11px] text-center" style={{ color: "var(--dynamic-bg, #000)" }}>
-                  Error al reclamar. Tocá de nuevo para reintentar.
-                </p>
-              )}
-            </div>
-          )}
+            )}
+            {claimError && (
+              <button onClick={handleClaim} className="font-['Fira_Code'] text-[11px] text-center underline" style={{ color: "var(--dynamic-bg, #000)" }}>
+                No pudimos sumar lo que ganaste. Tocá para reintentar.
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

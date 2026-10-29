@@ -87,6 +87,13 @@ export interface DeadDropQuestion {
   lastLines: string[];
   /** Optional hourly variations. Key = hour range "HH-HH" (24h). Overrides default content. */
   hourVariations?: DeadDropVariation[];
+  /** Placa de la máquina: polígrafo arriba, la máquina habla, reglas y botón. Usa title/lines/rules/speakText/button. */
+  machine?: boolean;
+  title?: string;
+  lines?: string[];
+  rules?: string[];
+  speakText?: string;
+  button?: string;
 }
 
 export interface DeadDropVariation {
@@ -260,12 +267,23 @@ export interface VoiceQuestion {
   text: string;
   /** La voz de BRUTAL la lee en voz alta (default: true). */
   speak?: boolean;
+  /** Lo que dice la voz si es distinto de lo que se ve: acentos marcados, pausas, palabras escritas como suenan. */
+  speakText?: string;
   /** Cómo se interpreta lo que dijo: libre, entre dos opciones, sí/no, de acuerdo o un número. */
   answerType?: "open" | "choice" | "yes_no" | "agree" | "number";
   optionA?: string;
   optionB?: string;
   /** Máximo de segundos hablando (default: 20). */
   maxSeconds?: number;
+  /** Carta de la máquina: antes de hablar, el jugador marca en secreto si dice la verdad o miente. */
+  detector?: boolean;
+}
+
+/** La máquina del Drop: cuántas veces hay que mentirle y qué paga. */
+export interface DetectorConfig {
+  lies: number;
+  winTickets: number;
+  loseTickets: number;
 }
 
 /** Mayor o menor: juego de cartas que multiplica los Golden Tickets de la partida. */
@@ -276,6 +294,10 @@ export interface MayorMenorQuestion {
   ladder?: number[];
   /** Segundos para decidir cada carta (default: 15). */
   secondsPerCard?: number;
+  /** ladder: escalera (por defecto) · multiplier: una carta que activa un multiplicador · double: doble o nada con los tickets que llevás. */
+  mode?: "ladder" | "multiplier" | "double";
+  /** Rango de la primera carta, ej. [6, 9]. */
+  firstCard?: [number, number];
 }
 
 export type QuestionContent =
@@ -305,6 +327,8 @@ export type QuestionContent =
 export interface QuestionMeta {
   /** Server-side question UUID, injected at runtime by dbToPlayableDrop. */
   id?: string;
+  /** Etiqueta única de la carta (ej. "mentime-13-after"). Las reglas del perfil la usan para encontrarla. */
+  label?: string;
   /** Timer in seconds. Use 0 for dead_drop (no timer shown). */
   timer: number;
   /** Reward given on completion. Omit for no reward. */
@@ -324,6 +348,8 @@ export interface QuestionMeta {
     /** Text shown below percentage, e.g. "Opina igual que vos." */
     text: string;
   };
+  /** Micro-reacción propia de la carta (texto corto que flota después de responder). Sin esto, sale una del pozo. */
+  reaction?: string;
   /** Signal Pair ID — links two cards that should be read together for BIC analysis */
   signalPairId?: string;
   /** Card classification for analysis. Inferred from reward type if omitted. */
@@ -385,8 +411,8 @@ export interface RevealScoringConfig {
 // --- The Drop ---
 
 export interface SplashConfig {
-  /** "terminal" = default typewriter mode, "image" = full-screen image/gif */
-  mode: "terminal" | "image";
+  /** "terminal" = default typewriter mode, "image" = full-screen image/gif, "none" = sin placa: entra directo a la primera carta */
+  mode: "terminal" | "image" | "none";
   /** Font family for terminal text and button. Available: Fira_Code, Silkscreen, Roboto */
   fontFamily?: string;
   /** Button text (default: "ENTRO") */
@@ -424,6 +450,9 @@ export interface Drop {
 
   /** Optional splash screen customization */
   splash?: SplashConfig;
+
+  /** Si el Drop tiene cartas de la máquina (voz con `detector: true`), sus reglas. */
+  detector?: DetectorConfig;
 
   /** Optional segment restriction — only users in these segments can access the drop */
   segmentIds?: string[];

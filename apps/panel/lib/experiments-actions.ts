@@ -127,10 +127,14 @@ export async function removeQuestion(id: string): Promise<Saved> {
 export async function saveDrop(d: PanelDropRow): Promise<Saved> {
   if (!UUID.test(d?.id ?? '')) return fail('Drop sin identificador.');
   if (!/^[a-z0-9-]{3,80}$/.test(d.dropId ?? '')) return fail('El identificador del Drop solo puede tener minúsculas, números y guiones.');
+  // Lo que el editor no conoce (la máquina, la voz) se conserva tal como estaba en la base.
+  const { data: current } = await from('drops', 'drops').select('config').eq('id', d.id).maybeSingle();
+  const { timeoutMessage: _t, multiplierCheckpoints: _m, reveal: _r, splash: _s, editedAt: _e, ...keep } = ((current as any)?.config ?? {}) as Record<string, unknown>;
   const { error } = await db().schema('drops').rpc('panel_save_drop', {
     p: {
       id: d.id, slug: d.dropId, name: (d.name || 'Sin nombre').slice(0, 120), status: 'draft',
       config: {
+        ...keep,
         timeoutMessage: d.timeoutMessage, multiplierCheckpoints: d.multiplierCheckpoints ?? {}, reveal: d.reveal ?? {},
         ...(d.splash ? { splash: d.splash } : {}), editedAt: d.updatedAt ?? new Date().toISOString(),
       },

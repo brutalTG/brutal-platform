@@ -14,6 +14,27 @@
     <meta property="og:image:alt" content="BRUTAL" />
     <meta name="twitter:card" content="summary_large_image" />
     <title>BRUTAL</title>
+    <script>
+      // Link de grupo: anota la apertura apenas llega la página, antes de que cargue el juego.
+      // Así cuenta también a quien toca el link y se va enseguida.
+      (function () {
+        try {
+          var parts = location.pathname.split("/").filter(Boolean);
+          if (parts[0] !== "j" || !parts[1]) return;
+          var id = null;
+          try {
+            id = localStorage.getItem("brutal_client");
+            if (!id) { id = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + "-" + Math.random().toString(36).slice(2)); localStorage.setItem("brutal_client", id); }
+          } catch (e) {}
+          var de = new URLSearchParams(location.search).get("de");
+          fetch("%VITE_API_URL%".replace(/\/+$/, "") + "/join/open", {
+            method: "POST", keepalive: true, headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ code: parts[1].toLowerCase(), client: id, source: de })
+          }).catch(function () {});
+          window.__brutalOpenSent = true;
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

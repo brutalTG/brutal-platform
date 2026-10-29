@@ -1,5 +1,6 @@
 // ============================================================
-// PREGUNTA POR VOZ — se lee (o la dice la voz de BRUTAL) y se contesta hablando.
+// PREGUNTA POR VOZ — se lee (o la dice la voz de BRUTAL) y se contesta escribiendo o hablando.
+// Por defecto hay una caja de texto; "Prefiero mandar un audio" abre el micrófono.
 // El audio sube con la respuesta; el servidor lo transcribe y lo guarda en privado.
 // ============================================================
 
@@ -7,55 +8,74 @@ import { useEffect, useRef, useState } from "react";
 import { Mic, Square } from "lucide-react";
 import { DuotoneCard, CardTitle, ActionButton } from "./brutal-ui";
 import { hapticMedium } from "./haptics";
-import { API_BASE } from "./api-base";
-import { userAuthHeaders } from "./access-context";
+import { say, stopSpeaking } from "./voice-cache";
+import { Polygraph, type PolygraphHandle } from "./polygraph";
 
-type Done = { audio: Blob | null; mime: string; speechMs: number; latencyMs: number };
+type Done = { audio: Blob | null; mime: string; speechMs: number; latencyMs: number; committed?: "truth" | "lie"; decisionMs?: number; text?: string; meta?: Record<string, unknown> };
+
+/** Carta de la máquina: qué puede marcar el jugador en esta carta. */
+export type DetectorBudget = { mustLie: boolean; mustTell: boolean; remainingLies: number; remainingItems: number };
 
 function pickMime() {
   const options = ["audio/webm;codecs=opus", "audio/mp4", "audio/webm", "audio/ogg;codecs=opus"];
   return options.find((m) => typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported?.(m)) ?? "";
 }
 
-async function say(text: string) {
-  try {
-    const res = await fetch(`${API_BASE}/tts`, { method: "POST", headers: userAuthHeaders(), body: JSON.stringify({ text }) });
-    if (!res.ok) throw new Error(String(res.status));
-    const url = URL.createObjectURL(await res.blob());
-    const el = new Audio(url);
-    await new Promise<void>((resolve) => { el.onended = () => resolve(); el.onerror = () => resolve(); el.play().catch(() => resolve()); });
-    URL.revokeObjectURL(url);
-  } catch {
-    if (typeof speechSynthesis === "undefined") return;
-    await new Promise<void>((resolve) => {
-      const u = new SpeechSynthesisUtterance(text);
-      u.lang = "es-AR";
-      const t = setTimeout(resolve, 2000 + text.length * 80);
-      u.onend = () => { clearTimeout(t); resolve(); };
-      u.onerror = () => { clearTimeout(t); resolve(); };
-      speechSynthesis.speak(u);
-    });
-  }
-}
-
-export function VoiceQuestion({ actionHint, text, speak = true, maxSeconds = 20, optionA, optionB, answerType, onDone }: {
-  actionHint: string; text: string; speak?: boolean; maxSeconds?: number; optionA?: string; optionB?: string; answerType?: string;
+export function VoiceQuestion({ actionHint, text, speakText, speak = true, maxSeconds = 20, optionA, optionB, answerType, detector, budget, onDone }: {
+  actionHint: string; text: string; speakText?: string; speak?: boolean; maxSeconds?: number; optionA?: string; optionB?: string; answerType?: string;
+  /** Carta de la máquina: antes de hablar marca en secreto verdad o mentira. */
+  detector?: boolean; budget?: DetectorBudget;
   onDone: (d: Done) => void;
 }) {
-  const [phase, setPhase] = useState<"ready" | "speaking" | "recording" | "denied" | "sending">(speak ? "speaking" : "ready");
+  // Carta de la máquina: después de escuchar, primero decide ("commit") y recién entonces aparece el micrófono.
+  const [phase, setPhase] = useState<"ready" | "speaking" | "commit" | "recording" | "denied" | "sending">(detector ? (speak ? "speaking" : "commit") : "ready");
+  // Cartas comunes: se contesta escribiendo (por defecto) o con audio.
+  const [mode, setMode] = useState<"text" | "audio">("text");
+  const [typed, setTyped] = useState("");
+  const [talking, setTalking] = useState(speak);
+  const firstKey = useRef<number | null>(null);
+  const switches = useRef(0);
   const [level, setLevel] = useState(0);
   const [left, setLeft] = useState(maxSeconds);
   const shownAt = useRef(performance.now());
   const rec = useRef<{ stop: () => void } | null>(null);
+  const committed = useRef<{ value: "truth" | "lie"; decisionMs: number } | null>(null);
+  const poly = useRef<PolygraphHandle>(null);
 
   useEffect(() => {
     let alive = true;
-    if (speak) say(text).finally(() => { if (alive) { setPhase((p) => (p === "speaking" ? "ready" : p)); shownAt.current = performance.now(); } });
-    return () => { alive = false; rec.current?.stop(); };
-  }, [speak, text]);
+    if (speak) say(speakText || text).finally(() => {
+      if (!alive) return;
+      setTalking(false);
+      if (detector) { setPhase((p) => (p === "speaking" ? "commit" : p)); shownAt.current = performance.now(); }
+    });
+    return () => { alive = false; rec.current?.stop(); stopSpeaking(); };
+  }, [speak, text, speakText, detector]);
+
+  function commit(value: "truth" | "lie") {
+    hapticMedium();
+    committed.current = { value, decisionMs: Math.round(performance.now() - shownAt.current) };
+    poly.current?.jolt(value === "lie" ? 0.7 : 0.25);
+    setPhase("ready");
+  }
+
+  const modeMeta = () => ({ answer_mode: mode, mode_switches: switches.current, ...(firstKey.current != null ? { first_key_ms: firstKey.current } : {}) });
+  const finish = (d: Omit<Done, "committed" | "decisionMs">) =>
+    onDone(committed.current ? { ...d, committed: committed.current.value, decisionMs: committed.current.decisionMs } : { ...d, meta: { ...modeMeta(), ...(d.meta ?? {}) } });
+
+  function sendText() {
+    const t = typed.trim();
+    if (!t) return;
+    hapticMedium();
+    stopSpeaking();
+    setPhase("sending");
+    finish({ audio: null, mime: "", speechMs: 0, latencyMs: Math.round(performance.now() - shownAt.current), text: t });
+  }
+  function switchTo(m: "text" | "audio") { switches.current++; setMode(m); if (m === "audio") stopSpeaking(); }
 
   async function start() {
     hapticMedium();
+    stopSpeaking();
     const latencyMs = Math.round(performance.now() - shownAt.current);
     let stream: MediaStream;
     try {
@@ -85,6 +105,7 @@ export function VoiceQuestion({ actionHint, text, speak = true, maxSeconds = 20,
       if (rms > 0.02) speechMs += now - last;
       last = now;
       setLevel(Math.min(1, rms * 8));
+      poly.current?.setLevel(Math.min(1, rms * 8));
       const remaining = Math.max(0, maxSeconds - (now - began) / 1000);
       setLeft(Math.ceil(remaining));
       if (remaining <= 0) return stop();
@@ -94,12 +115,13 @@ export function VoiceQuestion({ actionHint, text, speak = true, maxSeconds = 20,
       if (finished) return;
       finished = true;
       cancelAnimationFrame(raf);
+      poly.current?.setLevel(0);
       setPhase("sending");
       mr.onstop = () => {
         stream.getTracks().forEach((t) => t.stop());
         ctx.close().catch(() => {});
         const audio = chunks.length ? new Blob(chunks, { type: mr.mimeType || mime || "audio/webm" }) : null;
-        onDone({ audio, mime: mr.mimeType || mime, speechMs: Math.round(speechMs), latencyMs });
+        finish({ audio, mime: mr.mimeType || mime, speechMs: Math.round(speechMs), latencyMs });
       };
       mr.stop();
     };
@@ -111,46 +133,156 @@ export function VoiceQuestion({ actionHint, text, speak = true, maxSeconds = 20,
 
   const options = answerType === "choice" && optionA && optionB ? [optionA, optionB] : null;
 
+  if (detector) {
+    // Carta de la máquina: pantalla completa, el polígrafo arriba (mitad de la pantalla) y la pregunta abajo.
+    const ink = "#F2F2F2";
+    return (
+      <div className="fixed inset-0 flex justify-center overflow-hidden bg-[#050505] font-['Roboto']" style={{ color: ink }}>
+        <div className="flex h-dvh w-full max-w-[420px] flex-col">
+          <div className="relative w-full shrink-0" style={{ height: "50dvh" }}>
+            <Polygraph ref={poly} fill={0.98} label="La máquina te está midiendo" />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16" style={{ background: "linear-gradient(to bottom, rgba(5,5,5,0), #050505)" }} />
+            <p className="pointer-events-none absolute inset-x-0 font-['Silkscreen'] text-[13px] tracking-wide" style={{ top: "calc(var(--tg-safe-top, 0px) + 16px)", left: 20, textShadow: "0 1px 8px rgba(0,0,0,.8)" }}>
+              BRUTAL////////////////
+            </p>
+          </div>
+
+          <div className="flex flex-1 flex-col items-center px-6 pt-3 text-center" style={{ paddingBottom: "calc(var(--tg-safe-bottom, 0px) + 20px)" }}>
+            <h2 className="text-[24px] font-bold leading-tight">{text}</h2>
+            <div className="flex-1" />
+
+            {phase === "speaking" && <p className="font-['Fira_Code'] text-sm opacity-60">La máquina pregunta…</p>}
+
+            {phase === "commit" && (
+              <div className="flex w-full flex-col items-center gap-3">
+                <p className="font-['Fira_Code'] text-xs uppercase tracking-[0.2em] opacity-70">
+                  {budget?.mustLie ? "Te queda una mentira. Es esta." : budget?.mustTell ? "Ya mentiste todo. Esta va con la verdad." : "Antes de hablar, decidí en secreto"}
+                </p>
+                <div className="flex w-full gap-2">
+                  {!budget?.mustLie && (
+                    <button onClick={() => commit("truth")} className="h-[56px] flex-1 rounded-2xl text-base font-bold uppercase active:scale-95" style={{ backgroundColor: ink, color: "#050505" }}>Verdad</button>
+                  )}
+                  {!budget?.mustTell && (
+                    <button onClick={() => commit("lie")} className="h-[56px] flex-1 rounded-2xl text-base font-bold uppercase active:scale-95" style={{ backgroundColor: "#FF0040", color: "#fff" }}>Mentira</button>
+                  )}
+                </div>
+                {!budget?.mustLie && !budget?.mustTell && budget && (
+                  <p className="font-['Fira_Code'] text-[11px] opacity-60">
+                    {budget.remainingLies === 1 ? "Te queda 1 mentira" : `Te quedan ${budget.remainingLies} mentiras`} en {budget.remainingItems} preguntas.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {phase === "ready" && (
+              <>
+                <button onClick={start} className="mb-2 flex size-20 items-center justify-center rounded-full active:scale-95" style={{ backgroundColor: ink, color: "#050505" }} aria-label="Tocá y hablá">
+                  <Mic size={34} />
+                </button>
+                <p className="font-['Fira_Code'] text-sm">Tocá y hablá</p>
+              </>
+            )}
+
+            {phase === "recording" && (
+              <>
+                <button onClick={() => rec.current?.stop()} className="mb-2 flex size-20 items-center justify-center rounded-full" style={{ backgroundColor: ink, color: "#050505", boxShadow: `0 0 0 ${6 + level * 22}px rgba(242,242,242,.18)`, transition: "box-shadow 80ms linear" }} aria-label="Listo">
+                  <Square size={28} fill="currentColor" />
+                </button>
+                <p className="font-['Fira_Code'] text-sm">Te escucho · {left}s · tocá para terminar</p>
+              </>
+            )}
+
+            {phase === "sending" && <p className="font-['Fira_Code'] text-sm">Listo.</p>}
+
+            {phase === "denied" && (
+              <div className="flex w-full flex-col items-center gap-3">
+                <p className="text-sm">No pudimos usar el micrófono. Habilitalo en el navegador o seguí sin responder esta.</p>
+                <button onClick={() => finish({ audio: null, mime: "", speechMs: 0, latencyMs: Math.round(performance.now() - shownAt.current) })} className="h-[52px] w-full rounded-full font-bold" style={{ backgroundColor: ink, color: "#050505" }}>Seguir</button>
+              </div>
+            )}
+
+            <p className="mt-4 font-['Fira_Code'] text-[11px] opacity-50">La máquina escucha. Nadie más.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const ink = "var(--dynamic-bg, #000)";
+  const paper = "var(--dynamic-fg, #fff)";
+  const linkBtn = "mt-3 w-full text-center font-['Roboto'] text-[15px] font-semibold underline underline-offset-4 active:opacity-60";
+
   return (
     <div className="flex flex-col flex-1 gap-6">
-      <DuotoneCard hint={actionHint}>
+      <DuotoneCard hint={mode === "text" ? "Escribí" : "Hablá"}>
         <CardTitle>{text}</CardTitle>
         {options && (
           <div className="mb-5 flex w-full gap-2">
             {options.map((o) => (
-              <div key={o} className="flex-1 rounded-2xl px-3 py-3 text-center font-['Roboto'] text-base font-bold" style={{ border: "2px solid var(--dynamic-bg, #000)", color: "var(--dynamic-bg, #000)" }}>{o}</div>
+              <div key={o} className="flex-1 rounded-2xl px-3 py-3 text-center font-['Roboto'] text-base font-bold" style={{ border: `2px solid ${ink}`, color: ink }}>{o}</div>
             ))}
           </div>
         )}
 
-        {phase === "speaking" && <p className="mb-4 font-['Fira_Code'] text-sm" style={{ color: "var(--dynamic-bg, #000)", opacity: 0.6 }}>Escuchá…</p>}
-
-        {phase === "ready" && (
-          <button onClick={start} className="mb-2 flex size-24 items-center justify-center rounded-full active:scale-95" style={{ backgroundColor: "var(--dynamic-bg, #000)", color: "var(--dynamic-fg, #fff)" }} aria-label="Tocá y hablá">
-            <Mic size={40} />
-          </button>
-        )}
-        {phase === "ready" && <p className="font-['Fira_Code'] text-sm" style={{ color: "var(--dynamic-bg, #000)" }}>Tocá y hablá</p>}
-
-        {phase === "recording" && (
-          <>
-            <button onClick={() => rec.current?.stop()} className="mb-2 flex size-24 items-center justify-center rounded-full" style={{ backgroundColor: "var(--dynamic-bg, #000)", color: "var(--dynamic-fg, #fff)", boxShadow: `0 0 0 ${8 + level * 26}px color-mix(in srgb, var(--dynamic-bg, #000) 22%, transparent)`, transition: "box-shadow 80ms linear" }} aria-label="Listo">
-              <Square size={32} fill="currentColor" />
+        {mode === "text" && phase !== "sending" && (
+          <div className="flex w-full flex-col">
+            <textarea
+              value={typed}
+              onChange={(e) => { if (firstKey.current == null) firstKey.current = Math.round(performance.now() - shownAt.current); setTyped(e.target.value.slice(0, 500)); }}
+              rows={3}
+              maxLength={500}
+              placeholder="Escribí tu respuesta"
+              className="w-full resize-none rounded-2xl px-4 py-3 font-['Roboto'] text-[17px] leading-snug outline-none"
+              style={{ border: `2px solid ${ink}`, color: ink, backgroundColor: "transparent" }}
+            />
+            <button
+              onClick={sendText}
+              disabled={!typed.trim()}
+              className="mt-3 h-[54px] w-full rounded-full font-['Roboto'] text-[17px] font-bold active:scale-[0.98] disabled:opacity-40"
+              style={{ backgroundColor: ink, color: paper }}
+            >
+              Mandar
             </button>
-            <p className="font-['Fira_Code'] text-sm" style={{ color: "var(--dynamic-bg, #000)" }}>Te escucho · {left}s · tocá para terminar</p>
+            <button onClick={() => switchTo("audio")} className={linkBtn} style={{ color: ink }}>
+              Prefiero mandar un audio
+            </button>
+          </div>
+        )}
+
+        {mode === "audio" && (
+          <>
+            {phase === "ready" && (
+              <>
+                <button onClick={start} className="mb-2 flex size-24 items-center justify-center rounded-full active:scale-95" style={{ backgroundColor: ink, color: paper }} aria-label="Tocá y hablá">
+                  <Mic size={40} />
+                </button>
+                <p className="font-['Fira_Code'] text-sm" style={{ color: ink }}>Tocá y hablá</p>
+                <button onClick={() => switchTo("text")} className={linkBtn} style={{ color: ink }}>Mejor lo escribo</button>
+              </>
+            )}
+
+            {phase === "recording" && (
+              <>
+                <button onClick={() => rec.current?.stop()} className="mb-2 flex size-24 items-center justify-center rounded-full" style={{ backgroundColor: ink, color: paper, boxShadow: `0 0 0 ${8 + level * 26}px color-mix(in srgb, ${ink} 22%, transparent)`, transition: "box-shadow 80ms linear" }} aria-label="Listo">
+                  <Square size={32} fill="currentColor" />
+                </button>
+                <p className="font-['Fira_Code'] text-sm" style={{ color: ink }}>Te escucho · {left}s · tocá para terminar</p>
+              </>
+            )}
+
+            {phase === "denied" && (
+              <div className="flex w-full flex-col items-center gap-3">
+                <p className="text-center font-['Roboto'] text-sm" style={{ color: ink }}>No pudimos usar el micrófono. Escribila, es lo mismo.</p>
+                <ActionButton label="Escribirla" onClick={() => { setPhase("ready"); switchTo("text"); }} />
+              </div>
+            )}
           </>
         )}
 
-        {phase === "sending" && <p className="font-['Fira_Code'] text-sm" style={{ color: "var(--dynamic-bg, #000)" }}>Listo.</p>}
-
-        {phase === "denied" && (
-          <div className="flex w-full flex-col items-center gap-3">
-            <p className="text-center font-['Roboto'] text-sm" style={{ color: "var(--dynamic-bg, #000)" }}>No pudimos usar el micrófono. Habilitalo en el navegador o seguí sin responder esta.</p>
-            <ActionButton label="Seguir" onClick={() => onDone({ audio: null, mime: "", speechMs: 0, latencyMs: Math.round(performance.now() - shownAt.current) })} />
-          </div>
-        )}
+        {phase === "sending" && <p className="font-['Fira_Code'] text-sm" style={{ color: ink }}>Listo.</p>}
+        {talking && phase !== "sending" && <p className="mt-3 font-['Fira_Code'] text-xs" style={{ color: ink, opacity: 0.6 }}>Te la está leyendo BRUTAL…</p>}
       </DuotoneCard>
-      <p className="text-center font-['Fira_Code'] text-[11px] opacity-60">Tu respuesta queda grabada.</p>
+      <p className="text-center font-['Fira_Code'] text-[11px] opacity-60">{mode === "audio" ? "Tu audio queda grabado. Solo lo escucha BRUTAL." : "Tu respuesta queda guardada."}</p>
     </div>
   );
 }

@@ -62,7 +62,7 @@ export function TimerBar({ duration, onTimeUp }: { duration: number; onTimeUp?: 
     }
   }, [progress, onTimeUp]);
 
-  const timeString = `00:${seconds.toString().padStart(2, "0")}`;
+  const timeString = `${Math.floor(seconds / 60).toString().padStart(2, "0")}:${(seconds % 60).toString().padStart(2, "0")}`;
 
   return (
     <div

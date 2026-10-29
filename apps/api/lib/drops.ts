@@ -4,12 +4,13 @@ import { from, must } from './db';
 import { newCode, sha256, signToken, verifyToken } from './crypto';
 import { HttpError } from './http';
 import {
-  birthDateFromAge, computeClaim, consistencyOf, displayReward, hiloStep, hiloView, HILO_LADDER, multiplierFor, normalizeWallet, observationOf, parseLocation, POLICY,
-  resolveReward, sessionMultiplier, type AnswerBody, type Hand, type HiloAction, type VoiceAnswer,
+  applyDetector, birthDateFromAge, cleanNickname, cleanSource, cleanTypedAnswer, refSource, computeClaim, guestPhone, joinConfig, consistencyOf, detectorConfig, detectorLabel, detectorOutcome, detectorReason, voiceScript, displayReward, firstCardDraw, hiloLadder, hiloMode, hiloStep, hiloView, winningDraw, multiplierFor, normalizeWallet, observationOf, parseLocation, POLICY,
+  resolveReward, sessionMultiplier, type AnswerBody, type DetectorItem, type DetectorResult, type DetectorVerdictOut, type Hand, type HiloAction, type VoiceAnswer,
 } from './drops-game';
-import { parseAnswer } from './game';
+import { countFillers, parseAnswer } from './game';
 import { db } from './db';
 import { stt, tts, wordFeatures } from './elevenlabs';
+import { queueDropResult } from './messaging';
 
 // API del reproductor de Drops (traído del sandbox). Mismo contrato que el servidor viejo,
 // sobre la base nueva: nodos en core, señal en signal.observations, tickets y plata en economy.ledger.
@@ -74,15 +75,69 @@ export async function accessFrom(req: Request, purpose?: 'onboarding' | 'drop'):
   return a;
 }
 
+// ---------- Link de grupo: un link, muchos jugadores ----------
+/**
+ * Entra alguien por el link del grupo con su apodo. Se crea un nodo de prueba (teléfono inventado +999…,
+ * canal `grupo:<drop>`) y se le da su link personal al Drop. Sin onboarding: solo el apodo.
+ */
+export async function joinGroup(b: { code?: unknown; nickname?: unknown; client?: unknown; source?: unknown }) {
+  const code = String(b.code ?? '').trim().toLowerCase();
+  const nickname = cleanNickname(b.nickname);
+  if (!nickname) throw new HttpError(400, 'bad_nickname', 'Poné un apodo de 2 a 20 letras.');
+  const live = await must(from('drops', 'drops').select('id, slug, name, config').eq('status', 'live'), 'drops en juego') as any[];
+  const d = live.find((x) => joinConfig(x.config?.join)?.code === code);
+  const cfg = d ? joinConfig(d.config.join)! : null;
+  if (!d || !cfg) throw new HttpError(404, 'invalid_link', 'Este link no existe o ya cerró.');
+  if (!cfg.open) throw new HttpError(410, 'closed', 'Este Drop ya cerró.');
+  const channel = `grupo:${d.slug}`;
+  const { count } = await from('core', 'nodes').select('id', { count: 'exact', head: true }).eq('acquisition_channel', channel);
+  if ((count ?? 0) >= cfg.max) throw new HttpError(410, 'full', 'Ya entraron todos los lugares de este Drop.');
+  let nodeId: string | null = null;
+  for (let i = 0; i < 3 && !nodeId; i++) {
+    const { data, error } = await from('core', 'nodes').insert({
+      phone_e164: guestPhone(), status: 'active', nickname, acquisition_channel: channel, last_active_at: new Date().toISOString(),
+    }).select('id').single();
+    if (!error) nodeId = (data as any).id;
+    else if (!/duplicate/i.test(error.message)) throw new Error(`nodo de grupo: ${error.message}`);
+  }
+  if (!nodeId) throw new Error('nodo de grupo: no se pudo crear');
+  const link = await createDropsLink(nodeId, { purpose: 'drop', dropSlug: d.slug, hours: 72 });
+  await from('drops', 'join_events').insert({ drop_slug: d.slug, event: 'joined', node_id: nodeId, client_id: clientId(b.client), source: cleanSource(b.source) });
+  return { ok: true, url: link.url, code: link.code, drop: d.name, nickname, ref: refSource(nodeId) };
+}
+
+const clientId = (raw: unknown) => { const s = String(raw ?? '').toLowerCase(); return /^[a-z0-9-]{8,64}$/.test(s) ? s : null; };
+
+/** Alguien abrió el link de grupo (todavía no puso apodo). Para el embudo. */
+export async function joinOpened(b: { code?: unknown; client?: unknown; source?: unknown }, userAgent: string | null) {
+  const code = String(b.code ?? '').trim().toLowerCase();
+  const live = await must(from('drops', 'drops').select('slug, config').eq('status', 'live'), 'drops en juego') as any[];
+  const d = live.find((x) => joinConfig(x.config?.join)?.code === code);
+  if (!d) return { ok: false };
+  await from('drops', 'join_events').insert({ drop_slug: d.slug, event: 'open', client_id: clientId(b.client), user_agent: userAgent?.slice(0, 300) ?? null, source: cleanSource(b.source) });
+  return { ok: true };
+}
+
+/** Un jugador tocó "pasáselo a alguien". `source` es su código de reenvío. */
+export async function joinShared(b: { code?: unknown; client?: unknown; source?: unknown }) {
+  const code = String(b.code ?? '').trim().toLowerCase();
+  const live = await must(from('drops', 'drops').select('slug, config').eq('status', 'live'), 'drops en juego') as any[];
+  const d = live.find((x) => joinConfig(x.config?.join)?.code === code);
+  if (!d) return { ok: false };
+  await from('drops', 'join_events').insert({ drop_slug: d.slug, event: 'shared', client_id: clientId(b.client), source: cleanSource(b.source) });
+  return { ok: true };
+}
+
 // ---------- Nodo ----------
-type Node = { id: string; status: string; nickname: string | null; age: number | null; is_minor: boolean; province: string | null; birth_date: string | null; pseudonym_id: string };
+type Node = { id: string; status: string; nickname: string | null; age: number | null; is_minor: boolean; adult_verified: boolean; province: string | null; birth_date: string | null; pseudonym_id: string };
 
 async function nodeOf(nodeId: string): Promise<Node> {
   const n = await must(from('core', 'nodes').select('id, status, nickname, birth_date, province').eq('id', nodeId).maybeSingle(), 'nodo') as any;
   if (!n) throw new HttpError(404, 'node_not_found', 'Node not found');
   const f = await must(from('core', 'node_facts').select('age, is_minor').eq('id', nodeId).maybeSingle(), 'datos del nodo') as any;
   const ps = await must(from('core', 'node_pseudonyms').select('pseudonym_id').eq('node_id', nodeId).single(), 'seudónimo') as any;
-  return { ...n, age: f?.age ?? null, is_minor: Boolean(f?.is_minor), pseudonym_id: ps.pseudonym_id };
+  // Plata solo a mayores verificados: sin edad cargada (ej. jugadores del link de grupo) no se acredita efectivo.
+  return { ...n, age: f?.age ?? null, is_minor: Boolean(f?.is_minor), adult_verified: f?.is_minor === false, pseudonym_id: ps.pseudonym_id };
 }
 
 const playable = (n: Node, test: boolean) => test || ['active', 'pending'].includes(n.status);
@@ -132,12 +187,15 @@ function playableDrop(d: DropRow, cards: DQ[], node: Node) {
     multiplierCheckpoints: cfg.multiplierCheckpoints ?? {},
     reveal: cfg.reveal ?? { title: '', description: '', archetypes: [] },
     ...(cfg.splash ? { splash: cfg.splash } : {}),
+    ...(detectorConfig(cfg.detector) ? { detector: detectorConfig(cfg.detector) } : {}),
     questions: cards.map((c) => {
       const q = c.questions;
       const { profileEnrichment: _p, minorReward: _m, reward: _r, ...content } = q.content ?? {};
       const reward = displayReward(resolveReward(rewardOf(c), node.is_minor));
       return {
         questionId: q.id,
+        // La etiqueta identifica la carta aunque cambie de lugar o se apaguen otras (las reglas del perfil la usan).
+        ...(q.label ? { label: q.label } : {}),
         type: q.format,
         ...content,
         timer: q.format === 'dead_drop' ? 0 : content.timer ?? q.timer_s ?? 15,
@@ -291,15 +349,55 @@ export async function completeSession(a: Access, body: { session_id?: string; ar
   const passed = traps.filter((x) => x.trap_correct).length;
   const lat = answers.map((x) => x.latency_ms).filter((x) => typeof x === 'number');
   const now = new Date();
+  const detector = await runDetector(s.id, d, cards);
   await must(from('drops', 'sessions').update({
     status: 'completed', completed_at: now.toISOString(), total_ms: Math.max(0, now.getTime() - Date.parse(s.started_at)),
     multiplier: sessionMultiplier(multiplierFor(d.config?.multiplierCheckpoints, answers.length),
-      (await must(from('drops', 'hilo_hands').select('status, multiplier').eq('session_id', s.id), 'manos') as any[])),
+      (await must(from('drops', 'hilo_hands').select('status, multiplier, position').eq('session_id', s.id), 'manos') as any[])
+        .filter((h) => hiloMode(cards[h.position]?.questions.content) !== 'double')),
     traps_passed: passed, traps_failed: traps.length - passed,
     avg_latency_ms: lat.length ? Math.round(lat.reduce((p, c) => p + c, 0) / lat.length) : null,
     consistency: consistencyOf(answers), archetype: body.archetype_result ?? null, bic_scores: body.bic_scores ?? null,
+    detector,
   }).eq('id', s.id).eq('status', 'started'), 'cerrar sesión');
-  return { ok: true, trap_score: `${passed}/${traps.length}` };
+  return { ok: true, trap_score: `${passed}/${traps.length}`, detector };
+}
+
+// ---------- La máquina: acusa al cerrar la partida ----------
+
+/** Lee las cartas de la máquina de esta partida y decide. Sin cartas de la máquina: null. */
+async function runDetector(sessionId: string, d: DropRow, cards: DQ[]): Promise<DetectorVerdictOut | null> {
+  const cfg = detectorConfig(d.config?.detector);
+  const positions = cards.map((c, i) => (c.questions.format === 'voice' && c.questions.content?.detector === true ? i : -1)).filter((i) => i >= 0);
+  if (!cfg || positions.length < 2) return null;
+  const rows = await must(from('signal', 'observations').select('position, value').eq('session_id', sessionId).eq('kind', 'voice').in('position', positions), 'cartas de la máquina') as any[];
+  const items: DetectorItem[] = [];
+  const said = new Map<number, string>();
+  for (const r of rows.sort((a, b) => a.position - b.position)) {
+    const v = r.value ?? {};
+    if (v.committed !== 'truth' && v.committed !== 'lie') continue;
+    const position = positions.indexOf(r.position) + 1;
+    said.set(position, String(v.transcript ?? '').trim());
+    items.push({
+      position, committed: v.committed,
+      decision_ms: Number.isFinite(Number(v.decision_ms)) ? Number(v.decision_ms) : null,
+      onset_ms: Number.isFinite(Number(v.first_word_ms)) ? Number(v.first_word_ms) : null,
+      speech_ms: Number.isFinite(Number(v.speech_ms)) ? Number(v.speech_ms) : null,
+      fillers: countFillers(String(v.transcript ?? '')),
+    });
+  }
+  const r = detectorOutcome(items, cfg, sessionId);
+  if (!r) return null;
+  // Cada carta se nombra por lo que se preguntó ("la del famoso"), no por su número: nadie se acuerda cuál fue la segunda.
+  const contentAt = (p: number) => cards[positions[p - 1]]?.questions.content ?? {};
+  const label = (p: number) => detectorLabel(contentAt(p), p);
+  return {
+    ...r, text: detectorReason(r, label), lie_labels: r.lies.map(label),
+    cards: items.map((it) => ({
+      position: it.position, text: String(contentAt(it.position).text ?? ''), label: label(it.position),
+      said: said.get(it.position) ?? '', lied: it.committed === 'lie', accused: r.accused.includes(it.position),
+    })),
+  };
 }
 
 /** Acredita lo ganado en el Drop. Idempotente: dos veces no paga dos veces. */
@@ -307,14 +405,22 @@ export async function claimDrop(a: Access, body: { dropId?: string; drop_id?: st
   const slug = body.dropId ?? body.drop_id;
   if (!slug) throw new HttpError(400, 'drop_required', 'Retiros de plata: todavía se piden por WhatsApp.');
   const node = await nodeOf(a.nodeId);
-  const d = await must(from('drops', 'drops').select('id, slug, season_id, config').eq('slug', slug).maybeSingle(), 'drop') as any;
+  const d = await must(from('drops', 'drops').select('id, slug, name, season_id, config').eq('slug', slug).maybeSingle(), 'drop') as any;
   if (!d) throw new HttpError(404, 'session_not_found', 'Session not found');
-  const s = await sessionOf(node.pseudonym_id, d.id);
+  const s = await must(from('drops', 'sessions').select('id, status, position, multiplier, claimed_at, started_at, detector').eq('pseudonym_id', node.pseudonym_id).eq('drop_id', d.id).maybeSingle(), 'sesión') as any;
   if (!s) throw new HttpError(404, 'session_not_found', 'Session not found');
   if (s.claimed_at) return { ok: true, alreadyClaimed: true };
   if (s.status !== 'completed') throw new HttpError(409, 'not_completed', 'Session is not completed');
   const answers = await must(from('drops', 'answers').select('position, reward_currency, reward_value, reward_granted, trap_correct, questions(content)').eq('session_id', s.id), 'respuestas') as any[];
-  const total = computeClaim(answers.map((x) => ({ ...x, reward_value: Number(x.reward_value), penalty: Number(x.questions?.content?.penalty) || 0 })), Number(s.multiplier) || 1);
+  // Doble o nada: cada mano jugada duplica o borra lo que se llevaba hasta ahí.
+  const cards = await cardsOf(d.id);
+  const hands = await must(from('drops', 'hilo_hands').select('status, multiplier, position').eq('session_id', s.id), 'manos') as any[];
+  const doubles = hands
+    .filter((h) => hiloMode(cards[h.position]?.questions.content) === 'double' && (h.status === 'busted' || (h.status === 'stood' && Number(h.multiplier) > 1)))
+    .map((h) => ({ position: Number(h.position), won: h.status !== 'busted' }));
+  const base = computeClaim(answers.map((x) => ({ ...x, reward_value: Number(x.reward_value), penalty: Number(x.questions?.content?.penalty) || 0 })), Number(s.multiplier) || 1, doubles);
+  // Lo que dio la máquina se suma después del multiplicador: es un premio fijo, no se multiplica.
+  const total = { usd: base.usd, tickets: applyDetector(base.tickets, s.detector) };
   const season = d.season_id ?? (await must(from('economy', 'seasons').select('id').eq('status', 'active').maybeSingle(), 'temporada') as any)?.id ?? null;
   if (a.test) {
     // Prueba: muestra lo que hubiera cobrado, sin acreditar nada.
@@ -322,7 +428,7 @@ export async function claimDrop(a: Access, body: { dropId?: string; drop_id?: st
     return { ok: true, alreadyClaimed: false, test: true, credited: { usd: node.is_minor ? 0 : total.usd, coins: node.is_minor ? 0 : total.usd, tickets: total.tickets } };
   }
   const entries = [
-    total.usd > 0 && !node.is_minor && { currency: 'cash_usd', amount: total.usd, key: `drop_cash:${s.id}` },
+    total.usd > 0 && node.adult_verified && { currency: 'cash_usd', amount: total.usd, key: `drop_cash:${s.id}` },
     total.tickets > 0 && { currency: 'tickets', amount: total.tickets, key: `drop_tickets:${s.id}` },
   ].filter(Boolean) as { currency: string; amount: number; key: string }[];
   for (const e of entries) {
@@ -333,8 +439,15 @@ export async function claimDrop(a: Access, body: { dropId?: string; drop_id?: st
     if (error && !error.message.includes('idempotency_key')) throw new HttpError(409, 'claim_failed', error.message);
   }
   await from('drops', 'sessions').update({ claimed_at: new Date().toISOString() }).eq('id', s.id).is('claimed_at', null);
-  const usd = node.is_minor ? 0 : total.usd;
-  return { ok: true, alreadyClaimed: false, credited: { usd, coins: usd, tickets: total.tickets } };
+  const usd = node.adult_verified ? total.usd : 0;
+  // Ganó plata pero no tiene la edad verificada: queda pendiente hasta que la confirme.
+  const cashPending = !node.adult_verified && !node.is_minor ? total.usd : 0;
+  // Aviso por WhatsApp con lo ganado y el link al perfil. Si falla, la partida igual quedó cobrada.
+  try {
+    const link = await createDropsLink(node.id, { purpose: 'drop', destination: 'profile', hours: 168 });
+    await queueDropResult(node.id, { drop: d.name ?? slug, usd, tickets: total.tickets, verdict: s.detector?.verdict ?? null, link: link.url });
+  } catch (e) { console.error('aviso de resultado', e); }
+  return { ok: true, alreadyClaimed: false, credited: { usd, coins: usd, tickets: total.tickets }, cashPending };
 }
 
 // ---------- Perfil, billetera, ranking ----------
@@ -455,10 +568,13 @@ async function cardAt(a: Access, sessionId: string | undefined, position: number
 export async function dropHilo(a: Access, b: { session_id?: string; position?: number; question_id?: string; action?: string; at_step?: number }) {
   const action = (['start', 'higher', 'lower', 'stand'].includes(String(b.action)) ? b.action : 'start') as HiloAction;
   const { s, q } = await cardAt(a, b.session_id, b.position, b.question_id, 'mayor_menor');
-  const ladder = Array.isArray(q.content?.ladder) && q.content.ladder.every((x: unknown) => Number(x) > 1) ? q.content.ladder.map(Number).slice(0, 8) : HILO_LADDER;
+  const ladder = hiloLadder(q.content);
   const row = await must(from('drops', 'hilo_hands').select('cards, decisions, status, multiplier').eq('session_id', s.id).eq('position', b.position!).maybeSingle(), 'mano') as any;
   const current: Hand | null = row ? { cards: row.cards, decisions: row.decisions, status: row.status, multiplier: Number(row.multiplier) } : null;
-  const next = hiloStep(current, action, ladder, undefined, typeof b.at_step === 'number' ? b.at_step : undefined);
+  // Mano a favor: la carta que sale siempre le da la razón al jugador.
+  const rigged = q.content?.alwaysWin === true && current && (action === 'higher' || action === 'lower')
+    ? winningDraw(current.cards[current.cards.length - 1], action) : undefined;
+  const next = hiloStep(current, action, ladder, rigged, typeof b.at_step === 'number' ? b.at_step : undefined, firstCardDraw(q.content));
   if (!row) {
     const { error } = await from('drops', 'hilo_hands').insert({ session_id: s.id, position: b.position, question_id: q.id, cards: next.cards, decisions: next.decisions, status: next.status, multiplier: next.multiplier });
     if (error) return dropHilo(a, { ...b, action: 'start' }); // otra pestaña la arrancó recién
@@ -501,10 +617,28 @@ export async function recordVoice(a: Access, form: FormData) {
     const wf = wordFeatures(words);
     voice = {
       transcript, stated: parsed.kind, number: 'value' in parsed ? (parsed as any).value : null, audio_path: path ? `${DROPS_AUDIO}/${path}` : null,
-      speech_ms: Number(form.get('speech_ms')) || null, words: wf.words, first_word_ms: wf.first_word_ms,
+      speech_ms: Number(form.get('speech_ms')) || null, words: wf.words, first_word_ms: wf.first_word_ms, mode: 'audio',
     };
+  } else {
+    // Contestó escribiendo: se guarda igual que una transcripción, marcada como texto.
+    const typed = cleanTypedAnswer(form.get('text'));
+    if (typed) {
+      const type = (['choice', 'yes_no', 'agree', 'number', 'open'].includes(q.content?.answerType) ? q.content.answerType : 'open') as any;
+      const parsed = parseAnswer(type, typed, type === 'choice' ? { a: String(q.content?.optionA ?? ''), b: String(q.content?.optionB ?? '') } : undefined);
+      voice = {
+        transcript: typed, stated: parsed.kind, number: 'value' in parsed ? (parsed as any).value : null, audio_path: null,
+        speech_ms: null, words: typed.split(' ').length, first_word_ms: null, mode: 'text',
+      };
+    }
   }
-  const r = await recordResponse(a, { session_id: sessionId, question_id: questionId, position_in_drop: position, latency_ms: latency, voice, multiplier_at_position: Number(form.get('multiplier_at_position')) || 1 });
+  // Carta de la máquina: la marca secreta (verdad o mentira) y cuánto tardó en decidirla.
+  if (q.content?.detector === true) {
+    const committed = String(form.get('committed') ?? '');
+    if (committed !== 'truth' && committed !== 'lie') throw new HttpError(400, 'committed_required', 'Falta marcar verdad o mentira');
+    const decision = Number(form.get('decision_ms'));
+    voice = { ...(voice ?? { transcript: '', stated: null, number: null, audio_path: null, speech_ms: null, words: 0, first_word_ms: null }), committed, decision_ms: Number.isFinite(decision) && decision >= 0 ? Math.round(decision) : null };
+  }
+  const r = await recordResponse(a, { session_id: sessionId, question_id: questionId, position_in_drop: position, latency_ms: latency, voice, multiplier_at_position: Number(form.get('multiplier_at_position')) || 1, meta: form.get('meta') });
   return { ...r, transcript: voice?.transcript ?? null };
 }
 
@@ -514,7 +648,7 @@ export async function dropTts(a: Access, b: { text?: string }) {
   if (!text || text.length > 400) throw new HttpError(400, 'bad_text', 'bad text');
   const d = await dropFor(a);
   if (!d) throw new HttpError(404, 'no_active_drop', 'No active drop');
-  const voiced = (await cardsOf(d.id)).filter((c) => c.questions.format === 'voice' && c.questions.content?.speak !== false).map((c) => String(c.questions.content?.text ?? ''));
+  const voiced = voiceScript((await cardsOf(d.id)).map((c) => ({ format: c.questions.format, content: c.questions.content })));
   if (!voiced.includes(text)) throw new HttpError(403, 'not_in_script', 'not in script');
   const exp = await must(from('pressure', 'experiments').select('definition').order('created_at', { ascending: false }).limit(1).maybeSingle(), 'voz') as any;
   const voice = d.config?.voice ?? exp?.definition?.voice;

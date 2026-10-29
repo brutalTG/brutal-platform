@@ -46,3 +46,14 @@ export async function saveTemplate(form: FormData): Promise<Result & { fields?: 
   revalidatePath('/mensajes');
   return { ok: true, message: 'Mensaje guardado' };
 }
+
+/** Un mensaje en cola (WhatsApp apagado) que se mandó a mano desde un teléfono: queda como enviado. */
+export async function markMessageSent(id: string): Promise<Result> {
+  const { data, error } = await from('messaging', 'messages').update({ status: 'sent', sent_at: new Date().toISOString(), provider_message_id: `manual-${id}` })
+    .eq('id', id).eq('status', 'queued').select('id');
+  if (error) return { ok: false, error: explain(error)! };
+  if (!data?.length) return { ok: false, error: 'Ese mensaje ya no está en cola.' };
+  await audit('marcó un mensaje como mandado a mano', 'message', id);
+  revalidatePath('/mensajes');
+  return { ok: true, message: 'Marcado como enviado' };
+}

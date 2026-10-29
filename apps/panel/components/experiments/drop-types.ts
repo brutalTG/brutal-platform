@@ -375,10 +375,10 @@ export interface RevealArchetype {
 }
 
 export interface RevealScoringConfig {
-  choiceScoring?: { questionIndex: number; optionScores: Record<string, number>[] }[];
-  sliderScoring?: { questionIndex: number; ranges: { min: number; max: number; scores: Record<string, number> }[] }[];
-  rankingScoring?: { questionIndex: number; firstPlaceScores: Record<string, number>[] }[];
-  rafagaScoring?: { questionIndex: number; majorityA: Record<string, number>; majorityB: Record<string, number> }[];
+  choiceScoring?: { questionIndex: number; questionLabel?: string; optionScores: Record<string, number>[] }[];
+  sliderScoring?: { questionIndex: number; questionLabel?: string; ranges: { min: number; max: number; scores: Record<string, number> }[] }[];
+  rankingScoring?: { questionIndex: number; questionLabel?: string; firstPlaceScores: Record<string, number>[] }[];
+  rafagaScoring?: { questionIndex: number; questionLabel?: string; majorityA: Record<string, number>; majorityB: Record<string, number> }[];
   latencyScoring?: { fastThreshold: number; fastScores: Record<string, number>; slowThreshold: number; slowScores: Record<string, number> };
 }
 

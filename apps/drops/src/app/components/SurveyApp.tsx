@@ -15,6 +15,7 @@ import { ResultScreen } from "./result-screen";
 import { MultiplierUnlockScreen } from "./multiplier-unlock-screen";
 import { TrapFailScreen } from "./trap-fail-screen";
 import { RevealScreen } from "./reveal-screen";
+import { DetectorVerdictScreen } from "./detector-verdict-screen";
 import { SharedResultPage, parseSharedResult, buildShareUrl } from "./shared-result-page";
 import { ShareCard } from "./share-card";
 import { MicroReaction } from "./micro-reaction";
@@ -22,6 +23,8 @@ import { ProfileScreen } from "./profile-screen";
 import { LeaderboardScreen } from "./leaderboard-screen";
 
 // --- Extracted modules ---
+import { preloadVoices } from "./voice-cache";
+import { PassAlongButton, passAlongLink } from "./pass-along";
 import { StoryProgressBar, TimerBar, PlayingBadge, StatPills } from "./SurveyHeader";
 import { QuestionRenderer } from "./QuestionRenderer";
 import { useAnswerPipeline } from "./useAnswerPipeline";
@@ -34,9 +37,10 @@ import {
 import { markQuestionRendered, getAverageLatency, getInstinctiveCount, getDoubtCount, getTotalTime, formatLatency, resetRecords, getRecords } from "./latency-tracker";
 import { getNextDuotonePair } from "./color-generator";
 import { startSession as signalStartSession, finalizeSession, exportSessionJSON, updateCurrentPosition } from "./signal-store";
-import { computeDimensionsWithOptions, pickArchetype } from "./archetype-engine";
+import { computeDimensionsWithOptions, pickArchetype, resolveScoring } from "./archetype-engine";
 import { getReferralLink } from "./referral";
-import { serverStartSession, uploadResponse, completeSession, uploadSession, waitForUpload, claimRewards } from "./session-uploader";
+import { serverStartSession, uploadResponse, completeSession, uploadSession, waitForUpload, claimRewards, type DetectorVerdict } from "./session-uploader";
+import type { DetectorBudget } from "./voice-question";
 import { fetchActiveDrop, fetchPreviewDrop } from "./drop-api";
 import { AccessNotice } from "./AccessNotice";
 import { API_BASE } from "./api-base";
@@ -343,8 +347,10 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
   const initialScreen = useMemo<ScreenType>(() => {
     const s = new URLSearchParams(window.location.search).get("screen");
     if (s === "profile" || s === "leaderboard") return s;
-    return "splash";
-  }, []);
+    // Sin placa de inicio: del apodo directo a la primera carta.
+    return drop.splash?.mode === "none" ? "countdown" : "splash";
+  }, [drop.splash?.mode]);
+  const skipIntro = drop.splash?.mode === "none";
 
   // --- Core state ---
   const [screen, setScreen] = useState<ScreenType>(initialScreen);
@@ -360,8 +366,15 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
 
   // --- Multiplier ---
   const [currentMultiplier, setCurrentMultiplier] = useState(1);
+  // Plata ganada que no se acreditó porque la edad no está verificada.
+  const [cashPending, setCashPending] = useState(0);
   const [pendingMultiplier, setPendingMultiplier] = useState<{ multiplier: number; label: string } | null>(null);
   const [trapPenaltyValue, setTrapPenaltyValue] = useState(0);
+
+  // --- La máquina (cartas de voz con detector) ---
+  const detectorPositions = useMemo(() => questions.map((q, i) => (q.type === "voice" && q.detector === true ? i : -1)).filter((i) => i >= 0), [questions]);
+  const hasDetector = Boolean(drop.detector) && detectorPositions.length >= 2;
+  const [detectorVerdict, setDetectorVerdict] = useState<DetectorVerdict | null | "pending">("pending");
 
   // --- Micro-reaction ---
   const [reactionText, setReactionText] = useState<string | null>(null);
@@ -434,9 +447,9 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
       setQuestionIndex((i) => i + 1);
       setScreen("question");
     } else {
-      setScreen("reveal");
+      setScreen(hasDetector ? "verdict" : "reveal");
     }
-  }, [questionIndex, totalQuestions]);
+  }, [questionIndex, totalQuestions, hasDetector]);
 
   const advanceWithMultiplierCheck = useCallback(() => {
     const checkpoint = MULTIPLIER_CHECKPOINTS[questionIndex];
@@ -459,6 +472,28 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
     advanceWithMultiplierCheck,
   });
 
+  // Mayor o menor: doble o nada duplica o borra los tickets; las otras manos suman multiplicador.
+  const onHand = useCallback((r: { mode: "ladder" | "multiplier" | "double"; multiplier: number; busted: boolean; steps: number }) => {
+    if (r.mode === "double") {
+      if (r.busted) setTickets(0);
+      else if (r.multiplier > 1) setTickets((t) => t * 2);
+      return;
+    }
+    if (!r.busted && r.multiplier > 1) setCurrentMultiplier((m) => Math.round(m * r.multiplier * 100) / 100);
+  }, []);
+
+  // La voz de la máquina se baja entera apenas arranca la partida: cuando llega la carta, suena al instante.
+  const voicesLoaded = useRef(false);
+  useEffect(() => {
+    if (screen !== "question" || voicesLoaded.current) return;
+    voicesLoaded.current = true;
+    preloadVoices(questions.flatMap((q) => {
+      if (q.type === "voice" && q.speak !== false) return [q.speakText || q.text];
+      if (q.type === "dead_drop" && q.machine && q.speakText) return [q.speakText];
+      return [];
+    }));
+  }, [screen, questions]);
+
   // --- Latency tracking ---
   useEffect(() => {
     if (screen === "question" && currentQuestion) {
@@ -472,9 +507,68 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
     const reveal = drop.reveal;
     if (!reveal.archetypes || !reveal.scoring || reveal.archetypes.length === 0) return null;
     const avgLatency = getAverageLatency();
-    const dims = computeDimensionsWithOptions(answersRef.current, reveal.scoring, avgLatency, questionOptionsMap);
+    const scoring = resolveScoring(reveal.scoring, questions.map((q) => q.label));
+    const dims = computeDimensionsWithOptions(answersRef.current, scoring, avgLatency, questionOptionsMap);
     return pickArchetype(dims, reveal.archetypes);
-  }, [drop, questionOptionsMap]);
+  }, [drop, questions, questionOptionsMap]);
+
+  // Qué le queda por mentir en la carta de la máquina que tiene enfrente.
+  const detectorBudget = useMemo<DetectorBudget | undefined>(() => {
+    if (!hasDetector || !drop.detector) return undefined;
+    const committed = detectorPositions
+      .filter((p) => p < questionIndex)
+      .map((p) => answersRef.current[p])
+      .filter((a): a is Extract<UserAnswer, { type: "voice" }> => Boolean(a && a.type === "voice" && a.committed))
+      .map((a) => a.committed as "truth" | "lie");
+    const used = committed.filter((c) => c === "lie").length;
+    const remainingLies = Math.max(0, drop.detector.lies - used);
+    const remainingItems = Math.max(0, detectorPositions.length - committed.length);
+    return { remainingLies, remainingItems, mustLie: remainingLies > 0 && remainingLies >= remainingItems, mustTell: remainingLies <= 0 };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasDetector, drop.detector, detectorPositions, questionIndex]);
+
+  // Cierra la partida en el servidor una sola vez (último upload + sesión). Devuelve el veredicto de la máquina.
+  const finalizeOnce = useCallback(() => {
+    if (sessionFinalizedRef.current) return null;
+    sessionFinalizedRef.current = true;
+    const lastIdx = totalQuestions - 1;
+    const lastAnswer = answersRef.current[lastIdx];
+    const lastQuestion = questions[lastIdx];
+    if (lastAnswer && lastQuestion && lastIdx > lastUploadedIndexRef.current) {
+      lastUploadedIndexRef.current = lastIdx;
+      uploadResponse(lastQuestion, lastIdx, lastAnswer, drop.id, currentMultiplier);
+    }
+    localStorage.setItem(`brutal_drop_completed_${drop.id}`, "true");
+    const archetype = computeArchetype();
+    const archetypeData = archetype ? { id: archetype.id, title: archetype.title } : undefined;
+    const session = finalizeSession(questions, getRecords(), { coins, tickets, multiplier: currentMultiplier }, archetypeData);
+    if (session) {
+      console.log("[BRUTAL] Session finalized:", exportSessionJSON(session));
+      uploadSession(session);
+    }
+    return completeSession({ archetype_result: archetypeData, bic_scores: session?.signalPairs || null, multiplier: currentMultiplier });
+  }, [totalQuestions, questions, drop.id, currentMultiplier, coins, tickets, computeArchetype]);
+
+  useEffect(() => {
+    if (screen !== "verdict") return;
+    const p = finalizeOnce();
+    if (!p) return;
+    p.then((r) => setDetectorVerdict(r.detector)).catch(() => setDetectorVerdict(null));
+  }, [screen, finalizeOnce]);
+
+  // Arranca la partida: limpia lo local, abre la sesión en el servidor y muestra la primera carta.
+  const startedRef = useRef(false);
+  const startPlaying = useCallback(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    resetRecords();
+    signalStartSession(drop.id, drop.name, "web");
+    serverStartSession(drop.id);
+    setScreen("question");
+  }, [drop.id, drop.name]);
+  useEffect(() => {
+    if (skipIntro && screen === "countdown") startPlaying();
+  }, [skipIntro, screen, startPlaying]);
 
   // ====== SCREEN RENDERING ======
 
@@ -491,16 +585,8 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
   }
 
   if (screen === "countdown") {
-    return (
-      <CountdownScreen
-        onComplete={() => {
-          resetRecords();
-          signalStartSession(drop.id, drop.name, "web");
-          serverStartSession(drop.id);
-          setScreen("question");
-        }}
-      />
-    );
+    if (skipIntro) return null; // arranca solo (ver efecto de arriba)
+    return <CountdownScreen onComplete={startPlaying} />;
   }
 
   if (screen === "timeout" || screen === "confession_secret") {
@@ -528,6 +614,10 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
     return <TrapFailScreen penaltyValue={trapPenaltyValue} onComplete={advanceWithMultiplierCheck} />;
   }
 
+  if (screen === "verdict") {
+    return <DetectorVerdictScreen verdict={detectorVerdict} onContinue={() => setScreen("reveal")} />;
+  }
+
   if (screen === "reveal") {
     const avgLatency = getAverageLatency();
     const instinctive = getInstinctiveCount();
@@ -537,38 +627,12 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
     const revealTitle = archetype ? archetype.title : drop.reveal.title;
     const revealDescription = archetype ? archetype.description : drop.reveal.description;
 
-    if (!sessionFinalizedRef.current) {
-      sessionFinalizedRef.current = true;
+    finalizeOnce();
+    const bonusTickets = detectorVerdict && detectorVerdict !== "pending" ? Number(detectorVerdict.tickets) || 0 : 0;
 
-      // Subir la última carta
-      const lastIdx = totalQuestions - 1;
-      const lastAnswer = answersRef.current[lastIdx];
-      const lastQuestion = questions[lastIdx];
-      if (lastAnswer && lastQuestion && lastIdx > lastUploadedIndexRef.current) {
-        lastUploadedIndexRef.current = lastIdx;
-        uploadResponse(lastQuestion, lastIdx, lastAnswer, drop.id, currentMultiplier);
-      }
-
-      // --- GUARDA EN MEMORIA QUE COMPLETÓ EL DROP ---
-      localStorage.setItem(`brutal_drop_completed_${drop.id}`, "true");
-
-      const archetypeData = archetype ? { id: archetype.id, title: archetype.title } : undefined;
-      const session = finalizeSession(questions, getRecords(), { coins, tickets, multiplier: currentMultiplier }, archetypeData);
-      if (session) {
-        console.log("[BRUTAL] Session finalized:", exportSessionJSON(session));
-        uploadSession(session);
-      }
-
-      completeSession({
-        archetype_result: archetypeData,
-        bic_scores: session?.signalPairs || null,
-        multiplier: currentMultiplier,
-      });
-    }
-
-    const referralLink = getReferralLink();
+    const referralLink = passAlongLink() ?? getReferralLink();
     const shareUrl = buildShareUrl({ title: revealTitle, description: revealDescription, dropName: drop.name, latency: formatLatency(avgLatency), totalTime });
-    const finalTickets = Math.round(tickets * currentMultiplier);
+    const finalTickets = Math.max(0, Math.round(tickets * currentMultiplier) + bonusTickets);
 
     return (
       <RevealScreen
@@ -578,21 +642,26 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
         coins={coins}
         tickets={tickets}
         multiplier={currentMultiplier}
+        bonusTickets={bonusTickets}
         isMinor={isMinor}
+        cashPending={cashPending}
         onClaim={() => { setScreen("profile"); }}
         onClaimRewards={async () => {
           try {
             await waitForUpload();
             if (getStandaloneAccessToken()) {
-              const result = await claimRewards({
-                dropId: drop.id,
-                coins: coins, 
-                tickets: tickets, 
-                finalTickets: finalTickets,
-                multiplier: currentMultiplier,
-              });
-              console.log("[BRUTAL] Claim rewards result:", result);
-              return result.ok;
+              // Se acredita solo apenas aparece esta pantalla: si el servidor todavía está cerrando la partida, reintenta.
+              for (let i = 0; i < 5; i++) {
+                try {
+                  const result = await claimRewards({ dropId: drop.id, coins, tickets, finalTickets, multiplier: currentMultiplier });
+                  console.log("[BRUTAL] Claim rewards result:", result);
+                  setCashPending(Number(result.cashPending) || 0);
+                  return result.ok;
+                } catch (e) {
+                  if (i === 4) throw e;
+                  await new Promise((r) => setTimeout(r, 1200 * (i + 1)));
+                }
+              }
             }
             return true;
           } catch (err) {
@@ -611,6 +680,7 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
             shareUrl={shareUrl}
           />
         }
+        passAlong={passAlongLink() ? <PassAlongButton primary label="Invitá a alguien" /> : undefined}
       />
     );
   }
@@ -626,7 +696,8 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
   // ====== QUESTION SCREEN ======
   if (screen !== "question" || !currentQuestion) return null;
 
-  if (FULLSCREEN_TYPES.has(currentQuestion.type)) {
+  // Las cartas de la máquina van a pantalla completa, con el polígrafo arriba.
+  if (FULLSCREEN_TYPES.has(currentQuestion.type) || (currentQuestion.type === "voice" && currentQuestion.detector === true)) {
     return (
       <QuestionRenderer
         question={currentQuestion}
@@ -636,6 +707,9 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
         advanceWithMultiplierCheck={advanceWithMultiplierCheck}
         setResultConfig={setResultConfig}
         setScreen={setScreen as (s: string) => void}
+        detectorBudget={detectorBudget}
+        tickets={tickets}
+        onHand={onHand}
       />
     );
   }
@@ -710,6 +784,9 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
             advanceWithMultiplierCheck={advanceWithMultiplierCheck}
             setResultConfig={setResultConfig}
             setScreen={setScreen as (s: string) => void}
+            detectorBudget={detectorBudget}
+            tickets={tickets}
+            onHand={onHand}
           />
         </div>
       </div>
@@ -721,4 +798,4 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
   );
 }
 
-type ScreenType = "splash" | "countdown" | "question" | "result" | "timeout" | "confession_secret" | "multiplier" | "trap_fail" | "reveal" | "profile" | "leaderboard";
+type ScreenType = "splash" | "countdown" | "question" | "result" | "timeout" | "confession_secret" | "multiplier" | "trap_fail" | "verdict" | "reveal" | "profile" | "leaderboard";

@@ -11,7 +11,7 @@ interface RafagaEmojiQuestionProps {
   promptBold: string;
   items: RafagaEmojiItem[];
   secondsPerItem?: number;
-  onComplete: (answers: (string | null)[]) => void;
+  onComplete: (answers: (string | null)[], itemLatencyMs: (number | null)[]) => void;
 }
 
 const BLINK_STEPS = [1, 0, 1, 0, 1, 0, 1];
@@ -23,7 +23,7 @@ const POST_SELECT_DELAY = 200;
  * rafaga_emoji — Emoji-button rapid fire.
  *
  * Intro: full-screen clean text + fast countdown with haptics.
- * Active: large emojis without background frames, stimulus in thumb zone.
+ * Active: emojis in subtle glass boxes in the thumb zone; position shown as dots (current = pill), no number.
  */
 export function RafagaEmojiQuestion({
   promptBold,
@@ -41,6 +41,9 @@ export function RafagaEmojiQuestion({
 
   const currentIdxRef = useRef(0);
   const answersRef = useRef<(string | null)[]>(new Array(items.length).fill(null));
+  // Latencia de cada ítem: desde que el ítem queda quieto en pantalla hasta el toque.
+  const latRef = useRef<(number | null)[]>(new Array(items.length).fill(null));
+  const shownAtRef = useRef<number | null>(null);
   const completedRef = useRef(false);
   const transitioningRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -80,7 +83,7 @@ export function RafagaEmojiQuestion({
   const doComplete = useCallback(() => {
     if (completedRef.current) return;
     completedRef.current = true;
-    setTimeout(() => onCompleteRef.current([...answersRef.current]), 300);
+    setTimeout(() => onCompleteRef.current([...answersRef.current], [...latRef.current]), 300);
   }, []);
 
   const runBlink = useCallback((nextIdx: number) => {
@@ -127,6 +130,7 @@ export function RafagaEmojiQuestion({
       if (transitioningRef.current || completedRef.current) return;
       clearTimer();
       hapticLight();
+      if (shownAtRef.current !== null) latRef.current[currentIdxRef.current] = Math.round(performance.now() - shownAtRef.current);
       answersRef.current[currentIdxRef.current] = option;
       setSelectedOption(option);
 
@@ -142,6 +146,7 @@ export function RafagaEmojiQuestion({
 
   useEffect(() => {
     if (phase !== "active" || completedRef.current || transitioning) return;
+    shownAtRef.current = performance.now();
     setSubProgress(100);
     const start = Date.now();
     const dur = secondsPerItem * 1000;
@@ -196,68 +201,60 @@ export function RafagaEmojiQuestion({
 
   return (
     <div className="flex flex-col flex-1 items-center">
-      {/* Counter + dots at top */}
-      <div className="flex flex-col items-center gap-2 mb-2">
-        <span className="font-['Roboto'] font-semibold text-[14px] opacity-50" style={{ color: "var(--dynamic-fg, #fff)" }}>
-          {currentIdx + 1} / {total}
-        </span>
-        <div className="flex items-center gap-[6px]">
-          {items.map((_, i) => (
-            <div
-              key={i}
-              className="rounded-full"
-              style={{
-                width: 9,
-                height: 9,
-                backgroundColor: i <= currentIdx ? "var(--dynamic-fg, #fff)" : "transparent",
-                border: i <= currentIdx ? "none" : "2px solid color-mix(in srgb, var(--dynamic-fg, #fff) 30%, transparent)",
-              }}
-            />
-          ))}
-        </div>
+      {/* Position: dots, the current one stretches into a pill. No number. */}
+      <div className="flex items-center justify-center gap-[8px] mt-1">
+        {items.map((_, i) => (
+          <div
+            key={i}
+            className="rounded-full"
+            style={{
+              width: i === currentIdx ? 34 : 10,
+              height: 10,
+              backgroundColor: i === currentIdx
+                ? "var(--dynamic-fg, #fff)"
+                : "color-mix(in srgb, var(--dynamic-fg, #fff) 35%, transparent)",
+              transition: "width 0.25s ease, background-color 0.25s ease",
+            }}
+          />
+        ))}
       </div>
 
       {/* Top spacer */}
-      <div className="flex-[1.5]" />
+      <div className="flex-1" />
 
-      {/* Stimulus text + emoji buttons */}
-      <div
-        className="flex flex-col items-center gap-8"
-        style={{ opacity: blinkOpacity }}
+      {/* Stimulus text */}
+      <h2
+        className="font-['Roboto'] font-bold text-[36px] text-center leading-tight px-4"
+        style={{ color: "var(--dynamic-fg, #fff)", opacity: blinkOpacity }}
       >
-        {/* Stimulus text */}
-        <h2 className="font-['Roboto'] font-bold text-[36px] text-center leading-tight px-4" style={{ color: "var(--dynamic-fg, #fff)" }}>
-          {item.text}
-        </h2>
+        {item.text}
+      </h2>
 
-        {/* Emoji buttons — no frame, just big emojis */}
-        <div className="flex items-center justify-center gap-12">
+      <div className="flex-1" />
+
+      {/* Emoji buttons — subtle glass boxes in the thumb zone, no shadows */}
+      <div className="flex items-center justify-center gap-10 mb-8" style={{ opacity: blinkOpacity }}>
+        {[{ emoji: item.optionA, on: isA }, { emoji: item.optionB, on: isB }].map(({ emoji, on }, i) => (
           <button
-            onClick={() => handleSelect(item.optionA)}
-            className="flex items-center justify-center select-none active:scale-110"
+            key={i}
+            onClick={() => handleSelect(emoji)}
+            className="flex items-center justify-center select-none active:scale-95"
             style={{
-              transform: isA ? "scale(1.2)" : "scale(1)",
-              transition: "transform 0.15s ease",
+              width: 112,
+              height: 112,
+              borderRadius: 16,
+              backgroundColor: `color-mix(in srgb, var(--dynamic-fg, #fff) ${on ? 16 : 7}%, transparent)`,
+              border: `1px solid color-mix(in srgb, var(--dynamic-fg, #fff) ${on ? 55 : 14}%, transparent)`,
+              backdropFilter: "blur(14px)",
+              WebkitBackdropFilter: "blur(14px)",
+              transform: on ? "scale(1.06)" : "scale(1)",
+              transition: "transform 0.15s ease, background-color 0.15s ease, border-color 0.15s ease",
             }}
           >
-            <span style={{ fontSize: 72, lineHeight: 1 }}>{item.optionA}</span>
+            <span style={{ fontSize: 64, lineHeight: 1 }}>{emoji}</span>
           </button>
-
-          <button
-            onClick={() => handleSelect(item.optionB)}
-            className="flex items-center justify-center select-none active:scale-110"
-            style={{
-              transform: isB ? "scale(1.2)" : "scale(1)",
-              transition: "transform 0.15s ease",
-            }}
-          >
-            <span style={{ fontSize: 72, lineHeight: 1 }}>{item.optionB}</span>
-          </button>
-        </div>
+        ))}
       </div>
-
-      {/* Bottom spacer */}
-      <div className="flex-[3]" />
 
       {/* Sub-timer */}
       <div className="w-full h-[3px] rounded-full overflow-hidden mb-1" style={{ backgroundColor: "color-mix(in srgb, var(--dynamic-fg, #fff) 10%, transparent)" }}>

@@ -25,9 +25,10 @@ import { HotTakeQuestion } from "./hot-take-question";
 import { HotTakeVisualQuestion } from "./hot-take-visual-question";
 import { MediaReactionQuestion } from "./media-reaction-question";
 import { DeadDropScreen } from "./dead-drop-screen";
+import { MachineIntroScreen } from "./machine-intro-screen";
 import { resolveDeadDrop } from "./dead-drop-resolver";
 import { RafagaBurstQuestion } from "./rafaga-burst-question";
-import { VoiceQuestion } from "./voice-question";
+import { VoiceQuestion, type DetectorBudget } from "./voice-question";
 import { MayorMenorQuestion } from "./mayor-menor-question";
 
 interface Props {
@@ -39,11 +40,17 @@ interface Props {
   /** For media_reaction: setters needed for inline handler */
   setResultConfig: (cfg: { percentage: number; text: string }) => void;
   setScreen: (s: string) => void;
+  /** Carta de la máquina: qué le queda por mentir. */
+  detectorBudget?: DetectorBudget;
+  /** Tickets que lleva el jugador (para doble o nada). */
+  tickets?: number;
+  /** Lo que dejó una mano de mayor o menor: duplica/borra tickets o activa un multiplicador. */
+  onHand?: (r: { mode: "ladder" | "multiplier" | "double"; multiplier: number; busted: boolean; steps: number }) => void;
 }
 
 export function QuestionRenderer({
   question: q, questionIndex, pipeline, reactionText,
-  advanceWithMultiplierCheck, setResultConfig, setScreen,
+  advanceWithMultiplierCheck, setResultConfig, setScreen, detectorBudget, tickets = 0, onHand,
 }: Props) {
   const actionHint = getActionHint(q);
 
@@ -51,6 +58,19 @@ export function QuestionRenderer({
 
   if (q.type === "dead_drop") {
     pipeline.storeOnly(questionIndex, { type: "dead_drop", latencyMs: 0 });
+    if (q.machine) {
+      return (
+        <MachineIntroScreen
+          key={questionIndex}
+          title={q.title ?? q.firstLine}
+          lines={q.lines ?? []}
+          rules={q.rules}
+          speakText={q.speakText}
+          button={q.button}
+          onComplete={advanceWithMultiplierCheck}
+        />
+      );
+    }
     const resolved = resolveDeadDrop(q);
     return (
       <DeadDropScreen
@@ -145,16 +165,19 @@ export function QuestionRenderer({
         key={questionIndex}
         actionHint={actionHint}
         text={q.text}
+        speakText={q.speakText}
         speak={q.speak !== false}
         maxSeconds={q.maxSeconds ?? 20}
         answerType={q.answerType}
         optionA={q.optionA}
         optionB={q.optionB}
-        onDone={({ audio, mime, speechMs, latencyMs }) => {
+        detector={q.detector === true}
+        budget={detectorBudget}
+        onDone={({ audio, mime, speechMs, latencyMs, committed, decisionMs, text, meta }) => {
           if (!pipeline.acquireLock()) return;
           pipeline.markFirstAnswered();
           pipeline.captureLatency();
-          pipeline.submitStandard({ type: "voice", audio, mime, speechMs, latencyMs });
+          pipeline.submitStandard({ type: "voice", audio, mime, speechMs, latencyMs, committed, decisionMs, text, meta });
         }}
       />
     );
@@ -168,8 +191,12 @@ export function QuestionRenderer({
         position={questionIndex}
         questionId={(q as any).questionId || ""}
         secondsPerCard={q.secondsPerCard ?? 15}
+        mode={q.mode ?? "ladder"}
+        tickets={tickets}
+        allowPass={(q as any).alwaysWin !== true}
         onDone={({ multiplier, busted, steps }) => {
           if (!pipeline.acquireLock()) return;
+          onHand?.({ mode: q.mode ?? "ladder", multiplier, busted, steps });
           pipeline.markFirstAnswered();
           const latencyMs = pipeline.captureLatency();
           pipeline.submitStandard({ type: "mayor_menor", multiplier, busted, steps, latencyMs });
@@ -207,12 +234,12 @@ export function QuestionRenderer({
           optionA={q.optionA}
           optionB={q.optionB}
           maxTickets={q.maxTickets}
-          onConfirm={(option, _bet) => {
+          onConfirm={(option, bet) => {
             if (!pipeline.acquireLock()) return;
             pipeline.markFirstAnswered();
             const latencyMs = pipeline.captureLatency();
             const side = option === q.optionA ? "A" : "B";
-            pipeline.submitStandard({ type: "prediction_bet", side: side as "A" | "B", latencyMs });
+            pipeline.submitStandard({ type: "prediction_bet", side: side as "A" | "B", latencyMs, meta: { bet } });
           }}
         />
       )}
@@ -222,11 +249,11 @@ export function QuestionRenderer({
           actionHint={actionHint}
           text={q.text}
           options={q.options}
-          onConfirm={(ranked) => {
+          onConfirm={(ranked, detail) => {
             if (!pipeline.acquireLock()) return;
             pipeline.markFirstAnswered();
             const latencyMs = pipeline.captureLatency();
-            pipeline.submitWithDelay({ type: "ranking", order: ranked, latencyMs }, 300);
+            pipeline.submitWithDelay({ type: "ranking", order: ranked, latencyMs, meta: detail }, 300);
           }}
         />
       )}
@@ -253,11 +280,11 @@ export function QuestionRenderer({
           max={q.max}
           labelLeft={q.labelLeft}
           labelRight={q.labelRight}
-          onConfirm={(value) => {
+          onConfirm={(value, detail) => {
             if (!pipeline.acquireLock()) return;
             pipeline.markFirstAnswered();
             const latencyMs = pipeline.captureLatency();
-            pipeline.submitStandard({ type: "slider", value, latencyMs });
+            pipeline.submitStandard({ type: "slider", value, latencyMs, meta: detail });
           }}
         />
       )}
@@ -386,7 +413,7 @@ export function QuestionRenderer({
           promptBold={q.promptBold}
           items={rafagaItems}
           secondsPerItem={q.secondsPerItem}
-          onComplete={(answers) => {
+          onComplete={(answers, itemLatencyMs) => {
             if (!pipeline.acquireLock()) return;
             pipeline.markFirstAnswered();
             const latencyMs = pipeline.captureLatency();
@@ -399,7 +426,7 @@ export function QuestionRenderer({
               if (a === optB) return "B";
               return null;
             });
-            pipeline.submitStandard({ type: "rafaga", answers: abAnswers, latencyMs });
+            pipeline.submitStandard({ type: "rafaga", answers: abAnswers, latencyMs, meta: { item_latency_ms: itemLatencyMs } });
           }}
         />
       )}
