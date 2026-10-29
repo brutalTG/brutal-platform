@@ -366,6 +366,8 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
 
   // --- Multiplier ---
   const [currentMultiplier, setCurrentMultiplier] = useState(1);
+  // Plata ganada que no se acreditó porque la edad no está verificada.
+  const [cashPending, setCashPending] = useState(0);
   const [pendingMultiplier, setPendingMultiplier] = useState<{ multiplier: number; label: string } | null>(null);
   const [trapPenaltyValue, setTrapPenaltyValue] = useState(0);
 
@@ -642,20 +644,24 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
         multiplier={currentMultiplier}
         bonusTickets={bonusTickets}
         isMinor={isMinor}
+        cashPending={cashPending}
         onClaim={() => { setScreen("profile"); }}
         onClaimRewards={async () => {
           try {
             await waitForUpload();
             if (getStandaloneAccessToken()) {
-              const result = await claimRewards({
-                dropId: drop.id,
-                coins: coins, 
-                tickets: tickets, 
-                finalTickets: finalTickets,
-                multiplier: currentMultiplier,
-              });
-              console.log("[BRUTAL] Claim rewards result:", result);
-              return result.ok;
+              // Se acredita solo apenas aparece esta pantalla: si el servidor todavía está cerrando la partida, reintenta.
+              for (let i = 0; i < 5; i++) {
+                try {
+                  const result = await claimRewards({ dropId: drop.id, coins, tickets, finalTickets, multiplier: currentMultiplier });
+                  console.log("[BRUTAL] Claim rewards result:", result);
+                  setCashPending(Number(result.cashPending) || 0);
+                  return result.ok;
+                } catch (e) {
+                  if (i === 4) throw e;
+                  await new Promise((r) => setTimeout(r, 1200 * (i + 1)));
+                }
+              }
             }
             return true;
           } catch (err) {

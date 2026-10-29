@@ -129,14 +129,15 @@ export async function joinShared(b: { code?: unknown; client?: unknown; source?:
 }
 
 // ---------- Nodo ----------
-type Node = { id: string; status: string; nickname: string | null; age: number | null; is_minor: boolean; province: string | null; birth_date: string | null; pseudonym_id: string };
+type Node = { id: string; status: string; nickname: string | null; age: number | null; is_minor: boolean; adult_verified: boolean; province: string | null; birth_date: string | null; pseudonym_id: string };
 
 async function nodeOf(nodeId: string): Promise<Node> {
   const n = await must(from('core', 'nodes').select('id, status, nickname, birth_date, province').eq('id', nodeId).maybeSingle(), 'nodo') as any;
   if (!n) throw new HttpError(404, 'node_not_found', 'Node not found');
   const f = await must(from('core', 'node_facts').select('age, is_minor').eq('id', nodeId).maybeSingle(), 'datos del nodo') as any;
   const ps = await must(from('core', 'node_pseudonyms').select('pseudonym_id').eq('node_id', nodeId).single(), 'seudónimo') as any;
-  return { ...n, age: f?.age ?? null, is_minor: Boolean(f?.is_minor), pseudonym_id: ps.pseudonym_id };
+  // Plata solo a mayores verificados: sin edad cargada (ej. jugadores del link de grupo) no se acredita efectivo.
+  return { ...n, age: f?.age ?? null, is_minor: Boolean(f?.is_minor), adult_verified: f?.is_minor === false, pseudonym_id: ps.pseudonym_id };
 }
 
 const playable = (n: Node, test: boolean) => test || ['active', 'pending'].includes(n.status);
@@ -427,7 +428,7 @@ export async function claimDrop(a: Access, body: { dropId?: string; drop_id?: st
     return { ok: true, alreadyClaimed: false, test: true, credited: { usd: node.is_minor ? 0 : total.usd, coins: node.is_minor ? 0 : total.usd, tickets: total.tickets } };
   }
   const entries = [
-    total.usd > 0 && !node.is_minor && { currency: 'cash_usd', amount: total.usd, key: `drop_cash:${s.id}` },
+    total.usd > 0 && node.adult_verified && { currency: 'cash_usd', amount: total.usd, key: `drop_cash:${s.id}` },
     total.tickets > 0 && { currency: 'tickets', amount: total.tickets, key: `drop_tickets:${s.id}` },
   ].filter(Boolean) as { currency: string; amount: number; key: string }[];
   for (const e of entries) {
@@ -438,13 +439,15 @@ export async function claimDrop(a: Access, body: { dropId?: string; drop_id?: st
     if (error && !error.message.includes('idempotency_key')) throw new HttpError(409, 'claim_failed', error.message);
   }
   await from('drops', 'sessions').update({ claimed_at: new Date().toISOString() }).eq('id', s.id).is('claimed_at', null);
-  const usd = node.is_minor ? 0 : total.usd;
+  const usd = node.adult_verified ? total.usd : 0;
+  // Ganó plata pero no tiene la edad verificada: queda pendiente hasta que la confirme.
+  const cashPending = !node.adult_verified && !node.is_minor ? total.usd : 0;
   // Aviso por WhatsApp con lo ganado y el link al perfil. Si falla, la partida igual quedó cobrada.
   try {
     const link = await createDropsLink(node.id, { purpose: 'drop', destination: 'profile', hours: 168 });
     await queueDropResult(node.id, { drop: d.name ?? slug, usd, tickets: total.tickets, verdict: s.detector?.verdict ?? null, link: link.url });
   } catch (e) { console.error('aviso de resultado', e); }
-  return { ok: true, alreadyClaimed: false, credited: { usd, coins: usd, tickets: total.tickets } };
+  return { ok: true, alreadyClaimed: false, credited: { usd, coins: usd, tickets: total.tickets }, cashPending };
 }
 
 // ---------- Perfil, billetera, ranking ----------

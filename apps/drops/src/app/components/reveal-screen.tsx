@@ -19,6 +19,8 @@ interface RevealScreenProps {
   /** Lo que dio la máquina (se suma después del multiplicador; puede ser negativo). */
   bonusTickets?: number;
   isMinor?: boolean;
+  /** Plata ganada que queda guardada hasta que confirme su edad. */
+  cashPending?: number;
   onClaim: () => void;
   /** Async function that claims rewards on the server — called before animation */
   onClaimRewards: () => Promise<boolean>;
@@ -68,6 +70,7 @@ export function RevealScreen({
   multiplier,
   bonusTickets = 0,
   isMinor = false,
+  cashPending = 0,
   onClaim,
   onClaimRewards,
   onNotifyAndClose,
@@ -400,6 +403,12 @@ export function RevealScreen({
           {hasMultiplier && claimPhase === "done" && (
             <p className="font-['Fira_Code'] text-[11px] text-center -mt-1" style={{ color: "var(--dynamic-bg, #000)" }}>
               Tickets: {tickets.toLocaleString("es-AR")} × {multiplier.toFixed(2).replace(/\.?0+$/, "")}{bonusTickets !== 0 ? ` ${bonusTickets > 0 ? "+" : "−"} ${Math.abs(bonusTickets)} (la máquina)` : ""} = {finalTickets.toLocaleString("es-AR")}
+            </p>
+          )}
+
+          {cashPending > 0 && claimPhase === "done" && (
+            <p className="max-w-[290px] text-center font-['Roboto'] text-[13px] leading-snug" style={{ color: "var(--dynamic-bg, #000)" }}>
+              Los tickets ya son tuyos. La plata (US$ {cashPending.toFixed(2).replace(".", ",")}) queda guardada hasta que confirmes que sos mayor de edad.
             </p>
           )}
 

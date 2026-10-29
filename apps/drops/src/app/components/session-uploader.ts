@@ -389,7 +389,7 @@ export async function claimRewards(params: {
   tickets: number;
   finalTickets: number;
   multiplier?: number;
-}): Promise<{ ok: boolean; alreadyClaimed?: boolean; credited?: { coins: number; tickets: number; dropsCompleted: number } }> {
+}): Promise<{ ok: boolean; alreadyClaimed?: boolean; credited?: { coins: number; tickets: number; dropsCompleted: number }; cashPending?: number }> {
   console.log(`[BRUTAL] Claiming rewards: dropId=${params.dropId}, cash=${params.coins}, tickets=${params.finalTickets}`);
 
   const res = await fetch(`${API_BASE}/claim-rewards`, {
