@@ -99,3 +99,17 @@ footer img { height: 28px; width: auto; }
   .masthead nav { gap: 14px; }
 }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+/* Suscripción */
+.subscribe { background: var(--surface); border-radius: 20px; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 40px; margin-top: 64px; padding: 30px; }
+.subscribe span { color: var(--muted); text-transform: uppercase; font-size: 12px; letter-spacing: .02em; }
+.subscribe h3 { letter-spacing: -.045em; max-width: 680px; margin: 50px 0 14px; font-size: clamp(32px, 4vw, 54px); line-height: 1.05; }
+.subscribe p { max-width: 560px; color: var(--muted); font-size: 15px; line-height: 1.45; }
+.subscribe > a { color: #000; background: #fff; border-radius: 100px; display: inline-flex; justify-content: center; align-items: center; min-height: 48px; padding: 12px 22px; font-size: 14px; font-weight: 500; text-decoration: none; transition: transform .15s; white-space: nowrap; }
+.subscribe > a:hover { transform: scale(.98); }
+@media (max-width: 640px) {
+  .subscribe { grid-template-columns: 1fr; gap: 28px; padding: 24px; }
+  .subscribe h3 { margin-top: 36px; font-size: 32px; }
+  .subscribe > a { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) { .subscribe > a { transition: none; } }

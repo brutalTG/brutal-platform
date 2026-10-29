@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { briefs, findBrief } from '@/content/briefs';
+import { Subscribe } from '@/components/subscribe';
 
 type Params = { params: Promise<{ slug: string }> };
 
@@ -20,5 +21,5 @@ export default async function BriefPage({ params }: Params) {
   const b = findBrief(slug);
   if (!b?.Component) notFound();
   const C = b.Component;
-  return <main><C /></main>;
+  return <main><C /><Subscribe /></main>;
 }
