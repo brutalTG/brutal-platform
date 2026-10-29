@@ -31,19 +31,33 @@ export function preloadVoices(texts: string[]) {
   for (const t of new Set(texts.filter(Boolean))) voiceUrl(t);
 }
 
+let playing: { el: HTMLAudioElement; done: () => void } | null = null;
+let generation = 0;
+
+/** Corta la voz si está hablando (cuando el jugador ya contesta o se va de la carta). */
+export function stopSpeaking() {
+  generation++;
+  if (playing) { try { playing.el.pause(); } catch {} playing.done(); playing = null; }
+  try { if (typeof speechSynthesis !== "undefined") speechSynthesis.cancel(); } catch {}
+}
+
 /** Dice la frase y espera a que termine. Sin audio: la voz del teléfono; si tampoco hay, sigue. */
 export async function say(text: string) {
+  const mine = ++generation;
   const url = await voiceUrl(text);
+  if (mine !== generation) return; // ya la cortaron mientras bajaba
   if (url) {
     const el = new Audio(url);
     const ok = await new Promise<boolean>((resolve) => {
+      playing = { el, done: () => resolve(true) };
       el.onended = () => resolve(true);
       el.onerror = () => resolve(false);
       el.play().catch(() => resolve(false));
     });
-    if (ok) return;
+    if (playing?.el === el) playing = null;
+    if (ok || mine !== generation) return;
   }
-  if (typeof speechSynthesis === "undefined") return;
+  if (typeof speechSynthesis === "undefined" || mine !== generation) return;
   await new Promise<void>((resolve) => {
     const u = new SpeechSynthesisUtterance(text);
     u.lang = "es-AR";

@@ -4,7 +4,7 @@ import { from, must } from './db';
 import { newCode, sha256, signToken, verifyToken } from './crypto';
 import { HttpError } from './http';
 import {
-  applyDetector, birthDateFromAge, cleanNickname, cleanSource, refSource, computeClaim, guestPhone, joinConfig, consistencyOf, detectorConfig, detectorLabel, detectorOutcome, detectorReason, voiceScript, displayReward, firstCardDraw, hiloLadder, hiloMode, hiloStep, hiloView, multiplierFor, normalizeWallet, observationOf, parseLocation, POLICY,
+  applyDetector, birthDateFromAge, cleanNickname, cleanSource, cleanTypedAnswer, refSource, computeClaim, guestPhone, joinConfig, consistencyOf, detectorConfig, detectorLabel, detectorOutcome, detectorReason, voiceScript, displayReward, firstCardDraw, hiloLadder, hiloMode, hiloStep, hiloView, winningDraw, multiplierFor, normalizeWallet, observationOf, parseLocation, POLICY,
   resolveReward, sessionMultiplier, type AnswerBody, type DetectorItem, type DetectorResult, type DetectorVerdictOut, type Hand, type HiloAction, type VoiceAnswer,
 } from './drops-game';
 import { countFillers, parseAnswer } from './game';
@@ -568,7 +568,10 @@ export async function dropHilo(a: Access, b: { session_id?: string; position?: n
   const ladder = hiloLadder(q.content);
   const row = await must(from('drops', 'hilo_hands').select('cards, decisions, status, multiplier').eq('session_id', s.id).eq('position', b.position!).maybeSingle(), 'mano') as any;
   const current: Hand | null = row ? { cards: row.cards, decisions: row.decisions, status: row.status, multiplier: Number(row.multiplier) } : null;
-  const next = hiloStep(current, action, ladder, undefined, typeof b.at_step === 'number' ? b.at_step : undefined, firstCardDraw(q.content));
+  // Mano a favor: la carta que sale siempre le da la razón al jugador.
+  const rigged = q.content?.alwaysWin === true && current && (action === 'higher' || action === 'lower')
+    ? winningDraw(current.cards[current.cards.length - 1], action) : undefined;
+  const next = hiloStep(current, action, ladder, rigged, typeof b.at_step === 'number' ? b.at_step : undefined, firstCardDraw(q.content));
   if (!row) {
     const { error } = await from('drops', 'hilo_hands').insert({ session_id: s.id, position: b.position, question_id: q.id, cards: next.cards, decisions: next.decisions, status: next.status, multiplier: next.multiplier });
     if (error) return dropHilo(a, { ...b, action: 'start' }); // otra pestaña la arrancó recién
@@ -611,8 +614,19 @@ export async function recordVoice(a: Access, form: FormData) {
     const wf = wordFeatures(words);
     voice = {
       transcript, stated: parsed.kind, number: 'value' in parsed ? (parsed as any).value : null, audio_path: path ? `${DROPS_AUDIO}/${path}` : null,
-      speech_ms: Number(form.get('speech_ms')) || null, words: wf.words, first_word_ms: wf.first_word_ms,
+      speech_ms: Number(form.get('speech_ms')) || null, words: wf.words, first_word_ms: wf.first_word_ms, mode: 'audio',
     };
+  } else {
+    // Contestó escribiendo: se guarda igual que una transcripción, marcada como texto.
+    const typed = cleanTypedAnswer(form.get('text'));
+    if (typed) {
+      const type = (['choice', 'yes_no', 'agree', 'number', 'open'].includes(q.content?.answerType) ? q.content.answerType : 'open') as any;
+      const parsed = parseAnswer(type, typed, type === 'choice' ? { a: String(q.content?.optionA ?? ''), b: String(q.content?.optionB ?? '') } : undefined);
+      voice = {
+        transcript: typed, stated: parsed.kind, number: 'value' in parsed ? (parsed as any).value : null, audio_path: null,
+        speech_ms: null, words: typed.split(' ').length, first_word_ms: null, mode: 'text',
+      };
+    }
   }
   // Carta de la máquina: la marca secreta (verdad o mentira) y cuánto tardó en decidirla.
   if (q.content?.detector === true) {

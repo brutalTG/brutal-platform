@@ -16,9 +16,9 @@ const SUITS = ["s", "h", "d", "c"];
 const NAMES: Record<number, string> = { 1: "As", 11: "J", 12: "Q", 13: "K" };
 const src = (v: number, s: string) => `/cards/${v}${s}.webp`;
 
-export function MayorMenorQuestion({ text, position, questionId, secondsPerCard = 15, mode = "ladder", tickets = 0, onDone }: {
+export function MayorMenorQuestion({ text, position, questionId, secondsPerCard = 15, mode = "ladder", tickets = 0, allowPass = true, onDone }: {
   text?: string; position: number; questionId: string; secondsPerCard?: number;
-  mode?: "ladder" | "multiplier" | "double"; tickets?: number;
+  mode?: "ladder" | "multiplier" | "double"; tickets?: number; allowPass?: boolean;
   onDone: (r: { multiplier: number; busted: boolean; steps: number }) => void;
 }) {
   const [view, setView] = useState<View | null>(null);
@@ -152,7 +152,7 @@ export function MayorMenorQuestion({ text, position, questionId, secondsPerCard 
               <button disabled={busy} onClick={() => act("lower")} className="h-14 flex-1 rounded-full text-lg font-bold active:scale-95" style={{ backgroundColor: ink, color: "var(--dynamic-fg, #fff)" }}>Menor 👎</button>
             </div>
             {!single && view.step > 0 && <ActionButton label={`Me planto en x${view.multiplier}`} onClick={() => act("stand")} variant="pill" />}
-            {mode === "double" && stakeTickets > 0 && <ActionButton label="Paso, me quedo con lo que tengo" onClick={() => act("stand")} variant="pill" />}
+            {mode === "double" && allowPass && stakeTickets > 0 && <ActionButton label="Paso, me quedo con lo que tengo" onClick={() => act("stand")} variant="pill" />}
             {view.step === 0 && <p className="text-center font-['Fira_Code'] text-[11px]" style={{ color: ink }}>{single ? "Empate cuenta como acierto." : `Empate cuenta como acierto. Si acertás, pasás a x${nextMult}.`}</p>}
           </div>
         )}

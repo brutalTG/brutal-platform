@@ -64,7 +64,15 @@ export type VoiceAnswer = {
   transcript: string; stated: string | null; number: number | null; audio_path: string | null; speech_ms: number | null; words: number; first_word_ms: number | null;
   /** Carta de la máquina: qué marcó en secreto y cuánto tardó en decidirlo. */
   committed?: 'truth' | 'lie'; decision_ms?: number | null;
+  /** Cómo contestó la carta de voz: hablando o escribiendo. */
+  mode?: 'audio' | 'text';
 };
+
+/** Respuesta escrita en una carta de voz: sin espacios de más, hasta 500 letras; vacía = no contestó. */
+export function cleanTypedAnswer(raw: unknown): string | null {
+  const t = String(raw ?? '').replace(/\s+/g, ' ').trim().slice(0, 500);
+  return t || null;
+}
 export type HiloResult = { status: string; multiplier: number; steps: number; cards: number[]; decisions: string[] };
 
 export type AnswerBody = {
@@ -199,6 +207,16 @@ export function hiloLadder(content: { mode?: unknown; ladder?: unknown } | null 
   const raw = Array.isArray(content?.ladder) && content.ladder.length && content.ladder.every((x: unknown) => Number(x) > 1) ? content.ladder.map(Number).slice(0, 8) : HILO_LADDER;
   return mode === 'multiplier' ? raw.slice(0, 1) : raw;
 }
+/**
+ * Mano arreglada a favor: si la carta tiene `alwaysWin`, la carta que sale siempre le da la razón al jugador
+ * (mayor si dijo mayor, menor si dijo menor). Sirve para que la primera mano se gane y enganche.
+ */
+export function winningDraw(current: number, guess: string, rnd: () => number = Math.random) {
+  const lo = guess === 'higher' ? current : 1;
+  const hi = guess === 'higher' ? 13 : current;
+  return () => lo + Math.floor(rnd() * (hi - lo + 1));
+}
+
 /** Primera carta: si la carta pide un rango (ej. [6, 9]), sale de ahí para que la apuesta sea pareja. */
 export function firstCardDraw(content: { firstCard?: unknown } | null | undefined, rnd: () => number = Math.random) {
   const r = content?.firstCard;

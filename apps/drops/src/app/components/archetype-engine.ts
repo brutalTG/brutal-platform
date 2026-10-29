@@ -82,7 +82,7 @@ export type UserAnswer = (
   | { type: "dead_drop"; latencyMs?: number }
   | { type: "hot_take"; selectedIndex: number; latencyMs?: number }
   | { type: "timeout"; latencyMs?: number }
-  | { type: "voice"; audio: Blob | null; mime: string; speechMs?: number; latencyMs?: number; committed?: "truth" | "lie"; decisionMs?: number }
+  | { type: "voice"; audio: Blob | null; mime: string; speechMs?: number; latencyMs?: number; committed?: "truth" | "lie"; decisionMs?: number; text?: string }
   | { type: "mayor_menor"; multiplier: number; busted: boolean; steps: number; latencyMs?: number }
 ) & {
   /** Detalle fino para la señal (latencia por ítem, toques, correcciones, apuesta, salidas de la app). */

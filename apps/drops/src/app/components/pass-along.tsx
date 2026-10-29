@@ -23,7 +23,7 @@ export function passAlongLink(): string | null {
   return s ? `${window.location.origin}/j/${encodeURIComponent(s.code)}?de=${encodeURIComponent(s.ref)}` : null;
 }
 
-export function PassAlongButton() {
+export function PassAlongButton({ primary = false, label = "Pasáselo a alguien" }: { primary?: boolean; label?: string } = {}) {
   const s = shareInfo();
   const link = passAlongLink();
   if (!s || !link) return null;
@@ -43,10 +43,14 @@ export function PassAlongButton() {
   return (
     <button
       onClick={go}
-      className="mt-3 h-[52px] w-full max-w-[290px] rounded-full border-2 font-['Roboto'] text-[16px] font-bold active:scale-[0.98]"
-      style={{ borderColor: "var(--dynamic-fg, #fff)", color: "var(--dynamic-fg, #fff)" }}
+      className={primary
+        ? "h-[60px] w-full max-w-[290px] rounded-full font-['Roboto'] text-[20px] font-bold active:scale-[0.98]"
+        : "mt-3 h-[52px] w-full max-w-[290px] rounded-full border-2 font-['Roboto'] text-[16px] font-bold active:scale-[0.98]"}
+      style={primary
+        ? { backgroundColor: "var(--dynamic-bg, #000)", color: "var(--dynamic-fg, #fff)" }
+        : { borderColor: "var(--dynamic-fg, #fff)", color: "var(--dynamic-fg, #fff)" }}
     >
-      Pasáselo a alguien
+      {label}
     </button>
   );
 }

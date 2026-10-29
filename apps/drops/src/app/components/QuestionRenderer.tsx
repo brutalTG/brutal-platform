@@ -173,11 +173,11 @@ export function QuestionRenderer({
         optionB={q.optionB}
         detector={q.detector === true}
         budget={detectorBudget}
-        onDone={({ audio, mime, speechMs, latencyMs, committed, decisionMs }) => {
+        onDone={({ audio, mime, speechMs, latencyMs, committed, decisionMs, text, meta }) => {
           if (!pipeline.acquireLock()) return;
           pipeline.markFirstAnswered();
           pipeline.captureLatency();
-          pipeline.submitStandard({ type: "voice", audio, mime, speechMs, latencyMs, committed, decisionMs });
+          pipeline.submitStandard({ type: "voice", audio, mime, speechMs, latencyMs, committed, decisionMs, text, meta });
         }}
       />
     );
@@ -193,6 +193,7 @@ export function QuestionRenderer({
         secondsPerCard={q.secondsPerCard ?? 15}
         mode={q.mode ?? "ladder"}
         tickets={tickets}
+        allowPass={(q as any).alwaysWin !== true}
         onDone={({ multiplier, busted, steps }) => {
           if (!pipeline.acquireLock()) return;
           onHand?.({ mode: q.mode ?? "ladder", multiplier, busted, steps });

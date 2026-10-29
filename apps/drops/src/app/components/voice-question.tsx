@@ -1,5 +1,6 @@
 // ============================================================
-// PREGUNTA POR VOZ — se lee (o la dice la voz de BRUTAL) y se contesta hablando.
+// PREGUNTA POR VOZ — se lee (o la dice la voz de BRUTAL) y se contesta escribiendo o hablando.
+// Por defecto hay una caja de texto; "Prefiero mandar un audio" abre el micrófono.
 // El audio sube con la respuesta; el servidor lo transcribe y lo guarda en privado.
 // ============================================================
 
@@ -7,10 +8,10 @@ import { useEffect, useRef, useState } from "react";
 import { Mic, Square } from "lucide-react";
 import { DuotoneCard, CardTitle, ActionButton } from "./brutal-ui";
 import { hapticMedium } from "./haptics";
-import { say } from "./voice-cache";
+import { say, stopSpeaking } from "./voice-cache";
 import { Polygraph, type PolygraphHandle } from "./polygraph";
 
-type Done = { audio: Blob | null; mime: string; speechMs: number; latencyMs: number; committed?: "truth" | "lie"; decisionMs?: number };
+type Done = { audio: Blob | null; mime: string; speechMs: number; latencyMs: number; committed?: "truth" | "lie"; decisionMs?: number; text?: string; meta?: Record<string, unknown> };
 
 /** Carta de la máquina: qué puede marcar el jugador en esta carta. */
 export type DetectorBudget = { mustLie: boolean; mustTell: boolean; remainingLies: number; remainingItems: number };
@@ -27,7 +28,13 @@ export function VoiceQuestion({ actionHint, text, speakText, speak = true, maxSe
   onDone: (d: Done) => void;
 }) {
   // Carta de la máquina: después de escuchar, primero decide ("commit") y recién entonces aparece el micrófono.
-  const [phase, setPhase] = useState<"ready" | "speaking" | "commit" | "recording" | "denied" | "sending">(speak ? "speaking" : detector ? "commit" : "ready");
+  const [phase, setPhase] = useState<"ready" | "speaking" | "commit" | "recording" | "denied" | "sending">(detector ? (speak ? "speaking" : "commit") : "ready");
+  // Cartas comunes: se contesta escribiendo (por defecto) o con audio.
+  const [mode, setMode] = useState<"text" | "audio">("text");
+  const [typed, setTyped] = useState("");
+  const [talking, setTalking] = useState(speak);
+  const firstKey = useRef<number | null>(null);
+  const switches = useRef(0);
   const [level, setLevel] = useState(0);
   const [left, setLeft] = useState(maxSeconds);
   const shownAt = useRef(performance.now());
@@ -37,8 +44,12 @@ export function VoiceQuestion({ actionHint, text, speakText, speak = true, maxSe
 
   useEffect(() => {
     let alive = true;
-    if (speak) say(speakText || text).finally(() => { if (alive) { setPhase((p) => (p === "speaking" ? (detector ? "commit" : "ready") : p)); shownAt.current = performance.now(); } });
-    return () => { alive = false; rec.current?.stop(); };
+    if (speak) say(speakText || text).finally(() => {
+      if (!alive) return;
+      setTalking(false);
+      if (detector) { setPhase((p) => (p === "speaking" ? "commit" : p)); shownAt.current = performance.now(); }
+    });
+    return () => { alive = false; rec.current?.stop(); stopSpeaking(); };
   }, [speak, text, speakText, detector]);
 
   function commit(value: "truth" | "lie") {
@@ -48,11 +59,23 @@ export function VoiceQuestion({ actionHint, text, speakText, speak = true, maxSe
     setPhase("ready");
   }
 
+  const modeMeta = () => ({ answer_mode: mode, mode_switches: switches.current, ...(firstKey.current != null ? { first_key_ms: firstKey.current } : {}) });
   const finish = (d: Omit<Done, "committed" | "decisionMs">) =>
-    onDone(committed.current ? { ...d, committed: committed.current.value, decisionMs: committed.current.decisionMs } : d);
+    onDone(committed.current ? { ...d, committed: committed.current.value, decisionMs: committed.current.decisionMs } : { ...d, meta: { ...modeMeta(), ...(d.meta ?? {}) } });
+
+  function sendText() {
+    const t = typed.trim();
+    if (!t) return;
+    hapticMedium();
+    stopSpeaking();
+    setPhase("sending");
+    finish({ audio: null, mime: "", speechMs: 0, latencyMs: Math.round(performance.now() - shownAt.current), text: t });
+  }
+  function switchTo(m: "text" | "audio") { switches.current++; setMode(m); if (m === "audio") stopSpeaking(); }
 
   async function start() {
     hapticMedium();
+    stopSpeaking();
     const latencyMs = Math.round(performance.now() - shownAt.current);
     let stream: MediaStream;
     try {
@@ -185,69 +208,81 @@ export function VoiceQuestion({ actionHint, text, speakText, speak = true, maxSe
     );
   }
 
+  const ink = "var(--dynamic-bg, #000)";
+  const paper = "var(--dynamic-fg, #fff)";
+  const linkBtn = "mt-3 w-full text-center font-['Roboto'] text-[15px] font-semibold underline underline-offset-4 active:opacity-60";
+
   return (
     <div className="flex flex-col flex-1 gap-6">
-      <DuotoneCard hint={actionHint}>
+      <DuotoneCard hint={mode === "text" ? "Escribí" : "Hablá"}>
         <CardTitle>{text}</CardTitle>
         {options && (
           <div className="mb-5 flex w-full gap-2">
             {options.map((o) => (
-              <div key={o} className="flex-1 rounded-2xl px-3 py-3 text-center font-['Roboto'] text-base font-bold" style={{ border: "2px solid var(--dynamic-bg, #000)", color: "var(--dynamic-bg, #000)" }}>{o}</div>
+              <div key={o} className="flex-1 rounded-2xl px-3 py-3 text-center font-['Roboto'] text-base font-bold" style={{ border: `2px solid ${ink}`, color: ink }}>{o}</div>
             ))}
           </div>
         )}
 
-        {phase === "speaking" && <p className="mb-4 font-['Fira_Code'] text-sm" style={{ color: "var(--dynamic-bg, #000)", opacity: 0.6 }}>Escuchá…</p>}
-
-        {phase === "commit" && (
-          <div className="flex w-full flex-col items-center gap-3">
-            <p className="font-['Fira_Code'] text-xs uppercase tracking-[0.2em]" style={{ color: "var(--dynamic-bg, #000)", opacity: 0.7 }}>
-              {budget?.mustLie ? "Te queda la mentira. Es esta." : budget?.mustTell ? "Ya mentiste. Esta va con la verdad." : "Antes de hablar, decidí en secreto"}
-            </p>
-            <div className="flex w-full gap-2">
-              {!budget?.mustLie && (
-                <button onClick={() => commit("truth")} className="flex-1 rounded-2xl px-3 py-4 font-['Roboto'] text-base font-bold uppercase active:scale-95"
-                  style={{ backgroundColor: "var(--dynamic-bg, #000)", color: "var(--dynamic-fg, #fff)" }}>Verdad</button>
-              )}
-              {!budget?.mustTell && (
-                <button onClick={() => commit("lie")} className="flex-1 rounded-2xl px-3 py-4 font-['Roboto'] text-base font-bold uppercase active:scale-95"
-                  style={{ border: "2px solid var(--dynamic-bg, #000)", color: "var(--dynamic-bg, #000)" }}>Mentira</button>
-              )}
-            </div>
-            {!budget?.mustLie && !budget?.mustTell && budget && (
-              <p className="font-['Fira_Code'] text-[11px]" style={{ color: "var(--dynamic-bg, #000)", opacity: 0.6 }}>
-                {budget.remainingLies === 1 ? "Te queda 1 mentira" : `Te quedan ${budget.remainingLies} mentiras`} en {budget.remainingItems} cartas.
-              </p>
-            )}
+        {mode === "text" && phase !== "sending" && (
+          <div className="flex w-full flex-col">
+            <textarea
+              value={typed}
+              onChange={(e) => { if (firstKey.current == null) firstKey.current = Math.round(performance.now() - shownAt.current); setTyped(e.target.value.slice(0, 500)); }}
+              rows={3}
+              maxLength={500}
+              placeholder="Escribí tu respuesta"
+              className="w-full resize-none rounded-2xl px-4 py-3 font-['Roboto'] text-[17px] leading-snug outline-none"
+              style={{ border: `2px solid ${ink}`, color: ink, backgroundColor: "transparent" }}
+            />
+            <button
+              onClick={sendText}
+              disabled={!typed.trim()}
+              className="mt-3 h-[54px] w-full rounded-full font-['Roboto'] text-[17px] font-bold active:scale-[0.98] disabled:opacity-40"
+              style={{ backgroundColor: ink, color: paper }}
+            >
+              Mandar
+            </button>
+            <button onClick={() => switchTo("audio")} className={linkBtn} style={{ color: ink }}>
+              Prefiero mandar un audio
+            </button>
           </div>
         )}
 
-        {phase === "ready" && (
-          <button onClick={start} className="mb-2 flex size-24 items-center justify-center rounded-full active:scale-95" style={{ backgroundColor: "var(--dynamic-bg, #000)", color: "var(--dynamic-fg, #fff)" }} aria-label="Tocá y hablá">
-            <Mic size={40} />
-          </button>
-        )}
-        {phase === "ready" && <p className="font-['Fira_Code'] text-sm" style={{ color: "var(--dynamic-bg, #000)" }}>Tocá y hablá</p>}
-
-        {phase === "recording" && (
+        {mode === "audio" && (
           <>
-            <button onClick={() => rec.current?.stop()} className="mb-2 flex size-24 items-center justify-center rounded-full" style={{ backgroundColor: "var(--dynamic-bg, #000)", color: "var(--dynamic-fg, #fff)", boxShadow: `0 0 0 ${8 + level * 26}px color-mix(in srgb, var(--dynamic-bg, #000) 22%, transparent)`, transition: "box-shadow 80ms linear" }} aria-label="Listo">
-              <Square size={32} fill="currentColor" />
-            </button>
-            <p className="font-['Fira_Code'] text-sm" style={{ color: "var(--dynamic-bg, #000)" }}>Te escucho · {left}s · tocá para terminar</p>
+            {phase === "ready" && (
+              <>
+                <button onClick={start} className="mb-2 flex size-24 items-center justify-center rounded-full active:scale-95" style={{ backgroundColor: ink, color: paper }} aria-label="Tocá y hablá">
+                  <Mic size={40} />
+                </button>
+                <p className="font-['Fira_Code'] text-sm" style={{ color: ink }}>Tocá y hablá</p>
+                <button onClick={() => switchTo("text")} className={linkBtn} style={{ color: ink }}>Mejor lo escribo</button>
+              </>
+            )}
+
+            {phase === "recording" && (
+              <>
+                <button onClick={() => rec.current?.stop()} className="mb-2 flex size-24 items-center justify-center rounded-full" style={{ backgroundColor: ink, color: paper, boxShadow: `0 0 0 ${8 + level * 26}px color-mix(in srgb, ${ink} 22%, transparent)`, transition: "box-shadow 80ms linear" }} aria-label="Listo">
+                  <Square size={32} fill="currentColor" />
+                </button>
+                <p className="font-['Fira_Code'] text-sm" style={{ color: ink }}>Te escucho · {left}s · tocá para terminar</p>
+              </>
+            )}
+
+            {phase === "denied" && (
+              <div className="flex w-full flex-col items-center gap-3">
+                <p className="text-center font-['Roboto'] text-sm" style={{ color: ink }}>No pudimos usar el micrófono. Escribila, es lo mismo.</p>
+                <ActionButton label="Escribirla" onClick={() => { setPhase("ready"); switchTo("text"); }} />
+              </div>
+            )}
           </>
         )}
 
-        {phase === "sending" && <p className="font-['Fira_Code'] text-sm" style={{ color: "var(--dynamic-bg, #000)" }}>Listo.</p>}
-
-        {phase === "denied" && (
-          <div className="flex w-full flex-col items-center gap-3">
-            <p className="text-center font-['Roboto'] text-sm" style={{ color: "var(--dynamic-bg, #000)" }}>No pudimos usar el micrófono. Habilitalo en el navegador o seguí sin responder esta.</p>
-            <ActionButton label="Seguir" onClick={() => finish({ audio: null, mime: "", speechMs: 0, latencyMs: Math.round(performance.now() - shownAt.current) })} />
-          </div>
-        )}
+        {phase === "sending" && <p className="font-['Fira_Code'] text-sm" style={{ color: ink }}>Listo.</p>}
+        {talking && phase !== "sending" && <p className="mt-3 font-['Fira_Code'] text-xs" style={{ color: ink, opacity: 0.6 }}>Te la está leyendo BRUTAL…</p>}
       </DuotoneCard>
-      <p className="text-center font-['Fira_Code'] text-[11px] opacity-60">{detector ? "La máquina escucha. Nadie más." : "Tu respuesta queda grabada."}</p>
+      <p className="text-center font-['Fira_Code'] text-[11px] opacity-60">{mode === "audio" ? "Tu audio queda grabado. Solo lo escucha BRUTAL." : "Tu respuesta queda guardada."}</p>
     </div>
   );
 }

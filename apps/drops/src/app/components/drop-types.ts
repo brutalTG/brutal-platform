@@ -411,8 +411,8 @@ export interface RevealScoringConfig {
 // --- The Drop ---
 
 export interface SplashConfig {
-  /** "terminal" = default typewriter mode, "image" = full-screen image/gif */
-  mode: "terminal" | "image";
+  /** "terminal" = default typewriter mode, "image" = full-screen image/gif, "none" = sin placa: entra directo a la primera carta */
+  mode: "terminal" | "image" | "none";
   /** Font family for terminal text and button. Available: Fira_Code, Silkscreen, Roboto */
   fontFamily?: string;
   /** Button text (default: "ENTRO") */

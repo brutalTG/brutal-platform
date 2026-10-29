@@ -229,3 +229,27 @@ test('origen del link: se limpia y el reenvío no expone al jugador', () => {
   assert.equal(cleanSource('x'.repeat(60))?.length, 40);
   assert.equal(refSource('6b69c8ff-3173-416e-ab9f-afd8014815d6'), 'r-6b69c8ff');
 });
+
+// ---------- Carta de voz contestada por escrito ----------
+import { cleanTypedAnswer } from './drops-game.ts';
+
+test('respuesta escrita en una carta de voz', () => {
+  assert.equal(cleanTypedAnswer('  Messi   y\n Milei '), 'Messi y Milei');
+  assert.equal(cleanTypedAnswer('   '), null);
+  assert.equal(cleanTypedAnswer(undefined), null);
+  assert.equal(cleanTypedAnswer('a'.repeat(900))?.length, 500);
+});
+
+// ---------- Mano a favor ----------
+import { winningDraw } from './drops-game.ts';
+
+test('mano a favor: la carta siempre le da la razón', () => {
+  for (const r of [0, 0.3, 0.999]) {
+    assert.ok(winningDraw(8, 'higher', () => r)() >= 8);
+    assert.ok(winningDraw(8, 'lower', () => r)() <= 8);
+    assert.ok(winningDraw(13, 'higher', () => r)() === 13);
+  }
+  const h = hiloStep(null, 'start', [2], () => 1, undefined, () => 7);
+  assert.equal(hiloStep(h, 'lower', [2], winningDraw(7, 'lower', () => 0.5)).status, 'stood');
+  assert.equal(hiloStep(h, 'higher', [2], winningDraw(7, 'higher', () => 0.5)).multiplier, 2);
+});

@@ -226,6 +226,7 @@ async function _sendResponse(
     }
     const vmeta = { ...(answer.meta ?? {}), ...(takeAway(index) ?? {}) };
     if (Object.keys(vmeta).length) form.append("meta", JSON.stringify(vmeta));
+    if (answer.text) form.append("text", answer.text);
     if (answer.audio) form.append("audio", answer.audio, `respuesta.${answer.mime.includes("mp4") ? "m4a" : "webm"}`);
     const headers = { ...authHeaders() } as Record<string, string>;
     delete headers["Content-Type"];

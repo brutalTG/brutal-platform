@@ -716,6 +716,7 @@ function TypeSpecificFields({
             />
           )}
           <NumberField label="Segundos para decidir cada carta" value={d.secondsPerCard ?? 15} onChange={(v) => onChange({ secondsPerCard: v } as any)} min={5} max={60} />
+          <ToggleField label="Esta mano siempre se gana" description="La carta que sale le da la razón al jugador. Sirve para la primera mano: engancha. No se puede pasar." value={(d as any).alwaysWin === true} onChange={(v) => onChange({ alwaysWin: v || undefined } as any)} />
           <p className="text-xs" style={{ color: "var(--p-text-faint)" }}>
             {mode === "double"
               ? "Doble o nada: si acierta, duplica los tickets que lleva hasta esta carta; si erra, los pierde. Puede pasar. No toca la plata."

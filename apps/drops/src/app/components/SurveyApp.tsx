@@ -347,8 +347,10 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
   const initialScreen = useMemo<ScreenType>(() => {
     const s = new URLSearchParams(window.location.search).get("screen");
     if (s === "profile" || s === "leaderboard") return s;
-    return "splash";
-  }, []);
+    // Sin placa de inicio: del apodo directo a la primera carta.
+    return drop.splash?.mode === "none" ? "countdown" : "splash";
+  }, [drop.splash?.mode]);
+  const skipIntro = drop.splash?.mode === "none";
 
   // --- Core state ---
   const [screen, setScreen] = useState<ScreenType>(initialScreen);
@@ -552,6 +554,20 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
     p.then((r) => setDetectorVerdict(r.detector)).catch(() => setDetectorVerdict(null));
   }, [screen, finalizeOnce]);
 
+  // Arranca la partida: limpia lo local, abre la sesión en el servidor y muestra la primera carta.
+  const startedRef = useRef(false);
+  const startPlaying = useCallback(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    resetRecords();
+    signalStartSession(drop.id, drop.name, "web");
+    serverStartSession(drop.id);
+    setScreen("question");
+  }, [drop.id, drop.name]);
+  useEffect(() => {
+    if (skipIntro && screen === "countdown") startPlaying();
+  }, [skipIntro, screen, startPlaying]);
+
   // ====== SCREEN RENDERING ======
 
   if (screen === "splash") {
@@ -567,16 +583,8 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
   }
 
   if (screen === "countdown") {
-    return (
-      <CountdownScreen
-        onComplete={() => {
-          resetRecords();
-          signalStartSession(drop.id, drop.name, "web");
-          serverStartSession(drop.id);
-          setScreen("question");
-        }}
-      />
-    );
+    if (skipIntro) return null; // arranca solo (ver efecto de arriba)
+    return <CountdownScreen onComplete={startPlaying} />;
   }
 
   if (screen === "timeout" || screen === "confession_secret") {
@@ -666,7 +674,7 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
             shareUrl={shareUrl}
           />
         }
-        passAlong={<PassAlongButton />}
+        passAlong={passAlongLink() ? <PassAlongButton primary label="Invitá a alguien" /> : undefined}
       />
     );
   }
