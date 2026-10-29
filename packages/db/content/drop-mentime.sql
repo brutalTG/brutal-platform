@@ -80,6 +80,7 @@ insert into mentime_cards values
   (4, 'mentime-g1-doble', 'mayor_menor', 'culture', 25, 0, 0, '{
     "text": "¿Doble o nada?",
     "mode": "double",
+    "alwaysWin": true,
     "firstCard": [
       6,
       9
@@ -229,7 +230,7 @@ select 'mentime', 'MENTIME QUE ME GUSTA', 'draft', (select id from economy.seaso
     'join', jsonb_build_object('code', 'mentime', 'open', true, 'max', 50),
     'voice', jsonb_build_object('voice_id', 'QK4xDwo9ESPHA4JNUpX3', 'fallback_voice_id', 'N6aRe3hk1YqaHDtQpTAH', 'model', 'eleven_multilingual_v2'),
     'splash', jsonb_build_object(
-      'mode', 'terminal', 'buttonText', 'ENTRO',
+      'mode', 'none', 'buttonText', 'ENTRO',
       'staticLines', jsonb_build_array('> DROP 001 · MENTIME QUE ME GUSTA', '> 20 cartas · 5 minutos', '> Paga hasta US$ 1,75 + Golden Tickets', '> Hay cartas de doble o nada'),
       'typewriterLines', jsonb_build_array(
         '> Dieciséis situaciones que ya viviste o vas a vivir.',
