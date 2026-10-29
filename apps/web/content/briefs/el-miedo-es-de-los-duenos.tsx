@@ -28,14 +28,14 @@ export default function Brief() {
 
         <p>Dos de cada tres la arman. Eso solo no dice mucho; lo que dice algo es el reloj. Aceptar y rechazar tardaron igual, lo que lleva leer la pantalla. La pantalla siguiente metía a un familiar entre los veinte y preguntaba si cambiaban: la respuesta llegó más rápido todavía, y para la mayoría de los que habían aceptado, no cambió. Nadie estaba peleando con nada. No es que la plata le haya ganado a la empatía: es que el puesto de un desconocido no pesaba, y el de un primo pesaba poco.</p>
 
-        <p>Después vino la voz, y las diez respuestas que llegaron enteras se parecen de un modo que no esperábamos.</p>
+        <p>Después vino la voz, con la pregunta del principio: qué parte de tu trabajo ya podría hacer una inteligencia artificial, y por qué todavía no te reemplazaron. Las diez respuestas que llegaron enteras se parecen de un modo que no esperábamos.</p>
 
-        <Voices items={[
+        <Voices prompt="Decí qué parte de tu laburo ya podría hacer una IA, y por qué todavía no te reemplazaron." items={[
           { quote: 'Nada. Soy reemplazable.', who: 'Miricleta' },
-          { quote: 'No me reemplazaron porque no se dieron cuenta, creo.', who: 'Arto' },
-          { quote: 'Casi todo podría ser, y no me rajaron todavía.', who: 'Alf' },
-          { quote: 'Es mucho de personas.', who: 'Marcos B' },
-          { quote: 'Mi trabajo se implica en la confianza y en estar presente.', who: 'Kulorex' },
+          { quote: 'No me reemplazaron porque no se dieron cuenta, creo. Pero ya hay avatares, influencers y demás.', who: 'Arto' },
+          { quote: 'Casi todo lo podría hacer, y todavía no me rajaron. Podría ser un chat.', who: 'Alf' },
+          { quote: 'Es un trabajo muy de personas.', who: 'Marcos B' },
+          { quote: 'Mi trabajo se basa en la confianza y en estar presente: la comunicación del día a día, la confianza que uno transmite, sobre todo cuando estás vendiendo.', who: 'Kulorex' },
         ]} />
 
         <p>Unos siguen en su puesto por descuido ajeno: no se dieron cuenta, no me rajaron todavía. Otros lo defienden, pero con lo que el trabajo es: personas, confianza, logística. Lo que no apareció en ninguna de las diez es la frase que cualquiera de nosotros habría dicho casi con fastidio: <em>porque soy bueno en esto</em>. Y tampoco apareció lo que habíamos ido a buscar. No hay miedo en esas voces. Hay algo más parecido a un parte meteorológico.</p>
@@ -60,7 +60,7 @@ export default function Brief() {
       </div>
 
       <Sources items={[
-        <>El juego: "Mentime que me gusta", 19 pantallas, 29 de octubre de 2026, por link de grupo. 36 personas lo abrieron, 15 lo terminaron, en una mediana de cuatro minutos y medio. Entraron con apodo; no se pidió edad ni lugar. Es un piloto.</>,
+        <>El juego: "Mentime que me gusta", 19 pantallas, 29 de octubre de 2026, por link de grupo. 36 personas lo abrieron, 15 lo terminaron, en una mediana de cuatro minutos y medio. Entraron con apodo; no se pidió edad ni lugar. Las respuestas habladas se transcribieron y se corrigieron para que se lean como se dijeron, sin cambiar lo que dicen. Es un piloto.</>,
         <>Informalidad en menores de 30: 58,4%, Invecq sobre INDEC, presentado en el 62º Coloquio de IDEA, Mar del Plata, 2 de octubre de 2026.</>,
         <>Ley 27.802 de Modernización Laboral, promulgada el 6 de marzo de 2026: Fondos de Asistencia Laboral con aportes mensuales del empleador; excluye a los prestadores de plataformas.</>,
       ]} />

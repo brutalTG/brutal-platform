@@ -26,9 +26,10 @@ export function Screen({ n, total, question, options, chosen, caption }: { n: nu
 }
 
 /** Lo que dijeron, con apodo. */
-export function Voices({ items }: { items: { quote: string; who: string }[] }) {
+export function Voices({ prompt, items }: { prompt?: string; items: { quote: string; who: string }[] }) {
   return (
     <div className="voices">
+      {prompt && <p className="voices-prompt"><span>La pregunta</span>{prompt}</p>}
       {items.map((v) => <div key={v.quote}><q>{v.quote}</q><span>{v.who}</span></div>)}
     </div>
   );
