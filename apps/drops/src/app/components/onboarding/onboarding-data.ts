@@ -12,7 +12,7 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
     phase: "intro",
     title: "Entrá a Brutal",
     subtitle:
-      "Cinco datos para empezar. Después te conocemos jugando.",
+      "Cinco datos y entrás directo al Drop.\nCada respuesta suma Golden Tickets para el ranking.",
   },
 
   // ── FASE A: DATOS DUROS ───────────────────────────────────
@@ -20,7 +20,7 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
     id: "nickname",
     type: "text_input",
     phase: "A",
-    copy: "Como te decimos?\nElegi un nombre. Puede ser el tuyo, puede ser inventado.",
+    copy: "¿Cómo te decimos?\nElegí un nombre. Puede ser el tuyo, puede ser inventado.",
     placeholder: "Tu apodo",
     maxLength: 20,
   },
@@ -28,7 +28,7 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
     id: "age",
     type: "age_selector",
     phase: "A",
-    copy: "Cuantos anos tenes?",
+    copy: "¿Cuántos años tenés?",
     min: 15,
     max: 35,
     rejectMessage:
@@ -38,19 +38,19 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
     id: "gender",
     type: "single_choice",
     phase: "A",
-    copy: "Como te identificas?",
+    copy: "¿Cómo te identificás?",
     options: ["Hombre", "Mujer", "No binario", "Prefiero no decir"],
   },
   {
     id: "location",
     type: "nested_choice",
     phase: "A",
-    copy: "Donde vivis?",
+    copy: "¿Dónde vivís?",
     options: [
       {
         label: "CABA",
         subOptions: [
-          "Palermo", "Recoleta", "Belgrano", "Caballito", "Nunez",
+          "Palermo", "Recoleta", "Belgrano", "Caballito", "Núñez",
           "Villa Urquiza", "Almagro", "San Telmo", "La Boca", "Flores",
           "Villa Devoto", "Otro barrio",
         ],
@@ -61,9 +61,9 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
       {
         label: "Interior",
         subOptions: [
-          "Buenos Aires (interior)", "Cordoba", "Santa Fe", "Mendoza",
-          "Tucuman", "Salta", "Entre Rios", "Misiones", "Chaco",
-          "Neuquen", "Rio Negro", "Otra provincia",
+          "Buenos Aires (interior)", "Córdoba", "Santa Fe", "Mendoza",
+          "Tucumán", "Salta", "Entre Ríos", "Misiones", "Chaco",
+          "Neuquén", "Río Negro", "Otra provincia",
         ],
       },
     ],
@@ -72,7 +72,7 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
     id: "platforms",
     type: "multi_select",
     phase: "A",
-    copy: "¿Qué usas todos los días?",
+    copy: "¿Qué usás todos los días?",
     options: [
       "TikTok",
       "Instagram",

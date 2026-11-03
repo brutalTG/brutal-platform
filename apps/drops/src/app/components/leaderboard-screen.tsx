@@ -6,6 +6,7 @@
 // season countdown, user's own profile stats, and claim button.
 // ============================================================
 
+import { CASH_ENABLED } from "./economy";
 import { useState, useEffect, useMemo } from "react";
 import svgPaths from "../../imports/svg-mcipxppzoz";
 import { fetchEconomyPolicy, fetchLeaderboard, fetchUserProfile } from "./reward-api";
@@ -289,10 +290,10 @@ export function LeaderboardScreen({ onBack, onProfile }: LeaderboardScreenProps)
 
               {/* Stats row */}
               <div className="flex items-center justify-between mt-3 gap-3">
-                <div className="flex-1">
+{CASH_ENABLED && (<div className="flex-1">
                   <p className="text-white/30 text-[9px] font-bold uppercase tracking-wider">{isMinor ? "Premios" : "Balance USD"}</p>
                   <p className="text-white font-['Fira_Code'] font-bold text-lg">{isMinor ? "Tickets" : `USD ${cashStr}`}</p>
-                </div>
+                </div>)}
                 <div className="flex-1 text-center">
                   <p className="text-white/30 text-[9px] font-bold uppercase tracking-wider">Tickets</p>
                   <p className="text-white font-['Fira_Code'] font-bold text-lg">
@@ -305,8 +306,8 @@ export function LeaderboardScreen({ onBack, onProfile }: LeaderboardScreenProps)
                 </div>
               </div>
 
-              {/* Claim button */}
-              <div className="mt-3">
+              {/* Claim button (solo si BRUTAL paga en plata) */}
+              {CASH_ENABLED && <div className="mt-3">
                 {isMinor ? (
                   <div className="w-full py-2.5 bg-yellow-400/[0.08] border border-yellow-400/20 text-yellow-200/60 text-xs font-bold rounded-full text-center">
                     Tu edad recibe Golden Tickets, no saldo en USD
@@ -326,7 +327,7 @@ export function LeaderboardScreen({ onBack, onProfile }: LeaderboardScreenProps)
                     </span>
                   </div>
                 )}
-              </div>
+              </div>}
             </div>
           </div>
         )}

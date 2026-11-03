@@ -39,6 +39,15 @@ export function IntroStepView({ step, onNext }: { step: IntroStep; onNext: () =>
       </p>
 
       <ActionButton label="EMPEZAR" onClick={onNext} variant="pill" className="max-w-[320px]" />
+
+      {/* Aviso de privacidad: lo que hacemos con las respuestas, antes de pedir el primer dato. */}
+      <p
+        className="font-['Fira_Code'] text-[11px] leading-relaxed text-center mt-6 opacity-60 max-w-[320px]"
+        style={{ color: "var(--dynamic-fg, #fff)" }}
+      >
+        Usamos tus respuestas para estudios sobre jóvenes, sin tu nombre ni tu teléfono. Al empezar aceptás la{" "}
+        <a href="/privacidad" target="_blank" rel="noopener" className="underline">política de privacidad</a>.
+      </p>
     </div>
   );
 }

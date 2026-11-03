@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { command, parseWati, render, sendText } from './whatsapp.ts';
+import { command, inboundGate, parseWati, render, sendText } from './whatsapp.ts';
 
 test('lee mensajes entrantes de WATI y descarta los propios', () => {
   const msgs = parseWati([
@@ -16,8 +16,18 @@ test('lee mensajes entrantes de WATI y descarta los propios', () => {
 test('interpreta comandos', () => {
   assert.equal(command('Baja'), 'opt_out');
   assert.equal(command('ranking'), 'ranking');
-  assert.equal(command('hola!!'), 'play');
-  assert.equal(command('JUGAR'), 'play');
+  assert.equal(command('hola!!'), 'drop');
+  assert.equal(command('JUGAR'), 'drop');
+  assert.equal(command('Quiero jugar a BRUTAL'), 'drop');
+  assert.equal(command('pressure'), 'play');
+});
+
+test('quien escribe por primera vez queda anotado; los bloqueados no reciben nada', () => {
+  assert.equal(inboundGate(null), 'create');
+  assert.equal(inboundGate({ status: 'pending' }), 'known');
+  assert.equal(inboundGate({ status: 'active' }), 'known');
+  assert.equal(inboundGate({ status: 'blocked' }), 'ignore');
+  assert.equal(inboundGate({ status: 'archived' }), 'ignore');
 });
 
 test('completa plantillas', () => {

@@ -17,6 +17,35 @@ export interface InteractionRecord {
 }
 
 let records: InteractionRecord[] = [];
+
+// ---------- Salidas de la app ----------
+// Si el jugador se va de la pestaña (otra app, bloquea el teléfono) mientras tiene una carta enfrente,
+// se anota en esa carta: cuántas veces y cuánto tiempo.
+const away: Record<number, { count: number; ms: number }> = {};
+let hiddenAt: number | null = null;
+let hiddenIndex = -1;
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      if (currentQuestionIndex < 0) return;
+      hiddenAt = performance.now();
+      hiddenIndex = currentQuestionIndex;
+    } else if (hiddenAt !== null) {
+      const a = (away[hiddenIndex] ??= { count: 0, ms: 0 });
+      a.count += 1;
+      a.ms += Math.round(performance.now() - hiddenAt);
+      hiddenAt = null;
+    }
+  });
+}
+
+/** Lo que estuvo afuera de la app en esa carta (y lo olvida). */
+export function takeAway(questionIndex: number): { away_count: number; away_ms: number } | null {
+  const a = away[questionIndex];
+  if (!a) return null;
+  delete away[questionIndex];
+  return { away_count: a.count, away_ms: a.ms };
+}
 let currentQuestionStart: number | null = null;
 let currentQuestionIndex: number = -1;
 let currentQuestionType: string = "";

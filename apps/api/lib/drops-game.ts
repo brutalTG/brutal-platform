@@ -39,28 +39,68 @@ export function multiplierFor(checkpoints: Record<string, { multiplier?: number 
 export type AnswerRow = { position: number; reward_currency: 'cash_usd' | 'tickets' | null; reward_value: number; reward_granted: boolean; trap_correct: boolean | null; penalty: number };
 
 /** Lo que se acredita al reclamar. Una trampa fallada resta tickets acumulados (nunca plata). El multiplicador solo multiplica tickets. */
-export function computeClaim(answers: AnswerRow[], multiplier: number) {
+/**
+ * Lo que cobra la partida. `doubles`: manos de doble o nada ya jugadas; cada una duplica (ganó) o borra (perdió)
+ * los tickets juntados ANTES de su posición. El multiplicador final se aplica después de todo.
+ */
+export function computeClaim(answers: AnswerRow[], multiplier: number, doubles: { position: number; won: boolean }[] = []) {
   let usd = 0, tickets = 0;
+  const pending = [...doubles].sort((x, y) => x.position - y.position);
+  const settle = (upTo: number) => {
+    while (pending.length && pending[0].position < upTo) { const d = pending.shift()!; tickets = d.won ? tickets * 2 : 0; }
+  };
   for (const a of [...answers].sort((x, y) => x.position - y.position)) {
+    settle(a.position);
     if (a.trap_correct === false) { tickets = Math.max(0, tickets - (Number(a.penalty) || 0)); continue; }
     if (!a.reward_granted) continue;
     if (a.reward_currency === 'cash_usd') usd = Math.round((usd + Number(a.reward_value)) * 100) / 100;
     else if (a.reward_currency === 'tickets') tickets += Number(a.reward_value);
   }
+  settle(Infinity);
   return { usd, tickets: Math.floor(tickets * Math.max(1, Number(multiplier) || 1)) };
 }
 
-export type VoiceAnswer = { transcript: string; stated: string | null; number: number | null; audio_path: string | null; speech_ms: number | null; words: number; first_word_ms: number | null };
+export type VoiceAnswer = {
+  transcript: string; stated: string | null; number: number | null; audio_path: string | null; speech_ms: number | null; words: number; first_word_ms: number | null;
+  /** Carta de la máquina: qué marcó en secreto y cuánto tardó en decidirlo. */
+  committed?: 'truth' | 'lie'; decision_ms?: number | null;
+  /** Cómo contestó la carta de voz: hablando o escribiendo. */
+  mode?: 'audio' | 'text';
+};
+
+/** Respuesta escrita en una carta de voz: sin espacios de más, hasta 500 letras; vacía = no contestó. */
+export function cleanTypedAnswer(raw: unknown): string | null {
+  const t = String(raw ?? '').replace(/\s+/g, ' ').trim().slice(0, 500);
+  return t || null;
+}
 export type HiloResult = { status: string; multiplier: number; steps: number; cards: number[]; decisions: string[] };
 
 export type AnswerBody = {
   choice_index?: number | null; slider_value?: number | null; ranking_result?: unknown[] | null;
   rafaga_choices?: unknown[] | null; text_response?: string | null; choice?: string | null;
   voice?: VoiceAnswer | null; hilo?: HiloResult | null;
+  /** Detalle fino que manda el reproductor: latencia por ítem, toques, correcciones, apuesta, salidas de la app. */
+  meta?: unknown;
 };
 
-/** Cómo queda la respuesta en signal.observations. */
+/** El detalle fino, saneado: solo un objeto chico (hasta 4 KB), sin funciones ni anidamiento raro. Si no sirve, null. */
+export function cleanMeta(raw: unknown): Record<string, unknown> | null {
+  let v = raw;
+  if (typeof v === 'string') { try { v = JSON.parse(v); } catch { return null; } }
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const s = JSON.stringify(v);
+  if (!s || s.length > 4096 || s === '{}') return null;
+  return JSON.parse(s) as Record<string, unknown>;
+}
+
+/** Cómo queda la respuesta en signal.observations (con el detalle fino en value.meta). */
 export function observationOf(format: string, content: Record<string, any>, b: AnswerBody) {
+  const o = observationCore(format, content, b);
+  const meta = cleanMeta(b.meta);
+  return meta ? { ...o, value: { ...(o.value as Record<string, unknown>), meta } } : o;
+}
+
+function observationCore(format: string, content: Record<string, any>, b: AnswerBody) {
   const options: unknown[] = Array.isArray(content.options) ? content.options : [];
   if (format === 'voice') {
     const v = b.voice;
@@ -126,8 +166,8 @@ export type HiloAction = 'start' | 'higher' | 'lower' | 'stand';
 const okGuess = (cur: number, next: number, g: string) => (g === 'higher' ? next >= cur : next <= cur);
 
 /** Un paso de la mano. El servidor saca la carta; el teléfono solo ve la que tiene enfrente. Reintentos no sacan otra carta. */
-export function hiloStep(hand: Hand | null, action: HiloAction, ladder: number[] = HILO_LADDER, draw: () => number = () => 1 + Math.floor(Math.random() * 13), atStep?: number): Hand {
-  const h: Hand = hand ? { ...hand, cards: [...hand.cards], decisions: [...hand.decisions] } : { cards: [draw()], decisions: [], status: 'playing', multiplier: 1 };
+export function hiloStep(hand: Hand | null, action: HiloAction, ladder: number[] = HILO_LADDER, draw: () => number = () => 1 + Math.floor(Math.random() * 13), atStep?: number, firstDraw: () => number = draw): Hand {
+  const h: Hand = hand ? { ...hand, cards: [...hand.cards], decisions: [...hand.decisions] } : { cards: [firstDraw()], decisions: [], status: 'playing', multiplier: 1 };
   if (action === 'start' || h.status !== 'playing') return h;
   if (typeof atStep === 'number' && atStep < h.decisions.length) return h;
   if (action === 'stand') return { ...h, status: 'stood' };
@@ -150,6 +190,203 @@ export function hiloView(h: Hand, ladder: number[] = HILO_LADDER) {
   };
 }
 
-/** Multiplicador final de la partida: checkpoints por avanzar × lo que se ganó en las manos de mayor o menor. */
+/**
+ * Las manos de mayor o menor vienen en tres sabores (`content.mode`):
+ * - `ladder` (por defecto): escalera de multiplicadores, te plantás cuando querés.
+ * - `multiplier`: una sola carta; si acertás, se activa el multiplicador de la escalera (ej. x1.5) para toda la partida.
+ * - `double`: doble o nada; una sola carta; si acertás se duplican los tickets que llevás, si errás se pierden. Podés pasar.
+ */
+export type HiloMode = 'ladder' | 'multiplier' | 'double';
+export function hiloMode(content: { mode?: unknown } | null | undefined): HiloMode {
+  return content?.mode === 'double' || content?.mode === 'multiplier' ? content.mode : 'ladder';
+}
+/** Escalera de la mano según el modo: doble o nada siempre es x2 en un paso; multiplicador, un solo paso. */
+export function hiloLadder(content: { mode?: unknown; ladder?: unknown } | null | undefined): number[] {
+  const mode = hiloMode(content);
+  if (mode === 'double') return [2];
+  const raw = Array.isArray(content?.ladder) && content.ladder.length && content.ladder.every((x: unknown) => Number(x) > 1) ? content.ladder.map(Number).slice(0, 8) : HILO_LADDER;
+  return mode === 'multiplier' ? raw.slice(0, 1) : raw;
+}
+/**
+ * Mano arreglada a favor: si la carta tiene `alwaysWin`, la carta que sale siempre le da la razón al jugador
+ * (mayor si dijo mayor, menor si dijo menor). Sirve para que la primera mano se gane y enganche.
+ */
+export function winningDraw(current: number, guess: string, rnd: () => number = Math.random) {
+  const lo = guess === 'higher' ? current : 1;
+  const hi = guess === 'higher' ? 13 : current;
+  return () => lo + Math.floor(rnd() * (hi - lo + 1));
+}
+
+/** Primera carta: si la carta pide un rango (ej. [6, 9]), sale de ahí para que la apuesta sea pareja. */
+export function firstCardDraw(content: { firstCard?: unknown } | null | undefined, rnd: () => number = Math.random) {
+  const r = content?.firstCard;
+  const lo = Array.isArray(r) ? Math.max(1, Math.min(13, Math.round(Number(r[0])))) : 1;
+  const hi = Array.isArray(r) ? Math.max(lo, Math.min(13, Math.round(Number(r[1])))) : 13;
+  return () => lo + Math.floor(rnd() * (hi - lo + 1));
+}
+
+/** Multiplicador final de la partida: checkpoints por avanzar × lo que se ganó en las manos de mayor o menor (sin las de doble o nada). */
 export const sessionMultiplier = (checkpoint: number, hands: { status: string; multiplier: number }[]) =>
   Math.round(hands.reduce((m, h) => (h.status === 'stood' ? m * Math.max(1, Number(h.multiplier) || 1) : m), checkpoint) * 100) / 100;
+
+// ---------- La máquina dentro del Drop ----------
+// Cartas de voz con `detector: true`: antes de hablar el jugador marca en secreto VERDAD o MENTIRA.
+// Tiene que mentir exactamente `lies` veces en el Drop. Al cerrar, la máquina acusa `lies` cartas
+// comparando cómo habló en cada una (dudó más, arrancó tarde, habló menos, rellenó).
+// Te agarra si encuentra TODAS tus mentiras; si se le escapa al menos una, zafaste.
+
+export type DetectorConfig = { lies: number; winTickets: number; loseTickets: number };
+export const DEFAULT_DETECTOR: DetectorConfig = { lies: 1, winTickets: 150, loseTickets: 50 };
+
+export function detectorConfig(raw: unknown): DetectorConfig | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const n = (v: unknown, d: number) => (Number.isFinite(Number(v)) && Number(v) >= 0 ? Math.floor(Number(v)) : d);
+  return { lies: Math.max(1, n(r.lies, DEFAULT_DETECTOR.lies)), winTickets: n(r.winTickets, DEFAULT_DETECTOR.winTickets), loseTickets: n(r.loseTickets, DEFAULT_DETECTOR.loseTickets) };
+}
+
+export type DetectorItem = { position: number; committed: 'truth' | 'lie'; decision_ms: number | null; onset_ms: number | null; speech_ms: number | null; fillers: number };
+export type DetectorResult = {
+  lies: number[]; accused: number[]; caught: number; verdict: 'caught' | 'escaped';
+  reason: { position: number; kind: 'decision' | 'onset' | 'speech' | 'fillers'; value: number | null };
+  tickets: number;
+};
+
+const WEIGHTS = { decision: 1.2, onset: 1.0, speech: 0.5, fillers: 0.6 } as const;
+type Feature = keyof typeof WEIGHTS;
+const FEATURE_OF: Record<Feature, keyof DetectorItem> = { decision: 'decision_ms', onset: 'onset_ms', speech: 'speech_ms', fillers: 'fillers' };
+
+function zscores(items: DetectorItem[], f: keyof DetectorItem) {
+  const vals = items.map((i) => Number(i[f])).filter((v) => Number.isFinite(v));
+  const mean = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+  const sd = vals.length ? Math.sqrt(vals.reduce((a, b) => a + (b - mean) ** 2, 0) / vals.length) : 0;
+  return items.map((i) => { const v = Number(i[f]); return sd > 0 && Number.isFinite(v) ? (v - mean) / sd : 0; });
+}
+
+// Desempate estable: la misma partida acusa siempre igual.
+function jitter(seed: string, salt: number) {
+  let h = 2166136261;
+  for (const ch of `${seed}:${salt}`) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  return ((h >>> 0) % 1000) / 1e5;
+}
+
+/** Qué cartas acusa la máquina y cómo le fue al jugador. Hace falta al menos dos cartas para comparar. */
+export function detectorOutcome(items: DetectorItem[], cfg: DetectorConfig, seed = ''): DetectorResult | null {
+  if (items.length < 2) return null;
+  const z: Record<Feature, number[]> = {
+    decision: zscores(items, 'decision_ms'), onset: zscores(items, 'onset_ms'), fillers: zscores(items, 'fillers'),
+    // Mentir suele salir más corto: hablar menos que en el resto suma sospecha.
+    speech: zscores(items, 'speech_ms').map((v) => -v),
+  };
+  const scored = items.map((it, i) => {
+    let score = 0, top: Feature = 'decision', topVal = -Infinity;
+    for (const f of Object.keys(WEIGHTS) as Feature[]) {
+      const c = z[f][i] * WEIGHTS[f];
+      score += c;
+      if (c > topVal) { topVal = c; top = f; }
+    }
+    return { position: it.position, score: score + jitter(seed, it.position), reason: top, value: it[FEATURE_OF[top]] as number | null };
+  });
+  const howMany = Math.min(cfg.lies, items.length - 1);
+  const picks = [...scored].sort((a, b) => b.score - a.score).slice(0, howMany).sort((a, b) => a.position - b.position);
+  const lies = items.filter((i) => i.committed === 'lie').map((i) => i.position);
+  const caught = picks.filter((p) => lies.includes(p.position)).length;
+  const verdict = lies.length > 0 && caught >= lies.length ? 'caught' : 'escaped';
+  const first = picks[0];
+  return {
+    lies, accused: picks.map((p) => p.position), caught, verdict,
+    reason: { position: first.position, kind: first.reason, value: first.value },
+    tickets: verdict === 'escaped' ? cfg.winTickets : -cfg.loseTickets,
+  };
+}
+
+const nf = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 1 });
+
+/** La acusación, en palabras. `label` es cómo se nombra la carta ("la segunda"). */
+export function detectorReason(r: DetectorResult, label: (position: number) => string) {
+  const { kind, value, position } = r.reason;
+  const at = label(position);
+  switch (kind) {
+    case 'decision': return value != null ? `En ${at} dudaste ${nf.format(value / 1000)} segundos antes de decidir.` : `En ${at} dudaste antes de decidir.`;
+    case 'onset': return value != null ? `En ${at} tardaste ${nf.format(value / 1000)} segundos en arrancar a hablar.` : `En ${at} arrancaste tarde.`;
+    case 'speech': return `En ${at} hablaste menos que en las otras.`;
+    case 'fillers': return `En ${at} rellenaste con "eh" y "este".`;
+  }
+}
+
+const ORDINAL = ['la primera', 'la segunda', 'la tercera', 'la cuarta', 'la quinta', 'la sexta'];
+
+/** Cómo se nombra una carta de la máquina en el veredicto: su `detectorLabel` ("la del famoso") o, si no tiene, el orden. */
+export function detectorLabel(content: { detectorLabel?: unknown } | null | undefined, position: number) {
+  const own = typeof content?.detectorLabel === 'string' ? content.detectorLabel.trim() : '';
+  return own || (ORDINAL[position - 1] ?? `la ${position}`);
+}
+
+/** Lo que la máquina dice en una carta del veredicto. */
+export type DetectorCard = { position: number; text: string; label: string; said: string; lied: boolean; accused: boolean };
+export type DetectorVerdictOut = DetectorResult & { text: string; lie_labels: string[]; cards: DetectorCard[] };
+
+/** Los únicos textos que la voz de BRUTAL puede decir en un Drop: las cartas de voz (su `speakText` si lo tienen) y la presentación de la máquina. */
+export function voiceScript(cards: { format: string; content?: Record<string, any> | null }[]) {
+  const out: string[] = [];
+  for (const c of cards) {
+    const content = c.content ?? {};
+    if (c.format === 'voice' && content.speak !== false && (content.speakText || content.text)) out.push(String(content.speakText || content.text));
+    if (c.format === 'dead_drop' && content.machine === true && typeof content.speakText === 'string' && content.speakText) out.push(content.speakText);
+  }
+  return out;
+}
+
+/** Cuántas mentiras le quedan y si en la próxima carta está obligado. */
+export function detectorBudget(total: number, lies: number, committed: ('truth' | 'lie')[]) {
+  const used = committed.filter((c) => c === 'lie').length;
+  const remainingLies = Math.max(0, lies - used);
+  const remainingItems = Math.max(0, total - committed.length);
+  return { remainingLies, remainingItems, mustLie: remainingLies > 0 && remainingLies >= remainingItems, mustTell: remainingLies <= 0 };
+}
+
+/** Tickets de la partida con lo que dio la máquina: nunca por debajo de cero. */
+export function applyDetector(tickets: number, result: DetectorResult | null | undefined) {
+  if (!result) return tickets;
+  return Math.max(0, tickets + (Number(result.tickets) || 0));
+}
+
+// ---------- Link de grupo ----------
+// Origen: `?de=grupo1` en el link dice por dónde llegó cada uno. Los reenvíos usan `r-<código del que lo pasó>`.
+
+/** Etiqueta de origen tal como se guarda: minúsculas, letras, números, guion y guion bajo, hasta 40. */
+export function cleanSource(raw: unknown): string | null {
+  const s = String(raw ?? '').trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9_-]/g, '').slice(0, 40);
+  return s || null;
+}
+
+/** Código de reenvío de un jugador: sale de su id, no dice nada de él. */
+export const refSource = (nodeId: string) => `r-${nodeId.replace(/-/g, '').slice(0, 8)}`;
+
+// Un solo link para muchos: cada uno pone un apodo y queda como un nodo de prueba separado.
+// Los nodos de grupo llevan un teléfono inventado (+999…) para no confundirse con números reales.
+
+export type JoinConfig = { code: string; open: boolean; max: number };
+
+export function joinConfig(raw: unknown): JoinConfig | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const code = String(r.code ?? '').trim().toLowerCase();
+  if (!/^[a-z0-9-]{3,40}$/.test(code)) return null;
+  const max = Number(r.max);
+  return { code, open: r.open !== false, max: Number.isFinite(max) && max > 0 ? Math.min(500, Math.floor(max)) : 50 };
+}
+
+/** Apodo de una persona del grupo: 2 a 20 caracteres visibles, sin saltos de línea. */
+export function cleanNickname(raw: unknown) {
+  const s = String(raw ?? '').replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim().slice(0, 20);
+  return s.length >= 2 ? s : null;
+}
+
+export const GUEST_PREFIX = '+999';
+export function guestPhone(rand: () => number = Math.random) {
+  let digits = '';
+  for (let i = 0; i < 11; i++) digits += Math.floor(rand() * 10);
+  return `${GUEST_PREFIX}${digits}`;
+}
+export const isGuestPhone = (phone: string | null | undefined) => Boolean(phone && phone.startsWith(GUEST_PREFIX));

@@ -2,9 +2,10 @@ import 'server-only';
 import { env } from './env';
 import { from, must } from './db';
 import { newCode, sha256 } from './crypto';
-import { command, render, sendText, type Inbound } from './whatsapp';
+import { command, inboundGate, render, sendText, type Inbound } from './whatsapp';
 import { createDropsLink } from './drops';
 import { selectAudience, type Audience, type Candidate } from './launch-rules';
+import { isGuestPhone } from './drops-game';
 
 const cfg = () => ({ mode: env.whatsappMode, endpoint: env.watiEndpoint, token: env.watiToken, channel: env.watiChannel });
 
@@ -28,10 +29,21 @@ async function upsertContact(phone: string, waId: string | null, displayName: st
     .select('id, node_id, opted_out_at').single(), 'crear contacto') as Promise<{ id: string; node_id: string | null; opted_out_at: string | null }>;
 }
 
-/** Manda un texto a un contacto y deja el registro, haya salido bien o no. */
+/**
+ * Manda un texto a un contacto y deja el registro, haya salido bien o no.
+ * Con WhatsApp apagado (`WHATSAPP_MODE=disabled`) el mensaje queda en cola: el panel lo muestra con el texto listo
+ * para mandarlo a mano desde un teléfono.
+ */
 export async function sendToContact(contact: { id: string; phone: string; nodeId: string | null }, text: string, purpose: string, templateKey?: string, campaignId?: string) {
-  const result = await sendText(cfg(), contact.phone, text);
   const now = new Date().toISOString();
+  if (cfg().mode === 'disabled') {
+    await from('messaging', 'messages').insert({
+      contact_id: contact.id, node_id: contact.nodeId, campaign_id: campaignId ?? null, direction: 'out', purpose, template_key: templateKey ?? null,
+      status: 'queued', body: text, idempotency_key: `out:${crypto.randomUUID()}`,
+    });
+    return { ok: true as const, providerMessageId: 'queued', queued: true as const };
+  }
+  const result = await sendText(cfg(), contact.phone, text);
   await from('messaging', 'messages').insert({
     contact_id: contact.id, node_id: contact.nodeId, campaign_id: campaignId ?? null, direction: 'out', purpose, template_key: templateKey ?? null,
     provider_message_id: result.ok ? result.providerMessageId : null,
@@ -41,6 +53,19 @@ export async function sendToContact(contact: { id: string; phone: string; nodeId
   });
   if (result.ok) await from('messaging', 'contacts').update({ last_outbound_at: now }).eq('id', contact.id);
   return result;
+}
+
+/** Al cobrar un Drop: lo ganado y el link al perfil, por WhatsApp. Solo si el contacto no se dio de baja. */
+export async function queueDropResult(nodeId: string, vars: { drop: string; usd: number; tickets: number; verdict: 'caught' | 'escaped' | null; link: string }) {
+  const node = await must(from('core', 'nodes').select('phone_e164').eq('id', nodeId).single(), 'nodo') as { phone_e164: string };
+  // Jugadores del link de grupo: no tienen WhatsApp cargado, no hay a quién avisarle.
+  if (isGuestPhone(node.phone_e164)) return null;
+  const existing = await must(from('messaging', 'contacts').select('id, opted_out_at').eq('node_id', nodeId).maybeSingle(), 'contacto') as { id: string; opted_out_at: string | null } | null;
+  if (existing?.opted_out_at) return null;
+  const contactId = existing?.id ?? await contactFor(node.phone_e164, nodeId);
+  const verdict = vars.verdict === 'caught' ? 'La máquina te agarró.' : vars.verdict === 'escaped' ? 'Zafaste: la máquina te creyó.' : '';
+  const text = render(await template('drop_result'), { drop: vars.drop, verdict, tickets: vars.tickets, usd: vars.usd.toFixed(2).replace('.', ','), link: vars.link }).replace(/ \n/g, '\n');
+  return sendToContact({ id: contactId, phone: node.phone_e164, nodeId }, text, 'drop_result', 'drop_result');
 }
 
 /** Link personal al juego: 48 horas, hasta 5 aperturas. */
@@ -78,8 +103,15 @@ export async function handleInbound(m: Inbound) {
   const dup = await must(from('messaging', 'messages').select('id').eq('provider_message_id', m.providerMessageId).maybeSingle(), 'dedupe');
   if (dup) return { handled: false, reason: 'duplicate' };
 
-  const node = await must(from('core', 'nodes').select('id, status').eq('phone_e164', m.phone).maybeSingle(), 'nodo') as { id: string; status: string } | null;
-  const invited = node && !['blocked', 'archived'].includes(node.status);
+  let node = await must(from('core', 'nodes').select('id, status').eq('phone_e164', m.phone).maybeSingle(), 'nodo') as { id: string; status: string } | null;
+  // Llega desde el botón de la landing: si no lo conocemos, lo anotamos y sigue al perfil.
+  if (inboundGate(node) === 'create') {
+    const { data, error } = await from('core', 'nodes').insert({ phone_e164: m.phone, status: 'pending', acquisition_channel: 'whatsapp', last_active_at: new Date().toISOString() }).select('id, status').single();
+    if (error && !/duplicate/i.test(error.message)) throw new Error(`nodo nuevo: ${error.message}`);
+    node = (data as { id: string; status: string } | null)
+      ?? (await must(from('core', 'nodes').select('id, status').eq('phone_e164', m.phone).maybeSingle(), 'nodo') as { id: string; status: string } | null);
+  }
+  const invited = Boolean(node) && inboundGate(node) === 'known';
   const contact = await upsertContact(m.phone, m.waId, m.displayName, invited ? node!.id : null);
   const cmd = command(m.text);
 
@@ -109,15 +141,15 @@ export async function handleInbound(m: Inbound) {
     await sendToContact(to, await rankingText(nodeId), 'ranking', 'ranking');
     return { handled: true, reply: 'ranking' };
   }
-  // Drops: si todavía no completó el perfil, primero el onboarding.
-  if (cmd === 'drop' || cmd === 'profile') {
+  // Drops: si todavía no completó el perfil, primero el onboarding. "AYUDA" también recibe el link.
+  if (cmd === 'drop' || cmd === 'profile' || cmd === 'help') {
     const n = await must(from('core', 'nodes').select('nickname, birth_date, province').eq('id', nodeId).single(), 'perfil') as any;
     const ready = Boolean(n.nickname && n.birth_date && n.province);
     const l = await createDropsLink(nodeId, ready ? { purpose: 'drop', destination: cmd === 'profile' ? 'profile' : 'drop' } : { purpose: 'onboarding', hours: 72 });
-    const text = !ready ? `Bienvenido a BRUTAL. Armá tu perfil acá (dos minutos) y entrás al Drop:\n\n${l.url}\n\nEl link es tuyo, no lo pases.`
+    const text = !ready ? `Bienvenido a BRUTAL. Cinco datos (un minuto) y entrás directo al Drop. Cada respuesta suma Golden Tickets para el ranking:\n\n${l.url}\n\nEl link es tuyo, no lo pases. Para no recibir más mensajes, escribí BAJA.`
       : cmd === 'profile' ? `Tu perfil, tus tickets y el ranking:\n\n${l.url}` : `Tu Drop te está esperando:\n\n${l.url}\n\nEl link es tuyo, no lo pases.`;
-    await sendToContact(to, text, ready ? `drops_${cmd}` : 'drops_onboarding');
-    return { handled: true, reply: ready ? `drops_${cmd}` : 'drops_onboarding' };
+    await sendToContact(to, text, ready ? `drops_${cmd === 'help' ? 'drop' : cmd}` : 'drops_onboarding');
+    return { handled: true, reply: ready ? `drops_${cmd === 'help' ? 'drop' : cmd}` : 'drops_onboarding' };
   }
   const link = await createPlayLink(nodeId, m.phone, ACTIVE_EXPERIMENT);
   await sendToContact(to, render(await template('pressure_invite'), { link }), 'pressure_invite', 'pressure_invite');
@@ -174,7 +206,7 @@ export async function launchDrop(slug: string, audience: Audience, dryRun: boole
     target: { drop: d.slug, audience }, status: 'sending', audience_count: selected.length, started_at: new Date().toISOString(),
   }).select('id').single(), 'campaña') as { id: string };
 
-  let sent = 0, failed = 0;
+  let sent = 0, failed = 0, queued = 0;
   for (const c of selected) {
     try {
       const ready = (c as any).ready;
@@ -182,12 +214,12 @@ export async function launchDrop(slug: string, audience: Audience, dryRun: boole
       const text = ready ? render(body, { drop: d.name, link: l.url }) : `Hay algo nuevo en BRUTAL: ${d.name}. Primero armá tu perfil (dos minutos) y entrás directo:\n\n${l.url}`;
       const contactId = await contactFor(c.phone, c.id);
       const r = await sendToContact({ id: contactId, phone: c.phone, nodeId: c.id }, text, 'drop_launch', 'drop_invite', campaign.id);
-      if (r.ok) sent++; else failed++;
+      if (!r.ok) failed++; else if ('queued' in r) queued++; else sent++;
     } catch (e) {
       console.error('launch', e);
       failed++;
     }
   }
   await from('messaging', 'campaigns').update({ status: 'done', sent_count: sent, failed_count: failed, completed_at: new Date().toISOString() }).eq('id', campaign.id);
-  return { ok: true, dryRun: false, campaign_id: campaign.id, sent, failed, ...summary };
+  return { ok: true, dryRun: false, campaign_id: campaign.id, sent, failed, queued, ...summary };
 }

@@ -129,13 +129,15 @@ export function useAnswerPipeline(config: PipelineConfig): PipelineActions {
 
   const showReaction = useCallback((latencyMs?: number) => {
     if (reactionTimerRef.current) clearTimeout(reactionTimerRef.current);
-    const text = pickReaction(latencyMs);
+    // La carta puede traer su propia reacción; si no, una del pozo según la latencia.
+    const own = questions[questionIndex]?.reaction;
+    const text = own && own.trim() ? own : pickReaction(latencyMs);
     setReactionText(text);
     reactionTimerRef.current = setTimeout(() => {
       setReactionText(null);
       reactionTimerRef.current = null;
     }, REACTION_MS);
-  }, [setReactionText, reactionTimerRef]);
+  }, [setReactionText, reactionTimerRef, questions, questionIndex]);
 
   const transitionAfterReward = useCallback(
     (hasReward: boolean, go: () => void) => {
