@@ -14,22 +14,22 @@ export type OnboardingTexts = {
 export const AGE_FLOOR = 15, AGE_CEILING = 35;
 
 export const ONBOARDING_DEFAULTS: OnboardingTexts = {
-  intro: { title: 'Entrá a Brutal', subtitle: 'Cinco datos para empezar. Después te conocemos jugando.' },
-  nickname: { copy: 'Como te decimos?\nElegi un nombre. Puede ser el tuyo, puede ser inventado.', placeholder: 'Tu apodo' },
+  intro: { title: 'Entrá a Brutal', subtitle: 'Cinco datos y entrás directo al Drop.\nCada respuesta suma Golden Tickets para el ranking.' },
+  nickname: { copy: '¿Cómo te decimos?\nElegí un nombre. Puede ser el tuyo, puede ser inventado.', placeholder: 'Tu apodo' },
   age: {
-    copy: 'Cuantos anos tenes?', min: 15, max: 35,
+    copy: '¿Cuántos años tenés?', min: 15, max: 35,
     rejectMessage: 'BRUTAL es para personas de 15 a 35 años.\nPero no te preocupes, vas a poder seguirnos desde afuera.',
   },
-  gender: { copy: 'Como te identificas?', options: ['Hombre', 'Mujer', 'No binario', 'Prefiero no decir'] },
+  gender: { copy: '¿Cómo te identificás?', options: ['Hombre', 'Mujer', 'No binario', 'Prefiero no decir'] },
   location: {
-    copy: 'Donde vivis?',
+    copy: '¿Dónde vivís?',
     options: [
-      { label: 'CABA', subOptions: ['Palermo', 'Recoleta', 'Belgrano', 'Caballito', 'Nunez', 'Villa Urquiza', 'Almagro', 'San Telmo', 'La Boca', 'Flores', 'Villa Devoto', 'Otro barrio'] },
+      { label: 'CABA', subOptions: ['Palermo', 'Recoleta', 'Belgrano', 'Caballito', 'Núñez', 'Villa Urquiza', 'Almagro', 'San Telmo', 'La Boca', 'Flores', 'Villa Devoto', 'Otro barrio'] },
       { label: 'GBA Norte' }, { label: 'GBA Sur' }, { label: 'GBA Oeste' },
-      { label: 'Interior', subOptions: ['Buenos Aires (interior)', 'Cordoba', 'Santa Fe', 'Mendoza', 'Tucuman', 'Salta', 'Entre Rios', 'Misiones', 'Chaco', 'Neuquen', 'Rio Negro', 'Otra provincia'] },
+      { label: 'Interior', subOptions: ['Buenos Aires (interior)', 'Córdoba', 'Santa Fe', 'Mendoza', 'Tucumán', 'Salta', 'Entre Ríos', 'Misiones', 'Chaco', 'Neuquén', 'Río Negro', 'Otra provincia'] },
     ],
   },
-  platforms: { copy: '¿Qué usas todos los días?', options: ['TikTok', 'Instagram', 'YouTube', 'X', 'Twitch', 'Discord', 'Spotify'], minSelect: 1, maxSelect: 3 },
+  platforms: { copy: '¿Qué usás todos los días?', options: ['TikTok', 'Instagram', 'YouTube', 'X', 'Twitch', 'Discord', 'Spotify'], minSelect: 1, maxSelect: 3 },
 };
 
 const lines = (s: string, max = 40) => [...new Set(s.split('\n').map((x) => x.trim()).filter(Boolean).map((x) => x.slice(0, max)))];
