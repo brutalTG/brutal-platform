@@ -3,6 +3,7 @@ import { from, explain } from '@/lib/db';
 import { fmt, cn } from '@/lib/utils';
 import { statusOf } from '@/lib/status';
 import { Badge, Card, CardHeader, ErrorNotice, PageHeader, Stat, Table, TD, TH, THead, TR } from '@/components/ui/primitives';
+import { GroupFunnel } from './group-funnel';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,7 +12,11 @@ export default async function DropPage({ params }: { params: Promise<{ slug: str
   const { data: d, error } = await from('drops', 'drop_overview').select('*').eq('slug', slug).maybeSingle();
   if (error) return <ErrorNotice message={explain(error)!} />;
   if (!d) notFound();
-  const { data: funnel } = await from('drops', 'card_funnel').select('*').eq('drop_id', d.id).order('position');
+  const [{ data: funnel }, { data: cfg }] = await Promise.all([
+    from('drops', 'card_funnel').select('*').eq('drop_id', d.id).order('position'),
+    from('drops', 'drops').select('config').eq('id', d.id).maybeSingle(),
+  ]);
+  const joinCode = typeof (cfg as any)?.config?.join?.code === 'string' ? (cfg as any).config.join.code as string : null;
 
   const s = statusOf('drop', d.status);
   const first = Number(funnel?.[0]?.answered ?? 0);
@@ -35,6 +40,8 @@ export default async function DropPage({ params }: { params: Promise<{ slug: str
         <Stat label="Abandonos" value={fmt.n(d.abandoned)} />
         <Stat label="Duración media" value={d.avg_total_ms ? fmt.duration(Number(d.avg_total_ms) / 1000) : '—'} />
       </div>
+
+      {joinCode && <GroupFunnel dropId={d.id} slug={d.slug} joinCode={joinCode} />}
 
       <Card className="mt-6">
         <CardHeader title="Recorrido carta por carta" description="Cuántos nodos llegaron a responder cada carta y dónde se fueron. La carta con más pérdida queda marcada." />

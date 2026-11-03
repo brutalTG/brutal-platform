@@ -19,7 +19,8 @@ async function synth(text: string, voiceId: string, model: string) {
     body: JSON.stringify({
       text,
       model_id: model,
-      language_code: 'es',
+      // Fijar el idioma solo lo aceptan los modelos v2.5 (Flash/Turbo); Multilingual v2 lo deduce del texto.
+      ...(/_v2_5$/.test(model) ? { language_code: 'es' } : {}),
       voice_settings: { stability: 0.55, similarity_boost: 0.8, style: 0.35, speed: 0.95 },
     }),
     signal: AbortSignal.timeout(20_000),

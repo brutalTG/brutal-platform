@@ -20,7 +20,7 @@ function buildDefaultTypewriterLines(totalCards: number) {
     "> No sabemos quién sos.",
     "> Pero vamos a saber quién sos REALMENTE.",
     "",
-    `> ${totalCards} cards loaded. ~3 min. Cash real.`,
+    `> ${totalCards} cartas. ~4 min. Golden Tickets.`,
     "",
     "> Tocá ENTRO para comenzar:",
   ];

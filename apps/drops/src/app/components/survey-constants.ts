@@ -9,27 +9,31 @@ export const REACTION_MS = 700;
 
 // --- Action hint per question type ---
 const ACTION_HINTS: Partial<Record<Question["type"], string>> = {
-  choice: "Elegi una",
-  choice_emoji: "Reacciona",
-  choice_hybrid: "Elegi una",
-  prediction_bet: "Aposta",
-  ranking: "Ordena",
+  choice: "Elegí una",
+  choice_emoji: "Reaccioná",
+  choice_hybrid: "Elegí una",
+  prediction_bet: "Apostá",
+  ranking: "Ordená",
   confesionario: "Confesionario",
-  slider: "Desliza",
-  slider_emoji: "Desliza",
-  trap: "Elegi una",
-  trap_silent: "Elegi una",
+  slider: "Deslizá",
+  slider_emoji: "Deslizá",
+  trap: "Elegí una",
+  trap_silent: "Elegí una",
   hot_take: "Hot take",
   hot_take_visual: "Hot take",
-  binary_media: "Elegi una",
+  binary_media: "Elegí una",
   rafaga: "Rafaga",
   rafaga_emoji: "Rafaga",
   voice: "Hablá",
   mayor_menor: "Mayor o menor",
 };
 
+/** La consigna de la carta y, si paga tickets, cuánto: "Elegí una · +20 🎟". */
 export function getActionHint(q: Question): string {
-  return ACTION_HINTS[q.type] ?? "";
+  const base = ACTION_HINTS[q.type] ?? "";
+  const r = (q as { reward?: { type: string; value: number } }).reward;
+  if (!r || r.type !== "tickets" || !(r.value > 0)) return base;
+  return base ? `${base} · +${r.value} 🎟` : `+${r.value} 🎟`;
 }
 
 // --- Tonal variation: timeout messages ---

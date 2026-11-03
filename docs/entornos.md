@@ -26,6 +26,7 @@ Las URLs `*.vercel.app` quedan detrás del login de Vercel; solo los dominios `b
 | panel | `brutal-panel-test` | `test-panel.brutal.lat` | pendiente |
 | api | `brutal-api-test` | `test-api.brutal.lat` | pendiente |
 | pressure | `brutal-pressure-test` | `test-pressure.brutal.lat` | pendiente |
+| web | `brutal-web-test` | `test-web.brutal.lat` (dominio pendiente de alta) | `brutal` (repo viejo, sirve `brutal.lat`) |
 
 Los proyectos de test tienen como rama de producción `main` en Vercel, así que un push a `test` arma una vista previa
 que no toca el dominio. Para publicar en el dominio de test, Claude crea un despliegue de producción de la rama `test`

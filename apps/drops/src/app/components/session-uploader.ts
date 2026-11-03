@@ -15,6 +15,7 @@ import type { UserAnswer } from "./archetype-engine";
 import type { Question } from "./drop-types";
 import { userAuthHeaders } from "./access-context";
 import { API_BASE } from "./api-base";
+import { takeAway } from "./latency-tracker";
 
 // ============================================================
 // State
@@ -84,9 +85,11 @@ async function fetchWithRetry(
  * Server expects: choice_index, slider_value, ranking_result, rafaga_choices,
  * text_response, latency_ms, raw_response
  */
-function answerToPayloadFields(answer: UserAnswer): Record<string, any> {
+function answerToPayloadFields(answer: UserAnswer, index: number): Record<string, any> {
+  const meta = { ...(answer.meta ?? {}), ...(takeAway(index) ?? {}) };
   const fields: Record<string, any> = {
     latency_ms: answer.latencyMs ?? null,
+    ...(Object.keys(meta).length ? { meta } : {}),
   };
 
   switch (answer.type) {
@@ -145,7 +148,7 @@ export async function serverStartSession(dropId: string): Promise<string | null>
     const res = await fetchWithRetry(`${API_BASE}/sessions/start`, {
       method: "POST",
       headers: authHeaders(),
-      body: JSON.stringify({ drop_id: dropId }),
+      body: JSON.stringify({ drop_id: dropId, device: { userAgent: navigator.userAgent, width: window.innerWidth, height: window.innerHeight } }),
     });
 
     if (!res) return null;
@@ -217,6 +220,13 @@ async function _sendResponse(
     form.append("latency_ms", String(answer.latencyMs ?? ""));
     form.append("speech_ms", String(answer.speechMs ?? ""));
     form.append("multiplier_at_position", String(currentMultiplier));
+    if (answer.committed) {
+      form.append("committed", answer.committed);
+      form.append("decision_ms", String(answer.decisionMs ?? ""));
+    }
+    const vmeta = { ...(answer.meta ?? {}), ...(takeAway(index) ?? {}) };
+    if (Object.keys(vmeta).length) form.append("meta", JSON.stringify(vmeta));
+    if (answer.text) form.append("text", answer.text);
     if (answer.audio) form.append("audio", answer.audio, `respuesta.${answer.mime.includes("mp4") ? "m4a" : "webm"}`);
     const headers = { ...authHeaders() } as Record<string, string>;
     delete headers["Content-Type"];
@@ -236,7 +246,7 @@ async function _sendResponse(
     question_type: question.type,
     source: "drop_card",
     multiplier_at_position: currentMultiplier, // Send current multiplier to the backend
-    ...answerToPayloadFields(answer),
+    ...answerToPayloadFields(answer, index),
   };
 
   try {
@@ -264,19 +274,34 @@ async function _sendResponse(
  * Mark the session as completed on the server.
  * Flushes offline queue first.
  */
+/** Lo que dice la máquina al cerrar la partida (solo en Drops con cartas de la máquina). */
+export interface DetectorVerdict {
+  lies: number[];
+  accused: number[];
+  caught: number;
+  verdict: "caught" | "escaped";
+  text: string;
+  lie_labels: string[];
+  tickets: number;
+  /** Cada carta de la máquina: qué se preguntó, qué dijo, si mintió y si lo acusó. */
+  cards?: { position: number; text: string; label: string; said: string; lied: boolean; accused: boolean }[];
+}
+
+export type CompleteResult = { ok: boolean; detector: DetectorVerdict | null };
+
 export async function completeSession(params: {
   archetype_result?: { id: string; title: string };
   bic_scores?: any;
   multiplier?: number;
-}): Promise<boolean> {
-  const doComplete = async (): Promise<boolean> => {
+}): Promise<CompleteResult> {
+  const doComplete = async (): Promise<CompleteResult> => {
     // Flush any queued responses first
     await _flushQueue();
     await _responseChain;
 
     if (!_sessionId) {
       console.warn("[BRUTAL] completeSession called without session_id");
-      return false;
+      return { ok: false, detector: null };
     }
 
     try {
@@ -291,18 +316,20 @@ export async function completeSession(params: {
         }),
       });
 
-      if (!res) return false;
+      if (!res) return { ok: false, detector: null };
       const data = await res.json().catch(() => ({}));
       console.log("[BRUTAL] Session completed:", data);
-      return true;
+      return { ok: Boolean(data?.ok ?? res.ok), detector: data?.detector ?? null };
     } catch (err) {
       console.error("[BRUTAL] completeSession error:", err);
-      return false;
+      return { ok: false, detector: null };
     }
   };
 
-  _completionPromise = doComplete();
-  return _completionPromise;
+  // Una sola llamada: waitForUpload espera la misma promesa.
+  const result = doComplete();
+  _completionPromise = result.then((r) => r.ok);
+  return result;
 }
 
 // ============================================================
@@ -362,7 +389,7 @@ export async function claimRewards(params: {
   tickets: number;
   finalTickets: number;
   multiplier?: number;
-}): Promise<{ ok: boolean; alreadyClaimed?: boolean; credited?: { coins: number; tickets: number; dropsCompleted: number } }> {
+}): Promise<{ ok: boolean; alreadyClaimed?: boolean; credited?: { coins: number; tickets: number; dropsCompleted: number }; cashPending?: number }> {
   console.log(`[BRUTAL] Claiming rewards: dropId=${params.dropId}, cash=${params.coins}, tickets=${params.finalTickets}`);
 
   const res = await fetch(`${API_BASE}/claim-rewards`, {

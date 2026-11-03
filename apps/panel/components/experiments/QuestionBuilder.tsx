@@ -645,6 +645,15 @@ function TypeSpecificFields({
         <>
           <TextField label="Pregunta" value={d.text} onChange={(v) => onChange({ text: v } as any)} multiline placeholder="Corta: se lee en voz alta y se contesta hablando." />
           <ToggleField label="La dice la voz de BRUTAL" description="Si está apagado, solo se lee en pantalla." value={d.speak !== false} onChange={(v) => onChange({ speak: v } as any)} />
+          {d.speak !== false && (
+            <TextField
+              label="Cómo lo dice la voz (opcional)"
+              value={(d as any).speakText ?? ""}
+              onChange={(v) => onChange({ speakText: v.trim() ? v : undefined } as any)}
+              multiline
+              placeholder={'Solo se escucha, no se ve. Tilde donde va el acento ("argentíno"), punto para cerrar, "..." o <break time="0.5s" /> para pausar, "i a" en vez de IA.'}
+            />
+          )}
           <SelectField
             label="Cómo se lee la respuesta"
             value={d.answerType ?? "open"}
@@ -664,27 +673,60 @@ function TypeSpecificFields({
             </div>
           )}
           <NumberField label="Máximo de segundos hablando" value={d.maxSeconds ?? 20} onChange={(v) => onChange({ maxSeconds: v } as any)} min={5} max={60} />
+          <ToggleField label="Carta de la máquina" description="Antes de hablar, el jugador marca en secreto si dice la verdad o miente. Con dos o más de estas en el Drop, la máquina acusa al final (reglas en la configuración del Drop: detector)." value={d.detector === true} onChange={(v) => onChange({ detector: v || undefined } as any)} />
           <p className="text-xs" style={{ color: "var(--p-text-faint)" }}>El jugador ve «Tu respuesta queda grabada». El audio se guarda en privado y se transcribe; en Resultados ves la frase y cómo se repartieron las respuestas.</p>
         </>
       );
 
-    case "mayor_menor":
+    case "mayor_menor": {
+      const mode = (d as any).mode ?? "ladder";
       return (
         <>
-          <TextField label="Texto de arriba (opcional)" value={d.text ?? ""} onChange={(v) => onChange({ text: v || undefined } as any)} placeholder="¿La que sigue es mayor o menor?" />
-          <TextField
-            label="Escalera de multiplicadores"
-            value={(d.ladder ?? [1.5, 2, 3, 5, 10]).join(", ")}
-            onChange={(v) => {
-              const ladder = v.split(",").map((x) => Number(x.trim().replace(",", "."))).filter((x) => Number.isFinite(x) && x > 1).slice(0, 8);
-              onChange({ ladder: ladder.length ? ladder : undefined } as any);
-            }}
-            placeholder="1.5, 2, 3, 5, 10"
+          <SelectField
+            label="Tipo de mano"
+            value={mode}
+            onChange={(v) => onChange({ mode: v === "ladder" ? undefined : v } as any)}
+            options={[
+              { value: "ladder", label: "Escalera: cada acierto sube el multiplicador, te plantás cuando querés" },
+              { value: "multiplier", label: "Multiplicador: una carta, si acierta se activa el primer escalón" },
+              { value: "double", label: "Doble o nada: una carta, duplica o borra los tickets que lleva" },
+            ]}
           />
+          <TextField label="Texto de arriba (opcional)" value={d.text ?? ""} onChange={(v) => onChange({ text: v || undefined } as any)} placeholder={mode === "double" ? "¿Doble o nada?" : mode === "multiplier" ? "Acertá y activás x1.5" : "¿La que sigue es mayor o menor?"} />
+          {mode !== "double" && (
+            <TextField
+              label={mode === "multiplier" ? "Multiplicador que se activa" : "Escalera de multiplicadores"}
+              value={(d.ladder ?? (mode === "multiplier" ? [1.5] : [1.5, 2, 3, 5, 10])).join(", ")}
+              onChange={(v) => {
+                const ladder = v.split(",").map((x) => Number(x.trim().replace(",", "."))).filter((x) => Number.isFinite(x) && x > 1).slice(0, mode === "multiplier" ? 1 : 8);
+                onChange({ ladder: ladder.length ? ladder : undefined } as any);
+              }}
+              placeholder={mode === "multiplier" ? "1.5" : "1.5, 2, 3, 5, 10"}
+            />
+          )}
+          {mode !== "ladder" && (
+            <TextField
+              label="Primera carta entre (opcional)"
+              value={Array.isArray((d as any).firstCard) ? (d as any).firstCard.join(" y ") : ""}
+              onChange={(v) => {
+                const n = v.split(/[^0-9]+/).map(Number).filter((x) => x >= 1 && x <= 13);
+                onChange({ firstCard: n.length >= 2 ? [Math.min(n[0], n[1]), Math.max(n[0], n[1])] : undefined } as any);
+              }}
+              placeholder="6 y 9: así la apuesta es pareja"
+            />
+          )}
           <NumberField label="Segundos para decidir cada carta" value={d.secondsPerCard ?? 15} onChange={(v) => onChange({ secondsPerCard: v } as any)} min={5} max={60} />
-          <p className="text-xs" style={{ color: "var(--p-text-faint)" }}>Cada acierto sube un escalón; errar lo pierde; plantarse lo asegura. Multiplica los Golden Tickets de toda la partida. Las cartas las reparte el servidor.</p>
+          <ToggleField label="Esta mano siempre se gana" description="La carta que sale le da la razón al jugador. Sirve para la primera mano: engancha. No se puede pasar." value={(d as any).alwaysWin === true} onChange={(v) => onChange({ alwaysWin: v || undefined } as any)} />
+          <p className="text-xs" style={{ color: "var(--p-text-faint)" }}>
+            {mode === "double"
+              ? "Doble o nada: si acierta, duplica los tickets que lleva hasta esta carta; si erra, los pierde. Puede pasar. No toca la plata."
+              : mode === "multiplier"
+                ? "Si acierta, el multiplicador se aplica a todos los Golden Tickets de la partida. Si erra, no pierde nada."
+                : "Cada acierto sube un escalón; errar lo pierde; plantarse lo asegura. Multiplica los Golden Tickets de toda la partida."}{" "}Las cartas las reparte el servidor.
+          </p>
         </>
       );
+    }
 
     case "confesionario":
       return (
