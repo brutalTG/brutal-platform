@@ -12,7 +12,7 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
     phase: "intro",
     title: "Entrá a Brutal",
     subtitle:
-      "Cinco datos para empezar. Después te conocemos jugando.",
+      "Cinco datos y entrás directo al Drop.\nCada respuesta suma Golden Tickets para el ranking.",
   },
 
   // ── FASE A: DATOS DUROS ───────────────────────────────────
