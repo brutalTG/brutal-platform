@@ -216,7 +216,7 @@ export interface RafagaBurstTrigger {
 
 export interface RafagaBurstInteraction {
   /** Tipo de interacción */
-  type: "emoji_binary" | "button_binary" | "slider";
+  type: "emoji_binary" | "button_binary" | "button_multi" | "slider";
   
   // Para emoji_binary
   /** Emoji opción A (requerido para emoji_binary) */
@@ -230,6 +230,9 @@ export interface RafagaBurstInteraction {
   /** Texto/emoji opción B (requerido para button_binary) */
   buttonB?: string;
   
+  // Para button_multi: de 2 a 4 botones apilados (tier list, "mirás / no bancás / ni idea", dilemas con "me da igual").
+  options?: string[];
+
   // Para slider
   /** Configuración del slider (requerido para slider) */
   sliderConfig?: {
@@ -258,6 +261,8 @@ export interface RafagaBurstQuestion {
     /** Duración en ms de la pantalla previa (default: 2500) */
     durationMs?: number;
   };
+  /** La consigna, visible arriba durante toda la ráfaga (ej. "Armá tu tier list"). */
+  prompt?: string;
   /** Items de la ráfaga */
   items: RafagaBurstItem[];
   /** Segundos por item antes de auto-avanzar (default: 3) */
@@ -389,6 +394,8 @@ export interface RevealConfig {
   title: string;
   /** Profile description text */
   description: string;
+  /** Etiqueta del perfil arriba del título (default "Tu perfil"; ej. "Tu tribu"). También va en la imagen para compartir. */
+  label?: string;
   /** Archetype definitions — the engine picks one based on answers */
   archetypes?: RevealArchetype[];
   /** Scoring rules mapping answers → dimension scores */

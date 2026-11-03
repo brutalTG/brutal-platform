@@ -20,6 +20,13 @@ export function resolveReward(r: Reward, isMinor: boolean): { cash: number; tick
 }
 
 /** Premio que ve el jugador en la carta: plata si hay, si no tickets. */
+/** Drops con edad mínima (config.minAge, ej. 18): sin edad cargada no se entra. */
+export function ageAllowed(minAge: unknown, age: number | null) {
+  const min = Number(minAge);
+  if (!Number.isFinite(min) || min <= 0) return true;
+  return age !== null && age >= min;
+}
+
 export function displayReward(r: { cash: number; tickets: number }) {
   if (r.cash > 0) return { type: 'coins' as const, value: r.cash };
   if (r.tickets > 0) return { type: 'tickets' as const, value: r.tickets };

@@ -18,6 +18,7 @@ const isVideoUrl = (url?: string) => {
 
 export function RafagaBurstQuestion({
   preScreen,
+  prompt,
   items,
   secondsPerItem = 3,
   onComplete,
@@ -210,6 +211,11 @@ export function RafagaBurstQuestion({
             />
           ))}
         </div>
+        {prompt && (
+          <p className="font-['Roboto'] font-extrabold text-[18px] text-center mt-3 px-4" style={{ color: "var(--dynamic-fg)", opacity: 0.85 }}>
+            {prompt}
+          </p>
+        )}
         {!isSlider && (
           <div className="w-[80%] h-[3px] rounded-full mt-3 overflow-hidden relative" style={{ backgroundColor: "var(--dynamic-fg)", opacity: 0.2 }}>
             <div 
@@ -230,7 +236,7 @@ export function RafagaBurstQuestion({
           <img src={item.trigger.imageUrl} className="absolute inset-0 w-full h-full object-cover z-0" alt="" />
         )}
         <div className="relative z-10 w-full flex flex-col items-center">
-          <h2 className="font-['Roboto'] font-bold text-[39px] text-center leading-tight mb-12" style={{ color: "var(--dynamic-fg)" }}>
+          <h2 className={`font-['Roboto'] font-bold text-center leading-tight ${item.interaction?.type === "button_multi" ? "text-[30px] mb-8" : "text-[39px] mb-12"}`} style={{ color: "var(--dynamic-fg)" }}>
             {item.trigger.text}
           </h2>
           <InteractionRenderer 
@@ -277,6 +283,24 @@ function InteractionRenderer({ interaction, selectedValue, onSelect }: { interac
           }}>
           {buttonB}
         </button>
+      </div>
+    );
+  }
+
+  if (interaction.type === "button_multi") {
+    const options: string[] = (interaction.options ?? []).filter(Boolean).slice(0, 4);
+    return (
+      <div className="flex flex-col gap-3 w-full">
+        {options.map((o) => (
+          <button key={o} onClick={() => onSelect(o)} className="w-full min-h-14 px-4 py-3 rounded-xl font-bold text-lg border-2 transition-all active:scale-[0.98]"
+            style={{
+              backgroundColor: selectedValue === o ? 'var(--dynamic-fg)' : 'transparent',
+              color: selectedValue === o ? 'var(--dynamic-bg)' : 'var(--dynamic-fg)',
+              borderColor: 'var(--dynamic-fg)',
+            }}>
+            {o}
+          </button>
+        ))}
       </div>
     );
   }

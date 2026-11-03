@@ -7,6 +7,8 @@ import { showsCash } from "./economy";
 
 interface RevealScreenProps {
   title: string;
+  /** Etiqueta arriba del título (default "Tu perfil"). */
+  label?: string;
   description: string;
   metrics: {
     latency: string;
@@ -64,6 +66,7 @@ function DashedLine() {
 
 export function RevealScreen({
   title,
+  label = "Tu perfil",
   description,
   metrics,
   coins,
@@ -241,7 +244,7 @@ export function RevealScreen({
           {/* "Tu perfil" pill */}
           <div className="inline-flex items-center justify-center rounded-full px-[14px] py-[6px] mb-5" style={{ backgroundColor: "var(--dynamic-bg, #000)", color: "var(--dynamic-fg, #fff)" }}>
             <span className="font-['Roboto'] font-semibold text-[12px] tracking-[-0.12px]">
-              Tu perfil
+              {label}
             </span>
           </div>
 

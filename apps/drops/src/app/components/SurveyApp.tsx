@@ -638,6 +638,7 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
     return (
       <RevealScreen
         title={revealTitle}
+        label={drop.reveal.label}
         description={revealDescription}
         metrics={{ latency: formatLatency(avgLatency), instinctiveResponses: `${instinctive}/${totalQuestions}`, doubtMoments: `${doubts}`, totalTime }}
         coins={coins}
@@ -674,6 +675,7 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
         shareCard={
           <ShareCard
             title={revealTitle}
+            label={drop.reveal.label}
             description={revealDescription}
             dropName={drop.name}
             metrics={{ latency: formatLatency(avgLatency), instinctiveResponses: `${instinctive}/${totalQuestions}`, totalTime }}
