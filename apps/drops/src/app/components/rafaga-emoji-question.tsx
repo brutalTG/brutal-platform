@@ -11,6 +11,9 @@ interface RafagaEmojiQuestionProps {
   promptBold: string;
   items: RafagaEmojiItem[];
   secondsPerItem?: number;
+  /** Qué significa cada emoji, debajo del botón (ej. "SÍ" / "NO"). Sin esto, el emoji va solo. */
+  labelA?: string;
+  labelB?: string;
   onComplete: (answers: (string | null)[], itemLatencyMs: (number | null)[]) => void;
 }
 
@@ -29,6 +32,8 @@ export function RafagaEmojiQuestion({
   promptBold,
   items,
   secondsPerItem = 3,
+  labelA,
+  labelB,
   onComplete,
 }: RafagaEmojiQuestionProps) {
   const [phase, setPhase] = useState<"intro" | "countdown" | "active">("intro");
@@ -63,7 +68,8 @@ export function RafagaEmojiQuestion({
   // Phase 1: Show intro text for 1.5s, then move to countdown
   useEffect(() => {
     if (phase !== "intro") return;
-    const t = setTimeout(() => setPhase("countdown"), 1500);
+    // Tiempo para leer la consigna: en el Drop 001 la gente no entendía qué se preguntaba.
+    const t = setTimeout(() => setPhase("countdown"), 2600);
     return () => clearTimeout(t);
   }, [phase]);
 
@@ -165,12 +171,27 @@ export function RafagaEmojiQuestion({
         className="fixed inset-0 z-50 flex items-center justify-center px-8"
         style={{ backgroundColor: "var(--dynamic-bg, #000)" }}
       >
-        <p
-          className="font-['Roboto'] font-bold text-center leading-tight"
-          style={{ color: "var(--dynamic-fg, #fff)", fontSize: 26 }}
-        >
-          {items.length} rapidas, {secondsPerItem} segundos cada una, reacciona
-        </p>
+        <div className="flex flex-col items-center gap-5">
+          {promptBold && (
+            <p
+              className="font-['Roboto'] font-extrabold text-center leading-none"
+              style={{ color: "var(--dynamic-fg, #fff)", fontSize: 44 }}
+            >
+              {promptBold}
+            </p>
+          )}
+          <p
+            className="font-['Roboto'] font-bold text-center leading-tight"
+            style={{ color: "var(--dynamic-fg, #fff)", fontSize: 20, opacity: 0.75 }}
+          >
+            {items.length} rápidas · {secondsPerItem} segundos cada una
+          </p>
+          {(labelA || labelB) && (
+            <p className="font-['Roboto'] font-bold text-center" style={{ color: "var(--dynamic-fg, #fff)", fontSize: 22 }}>
+              {items[0]?.optionA} {labelA} · {items[0]?.optionB} {labelB}
+            </p>
+          )}
+        </div>
       </div>
     );
   }
@@ -219,6 +240,16 @@ export function RafagaEmojiQuestion({
         ))}
       </div>
 
+      {/* La consigna queda arriba durante toda la ráfaga */}
+      {promptBold && (
+        <p
+          className="font-['Roboto'] font-extrabold text-center mt-4 text-[18px] tracking-wide"
+          style={{ color: "var(--dynamic-fg, #fff)", opacity: 0.8 }}
+        >
+          {promptBold}
+        </p>
+      )}
+
       {/* Top spacer */}
       <div className="flex-1" />
 
@@ -234,9 +265,9 @@ export function RafagaEmojiQuestion({
 
       {/* Emoji buttons — subtle glass boxes in the thumb zone, no shadows */}
       <div className="flex items-center justify-center gap-10 mb-8" style={{ opacity: blinkOpacity }}>
-        {[{ emoji: item.optionA, on: isA }, { emoji: item.optionB, on: isB }].map(({ emoji, on }, i) => (
+        {[{ emoji: item.optionA, on: isA, label: labelA }, { emoji: item.optionB, on: isB, label: labelB }].map(({ emoji, on, label }, i) => (
+          <div key={i} className="flex flex-col items-center gap-2">
           <button
-            key={i}
             onClick={() => handleSelect(emoji)}
             className="flex items-center justify-center select-none active:scale-95"
             style={{
@@ -253,6 +284,12 @@ export function RafagaEmojiQuestion({
           >
             <span style={{ fontSize: 64, lineHeight: 1 }}>{emoji}</span>
           </button>
+          {label && (
+            <span className="font-['Roboto'] font-extrabold text-[20px] tracking-wide" style={{ color: "var(--dynamic-fg, #fff)" }}>
+              {label}
+            </span>
+          )}
+          </div>
         ))}
       </div>
 

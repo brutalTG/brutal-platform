@@ -175,6 +175,9 @@ export interface RafagaEmojiQuestion {
   promptBold: string;
   items: RafagaItem[];
   secondsPerItem?: number;
+  /** Texto debajo de cada emoji (ej. "SÍ" / "NO"), para que se entienda qué elige cada botón. */
+  labelA?: string;
+  labelB?: string;
 }
 
 export interface HotTakeVisualQuestion {

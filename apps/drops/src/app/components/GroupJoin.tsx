@@ -6,6 +6,9 @@
 
 import { useEffect, useState } from "react";
 import { API_BASE } from "./api-base";
+import { TICKETS_LINE } from "./economy";
+
+import { randomNickname } from "./nickname";
 
 type Saved = { url: string; nickname: string };
 
@@ -51,7 +54,7 @@ export default function GroupJoin() {
   // De dónde llegó: ?de=grupo1, o r-xxxx si se lo pasó otro jugador.
   const source = new URLSearchParams(window.location.search).get("de") || null;
   const [saved, setSaved] = useState<Saved | null>(null);
-  const [nickname, setNickname] = useState("");
+  const [nickname, setNickname] = useState(() => randomNickname());
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -101,14 +104,18 @@ export default function GroupJoin() {
           </>
         ) : (
           <>
-            <h1 className="mb-3 font-['Silkscreen'] text-[26px] leading-tight">¿CÓMO TE DECIMOS?</h1>
-            <p className="mb-8 font-['Fira_Code'] text-[13px] leading-relaxed text-white/60">Un apodo. Puede ser el tuyo, puede ser inventado. Es lo único que te pedimos.</p>
+            <h1 className="mb-4 font-['Silkscreen'] text-[26px] leading-tight">SITUACIONES SIN SALIDA LIMPIA</h1>
+            <ul className="mb-8 flex flex-col gap-2 font-['Fira_Code'] text-[13px] leading-relaxed text-white/70">
+              <li>&gt; Un toque por carta. Nada para escribir.</li>
+              <li>&gt; Unos cuatro minutos.</li>
+              <li>&gt; {TICKETS_LINE}</li>
+            </ul>
+            <p className="mb-2 font-['Fira_Code'] text-[11px] uppercase tracking-widest text-white/40">Vas a aparecer como (lo podés cambiar)</p>
             <input
               value={nickname}
               onChange={(e) => setNickname(e.target.value.slice(0, 20))}
               onKeyDown={(e) => { if (e.key === "Enter") enter(); }}
               placeholder="Tu apodo"
-              autoFocus
               maxLength={20}
               className="mb-4 h-[60px] w-full rounded-2xl border-2 border-white/20 bg-transparent px-5 font-['Roboto'] text-[20px] font-bold text-white outline-none placeholder:text-white/30 focus:border-[#E8FF00]"
             />

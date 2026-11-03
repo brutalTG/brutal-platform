@@ -3,6 +3,7 @@ import svgPaths from "../../imports/svg-molz8y3cxk";
 import { hapticHeavy, hapticSuccess, hapticRigid } from "./haptics";
 import { getRandomDuotonePair } from "./color-generator";
 import { BrutalLogo } from "./brutal-ui";
+import { showsCash } from "./economy";
 
 interface RevealScreenProps {
   title: string;
@@ -372,22 +373,20 @@ export function RevealScreen({
 
           {/* Reward pills */}
           <div className="flex gap-2 w-full max-w-[290px]">
-            {/* USD / minor policy pill */}
-            <div className="flex-1 h-[60px] border-2 rounded-l-full rounded-r-[5px] flex items-center justify-center gap-2" style={{ borderColor: "var(--dynamic-bg, #000)" }}>
-              {isMinor ? (
-                <span className="font-['Fira_Code'] text-[10px] font-bold text-center leading-tight" style={{ color: "var(--dynamic-bg, #000)" }}>SOLO<br />TICKETS</span>
-              ) : <>
+            {/* USD / minor policy pill (solo si BRUTAL paga en plata) */}
+            {showsCash(isMinor) && <div className="flex-1 h-[60px] border-2 rounded-l-full rounded-r-[5px] flex items-center justify-center gap-2" style={{ borderColor: "var(--dynamic-bg, #000)" }}>
+              <>
               <CoinIcon className="w-5 h-5" style={{ color: "var(--dynamic-bg, #000)" }} />
               <span className="font-['Fira_Code'] text-[9px] font-bold" style={{ color: "var(--dynamic-bg, #000)" }}>USD</span>
               <span className="font-['Roboto'] font-extrabold text-[22px] tracking-[-0.22px]" style={{ color: "var(--dynamic-bg, #000)" }}>
                 {formattedCoins}
               </span>
-              </>}
-            </div>
+              </>
+            </div>}
 
             {/* Tickets pill */}
             <div
-              className="flex-1 h-[60px] border-2 rounded-r-full rounded-l-[5px] flex items-center justify-center gap-2"
+              className={`flex-1 h-[60px] border-2 ${showsCash(isMinor) ? "rounded-r-full rounded-l-[5px]" : "rounded-full"} flex items-center justify-center gap-2`}
               style={{
                 borderColor: "var(--dynamic-bg, #000)",
                 animation: claimPhase === "multiplying" ? "reveal-ticket-flash 300ms ease-in-out infinite" : "none",
@@ -406,7 +405,13 @@ export function RevealScreen({
             </p>
           )}
 
-          {cashPending > 0 && claimPhase === "done" && (
+          {!showsCash(isMinor) && claimPhase === "done" && (
+            <p className="max-w-[290px] text-center font-['Fira_Code'] text-[11px] leading-snug" style={{ color: "var(--dynamic-bg, #000)" }}>
+              Ya están en el ranking. Cada dos semanas se cierra y arranca de cero.
+            </p>
+          )}
+
+          {showsCash(isMinor) && cashPending > 0 && claimPhase === "done" && (
             <p className="max-w-[290px] text-center font-['Roboto'] text-[13px] leading-snug" style={{ color: "var(--dynamic-bg, #000)" }}>
               Los tickets ya son tuyos. La plata (US$ {cashPending.toFixed(2).replace(".", ",")}) queda guardada hasta que confirmes que sos mayor de edad.
             </p>

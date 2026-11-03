@@ -2,6 +2,7 @@
 // PROFILE SCREEN — User profile + reward history in mini app
 // ============================================================
 
+import { CASH_ENABLED } from "./economy";
 import { useState, useEffect, useCallback } from "react";
 import { fetchEconomyPolicy, fetchUserProfile, linkWallet } from "./reward-api";
 import type { UserProfile, RewardTransaction } from "./reward-api";
@@ -145,8 +146,8 @@ export function ProfileScreen({ onBack, onLeaderboard }: ProfileScreenProps) {
         {/* Stats grid */}
         <div className="px-5 grid grid-cols-2 gap-3 mb-6">
           <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
-            <p className="text-white/40 text-[10px] font-bold uppercase tracking-wider mb-1">{isMinor ? "Política de premios" : "Balance USD"}</p>
-            <p className="text-white font-extrabold text-2xl">{isMinor ? "Solo tickets" : `USD ${formattedCoins}`}</p>
+            <p className="text-white/40 text-[10px] font-bold uppercase tracking-wider mb-1">{!CASH_ENABLED ? "Tickets lifetime" : isMinor ? "Política de premios" : "Balance USD"}</p>
+            <p className="text-white font-extrabold text-2xl">{!CASH_ENABLED ? profile.lifetimeTickets.toLocaleString("es-AR") : isMinor ? "Solo tickets" : `USD ${formattedCoins}`}</p>
           </div>
           <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
             <p className="text-white/40 text-[10px] font-bold uppercase tracking-wider mb-1">Tickets (season)</p>
@@ -163,15 +164,15 @@ export function ProfileScreen({ onBack, onLeaderboard }: ProfileScreenProps) {
         </div>
 
         {/* Lifetime tickets */}
-        <div className="px-5 mb-6">
+        {CASH_ENABLED && <div className="px-5 mb-6">
           <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl px-4 py-3 flex items-center justify-between">
             <span className="text-white/40 text-xs">Tickets lifetime (todas las seasons)</span>
             <span className="text-white font-bold font-['Fira_Code'] text-sm">{profile.lifetimeTickets.toLocaleString("es-AR")}</span>
           </div>
-        </div>
+        </div>}
 
-        {/* Wallet / Lemon Cash */}
-        {!isMinor ? <div className="px-5 mb-6">
+        {/* Wallet / Lemon Cash (solo si BRUTAL paga en plata) */}
+        {!CASH_ENABLED ? null : !isMinor ? <div className="px-5 mb-6">
           <div className="bg-[#0f0f0f] border border-white/10 rounded-2xl p-4">
             <div className="flex items-center justify-between mb-2">
               <p className="text-white/60 text-xs font-bold uppercase tracking-wider">Lemon Cash Alias</p>
@@ -225,13 +226,13 @@ export function ProfileScreen({ onBack, onLeaderboard }: ProfileScreenProps) {
         {/* Transaction history */}
         <div className="px-5 mb-6">
           <p className="text-white/60 text-xs font-bold uppercase tracking-wider mb-3">Historial reciente</p>
-          {(isMinor ? transactions.filter((tx) => tx.rewardType !== "coins") : transactions).length === 0 ? (
+          {(isMinor || !CASH_ENABLED ? transactions.filter((tx) => tx.rewardType !== "coins") : transactions).length === 0 ? (
             <p className="text-white/20 text-xs font-['Fira_Code'] text-center py-4">
               Sin transacciones aun
             </p>
           ) : (
             <div className="flex flex-col gap-1">
-              {(isMinor ? transactions.filter((tx) => tx.rewardType !== "coins") : transactions).slice(0, 20).map((tx) => (
+              {(isMinor || !CASH_ENABLED ? transactions.filter((tx) => tx.rewardType !== "coins") : transactions).slice(0, 20).map((tx) => (
                 <div
                   key={tx.txId}
                   className="flex items-center justify-between py-2 px-3 bg-white/[0.02] rounded-lg"

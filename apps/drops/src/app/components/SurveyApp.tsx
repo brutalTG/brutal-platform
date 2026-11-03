@@ -28,6 +28,7 @@ import { PassAlongButton, passAlongLink } from "./pass-along";
 import { StoryProgressBar, TimerBar, PlayingBadge, StatPills } from "./SurveyHeader";
 import { QuestionRenderer } from "./QuestionRenderer";
 import { useAnswerPipeline } from "./useAnswerPipeline";
+import { showsCash } from "./economy";
 import {
   REACTION_MS,
   pickTimeoutMessage, buildQuestionOptionsMap, FULLSCREEN_TYPES,
@@ -769,7 +770,7 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
               formattedTickets={formattedTickets}
               rewardEvent={rewardEvent}
               isPenalty={isPenalty}
-              isMinor={isMinor}
+              isMinor={!showsCash(isMinor)}
             />
           </div>
         </div>
