@@ -417,7 +417,7 @@ export function RevealScreen({
             </p>
           )}
 
-          {/* CTA: invitar a otro. "Listo" lleva al perfil. */}
+          {/* CTA: invitar a otro. El final del Drop es el ranking. */}
           <div className="flex flex-col items-center gap-2 w-full max-w-[290px]">
             {passAlong ?? (
               <button
@@ -425,12 +425,12 @@ export function RevealScreen({
                 className="w-full h-[60px] rounded-full flex items-center justify-center select-none active:scale-[0.98]"
                 style={{ backgroundColor: "var(--dynamic-bg, #000)" }}
               >
-                <span className="font-['Roboto'] font-semibold text-[21px]" style={{ color: "var(--dynamic-fg, #fff)" }}>Ver mi perfil</span>
+                <span className="font-['Roboto'] font-semibold text-[21px]" style={{ color: "var(--dynamic-fg, #fff)" }}>Ver el ranking</span>
               </button>
             )}
             {passAlong && (
               <button onClick={onNotifyAndClose} className="mt-1 font-['Roboto'] text-[15px] font-semibold underline underline-offset-4" style={{ color: "var(--dynamic-bg, #000)" }}>
-                Ver mi perfil
+                Ver el ranking
               </button>
             )}
             {claimError && (

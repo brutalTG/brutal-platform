@@ -646,7 +646,7 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
         bonusTickets={bonusTickets}
         isMinor={isMinor}
         cashPending={cashPending}
-        onClaim={() => { setScreen("profile"); }}
+        onClaim={() => { setScreen("leaderboard"); }}
         onClaimRewards={async () => {
           try {
             await waitForUpload();
@@ -670,7 +670,7 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
             return false;
           }
         }}
-        onNotifyAndClose={async () => { setScreen("profile"); }}
+        onNotifyAndClose={async () => { setScreen("leaderboard"); }}
         shareCard={
           <ShareCard
             title={revealTitle}

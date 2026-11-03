@@ -21,8 +21,19 @@ export function command(text: string): Command {
   if (['AYUDA', 'MENU', 'HELP'].includes(t)) return 'help';
   if (['DROP', 'DROPS', 'QUIERO ENTRAR', 'ENTRAR'].includes(t)) return 'drop';
   if (['PERFIL', 'MI PERFIL', 'CUENTA', 'SALDO', 'BALANCE'].includes(t)) return 'profile';
-  // Cualquier otra cosa ("hola", "JUGAR", "PRESSURE") recibe el link al juego.
-  return 'play';
+  // El juego por voz queda solo para quien lo pide por nombre.
+  if (['PRESSURE', 'MAQUINA', 'LA MAQUINA', 'DETECTOR'].includes(t)) return 'play';
+  // Cualquier otra cosa ("hola", el texto del botón de la landing, "JUGAR") entra al Drop.
+  return 'drop';
+}
+
+/**
+ * Qué hacer con alguien que escribe. Cualquiera que escribe queda anotado (llega desde el botón de la landing);
+ * los bloqueados o archivados no reciben nada.
+ */
+export function inboundGate(node: { status: string } | null): 'create' | 'known' | 'ignore' {
+  if (!node) return 'create';
+  return ['blocked', 'archived'].includes(node.status) ? 'ignore' : 'known';
 }
 
 function iso(value: unknown): string | null {
