@@ -413,6 +413,8 @@ export function QuestionRenderer({
           promptBold={q.promptBold}
           items={rafagaItems}
           secondsPerItem={q.secondsPerItem}
+          labelA={q.labelA}
+          labelB={q.labelB}
           onComplete={(answers, itemLatencyMs) => {
             if (!pipeline.acquireLock()) return;
             pipeline.markFirstAnswered();
