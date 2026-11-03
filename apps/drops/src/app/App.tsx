@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
 import { createBrowserRouter, RouterProvider, useRouteError } from "react-router";
+import { Analytics } from "@vercel/analytics/react";
 
 // Lazy-load each route so a module failure in one doesn't crash the others
 const SurveyApp = lazy(() => import("./components/SurveyApp"));
@@ -75,5 +76,10 @@ const router = createBrowserRouter([
 ]);
 
 export default function App() {
-  return <RouterProvider router={router} />;
+  return (
+    <>
+      <RouterProvider router={router} />
+      <Analytics />
+    </>
+  );
 }
