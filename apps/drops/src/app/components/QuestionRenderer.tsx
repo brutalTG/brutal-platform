@@ -436,6 +436,7 @@ export function QuestionRenderer({
       {q.type === "rafaga_burst" && (
         <RafagaBurstQuestion
           preScreen={q.preScreen}
+          prompt={q.prompt}
           items={rafagaItems}
           secondsPerItem={q.secondsPerItem}
           onComplete={(answers) => {

@@ -4,7 +4,7 @@ import { from, must } from './db';
 import { newCode, sha256, signToken, verifyToken } from './crypto';
 import { HttpError } from './http';
 import {
-  applyDetector, birthDateFromAge, cleanNickname, cleanSource, cleanTypedAnswer, refSource, computeClaim, guestPhone, joinConfig, consistencyOf, detectorConfig, detectorLabel, detectorOutcome, detectorReason, voiceScript, displayReward, firstCardDraw, hiloLadder, hiloMode, hiloStep, hiloView, winningDraw, multiplierFor, normalizeWallet, observationOf, parseLocation, POLICY,
+  ageAllowed, applyDetector, birthDateFromAge, cleanNickname, cleanSource, cleanTypedAnswer, refSource, computeClaim, guestPhone, joinConfig, consistencyOf, detectorConfig, detectorLabel, detectorOutcome, detectorReason, voiceScript, displayReward, firstCardDraw, hiloLadder, hiloMode, hiloStep, hiloView, winningDraw, multiplierFor, normalizeWallet, observationOf, parseLocation, POLICY,
   resolveReward, sessionMultiplier, type AnswerBody, type DetectorItem, type DetectorResult, type DetectorVerdictOut, type Hand, type HiloAction, type VoiceAnswer,
 } from './drops-game';
 import { countFillers, parseAnswer } from './game';
@@ -212,6 +212,7 @@ export async function activeDrop(a: Access) {
   if (!playable(node, a.test)) throw new HttpError(403, 'not_authorized', 'Not authorized');
   const d = await dropFor(a);
   if (!d) throw new HttpError(404, 'no_active_drop', 'No active drop');
+  if (!ageAllowed(d.config?.minAge, node.age)) throw new HttpError(403, 'age_restricted', 'Este Drop es para mayores de edad');
   const cards = await cardsOf(d.id);
   if (!cards.length) throw new HttpError(404, 'no_questions', 'Active drop has no questions for this user');
   return playableDrop(d, cards, node);
@@ -228,6 +229,7 @@ export async function gate(a: Access) {
   if (!a.test && ['blocked', 'archived'].includes(node.status)) return { status: 'denied', reason: 'blocked' };
   if (!a.test && node.status === 'waitlisted') return { status: 'denied', reason: 'pending' };
   const d = await dropFor(a);
+  if (d && !ageAllowed(d.config?.minAge, node.age)) return { status: 'denied', reason: 'age' };
   if (d && !a.test) {
     const s = await sessionOf(node.pseudonym_id, d.id);
     if (s?.claimed_at) return { status: 'completed' };
@@ -507,7 +509,7 @@ export async function leaderboard(limit = 20) {
 // ---------- Onboarding ----------
 async function nextAfterOnboarding(node: Node) {
   const d = await dropFor({ linkId: '', nodeId: node.id, purpose: 'drop', destination: 'drop', dropSlug: null, expiresAt: '', test: false });
-  if (!d) return { nextAction: 'waitlist', dropUrl: null, dropId: null, dropName: null };
+  if (!d || !ageAllowed(d.config?.minAge, node.age)) return { nextAction: 'waitlist', dropUrl: null, dropId: null, dropName: null };
   const s = await sessionOf(node.pseudonym_id, d.id);
   if (s?.claimed_at) return { nextAction: 'waitlist', dropUrl: null, dropId: null, dropName: null };
   const link = await createDropsLink(node.id, { purpose: 'drop', dropSlug: d.slug, hours: 48 });

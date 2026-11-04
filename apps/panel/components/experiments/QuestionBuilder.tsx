@@ -313,12 +313,14 @@ function RafagaBurstItemsField({
   };
 
   // --- Interaction updates ---
-  const updateInteractionType = (i: number, intType: "emoji_binary" | "button_binary" | "slider") => {
+  const updateInteractionType = (i: number, intType: "emoji_binary" | "button_binary" | "button_multi" | "slider") => {
     const next = [...items];
     if (intType === "emoji_binary") {
       next[i] = { ...next[i], interaction: { type: "emoji_binary", emojiA: "👍", emojiB: "👎" } };
     } else if (intType === "button_binary") {
       next[i] = { ...next[i], interaction: { type: "button_binary", buttonA: "A", buttonB: "B" } };
+    } else if (intType === "button_multi") {
+      next[i] = { ...next[i], interaction: { type: "button_multi", options: ["Opción 1", "Opción 2", "Opción 3"] } };
     } else {
       next[i] = { ...next[i], interaction: { type: "slider", sliderConfig: { min: 0, max: 100, labelLeft: "Nah", labelRight: "Full" } } };
     }
@@ -418,6 +420,7 @@ function RafagaBurstItemsField({
                 >
                   <option value="emoji_binary">Emoji Binary</option>
                   <option value="button_binary">Button Binary</option>
+                  <option value="button_multi">De 2 a 4 botones</option>
                   <option value="slider">Slider</option>
                 </select>
               </div>
@@ -458,6 +461,21 @@ function RafagaBurstItemsField({
                     placeholder="Botón B"
                   />
                 </div>
+              )}
+
+              {item.interaction.type === "button_multi" && (
+                <textarea
+                  className="w-full rounded px-2.5 py-1.5 text-sm focus:outline-none"
+                  style={inputStyle}
+                  rows={4}
+                  value={(item.interaction.options ?? []).join("\n")}
+                  onChange={(e) => {
+                    const next = [...items];
+                    next[i] = { ...next[i], interaction: { type: "button_multi", options: e.target.value.split("\n").slice(0, 4) } };
+                    onChange(next);
+                  }}
+                  placeholder={"Un botón por línea (hasta 4)"}
+                />
               )}
 
               {item.interaction.type === "slider" && item.interaction.sliderConfig && (
@@ -826,6 +844,8 @@ function TypeSpecificFields({
           <TextField label="Prompt" value={d.prompt ?? ""} onChange={(v) => onChange({ prompt: v } as any)} />
           <TextField label="Prompt bold" value={d.promptBold} onChange={(v) => onChange({ promptBold: v } as any)} />
           <NumberField label="Segundos por item" value={d.secondsPerItem ?? 3} onChange={(v) => onChange({ secondsPerItem: v } as any)} min={1} max={10} suffix="seg" />
+          <TextField label="Texto debajo del emoji A (ej. SÍ)" value={d.labelA ?? ""} onChange={(v) => onChange({ labelA: v || undefined } as any)} />
+          <TextField label="Texto debajo del emoji B (ej. NO)" value={d.labelB ?? ""} onChange={(v) => onChange({ labelB: v || undefined } as any)} />
           <RafagaItemsField items={d.items || []} onChange={(v) => onChange({ items: v } as any)} emojiMode />
         </>
       );
@@ -833,6 +853,7 @@ function TypeSpecificFields({
     case "rafaga_burst":
       return (
         <>
+          <TextField label="Consigna visible durante la ráfaga" value={d.prompt ?? ""} onChange={(v) => onChange({ prompt: v || undefined } as any)} placeholder="Armá tu tier list" />
           <TextField 
             label="Pre-screen title" 
             value={d.preScreen?.title ?? ""} 
