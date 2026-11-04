@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { hiloStep, hiloView, sessionMultiplier, birthDateFromAge, computeClaim, consistencyOf, multiplierFor, normalizeWallet, observationOf, parseLocation, resolveReward } from './drops-game.ts';
+import { ageAllowed } from './drops-game.ts';
 
 test('un menor nunca cobra plata', () => {
   assert.deepEqual(resolveReward({ cash: 0.2, tickets: 0, minor: null }, true), { cash: 0, tickets: 1 });
@@ -252,4 +253,13 @@ test('mano a favor: la carta siempre le da la razón', () => {
   const h = hiloStep(null, 'start', [2], () => 1, undefined, () => 7);
   assert.equal(hiloStep(h, 'lower', [2], winningDraw(7, 'lower', () => 0.5)).status, 'stood');
   assert.equal(hiloStep(h, 'higher', [2], winningDraw(7, 'higher', () => 0.5)).multiplier, 2);
+});
+
+test('Drops con edad mínima: sin edad o menores no entran; sin mínimo entra cualquiera', () => {
+  assert.equal(ageAllowed(undefined, null), true);
+  assert.equal(ageAllowed(undefined, 16), true);
+  assert.equal(ageAllowed(18, 18), true);
+  assert.equal(ageAllowed(18, 17), false);
+  assert.equal(ageAllowed(18, null), false);
+  assert.equal(ageAllowed('18', 25), true);
 });

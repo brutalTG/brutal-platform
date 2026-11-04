@@ -11,6 +11,8 @@ import { hapticHeavy, hapticSuccess } from "./haptics";
 interface ShareCardProps {
   /** Archetype title (supports \n) */
   title: string;
+  /** Etiqueta del perfil (default "Tu perfil"). */
+  label?: string;
   /** Archetype description */
   description: string;
   /** Drop name */
@@ -77,7 +79,7 @@ function drawShareCard(
   ctx.fill();
   ctx.fillStyle = "#fff";
   ctx.font = "bold 12px 'Roboto', sans-serif";
-  ctx.fillText("Tu perfil", pillX + 18, pillY + 20);
+  ctx.fillText(props.label || "Tu perfil", pillX + 18, pillY + 20);
 
   // Title (multiline)
   const titleLines = props.title.split("\n");
