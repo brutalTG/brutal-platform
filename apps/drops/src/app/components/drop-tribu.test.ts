@@ -16,12 +16,13 @@ test('Tu tribu: solo mayores de 18, en borrador y con el link cerrado', () => {
   assert.match(sql, /'open', false/);
 });
 
-test('Tu tribu: 15 cartas en orden, etiquetas únicas, todo de un toque y solo tickets', () => {
-  assert.equal(cards.length, 15);
+test('Tu tribu: 15 cartas + 3 mercados en orden, etiquetas únicas, todo de un toque y solo tickets', () => {
+  assert.equal(cards.length, 18);
+  assert.equal(cards.filter((c) => c.format === 'market').length, 3);
   assert.deepEqual(cards.map((c) => c.pos), cards.map((_, i) => i));
   const labels = [...cards, ...extras].map((c) => c.label);
   assert.equal(new Set(labels).size, labels.length);
-  for (const c of cards) {
+  for (const c of cards.filter((x) => x.format !== 'market')) {
     assert.ok(!['voice', 'confesionario', 'dead_drop'].includes(c.format), c.label);
     assert.ok(c.tickets > 0, `${c.label} paga tickets`);
     assert.ok(c.tags.includes('nucleo') || c.tags.includes('relleno'), `${c.label} dice si es núcleo o relleno`);
@@ -38,6 +39,18 @@ test('Tu tribu: las ráfagas de botones tienen de 2 a 4 opciones y consigna visi
     }
   }
   for (const c of cards.filter((x) => x.format === 'rafaga_emoji')) assert.ok(c.content.labelA && c.content.labelB, c.label);
+});
+
+test('Tu tribu: cada mercado va justo después de su carta, con un precio y un % simulado por opción', () => {
+  for (const m of cards.filter((c) => c.format === 'market')) {
+    const ref = cards.find((c) => c.label === m.content.ref)!;
+    assert.ok(ref, m.label);
+    assert.equal(ref.pos, m.pos - 1, `${m.label} va pegado a ${ref.label}`);
+    assert.equal(m.content.prices.length, ref.content.options.length, m.label);
+    assert.equal(m.content.sim.length, ref.content.options.length, m.label);
+    for (const p of m.content.prices) assert.ok(p >= 1 && p <= 99, m.label);
+    assert.ok(!ref.tags.includes('politica'), 'los mercados no apuestan sobre política');
+  }
 });
 
 test('Tu tribu: lo político queda al final y nunca entra al perfil', () => {

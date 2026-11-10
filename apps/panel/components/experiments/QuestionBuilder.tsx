@@ -759,6 +759,22 @@ function TypeSpecificFields({
         </>
       );
 
+    case "market":
+      return (
+        <>
+          <TextField label="Pregunta del mercado" value={d.text} onChange={(v) => onChange({ text: v } as any)} multiline />
+          <TextField label="Carta de referencia (etiqueta, ej. tribu-10-primera-cita)" value={d.ref ?? ""} onChange={(v) => onChange({ ref: v.trim() } as any)} />
+          <TextField label="Precios en ¢, uno por opción de la carta de referencia (ej. 38, 27, 22, 13)" value={(d.prices ?? []).join(", ")} onChange={(v) => onChange({ prices: v.split(",").map((x) => Number(x.trim())).filter((x) => Number.isFinite(x)) } as any)} />
+          <TextField label="Club simulado en %, uno por opción (decide quién gana mientras hay poca gente)" value={(d.sim ?? []).join(", ")} onChange={(v) => onChange({ sim: v.split(",").map((x) => Number(x.trim())).filter((x) => Number.isFinite(x)) } as any)} />
+          <NumberField label="Jugadores simulados (0 = solo reales)" value={d.simPlayers ?? 300} onChange={(v) => onChange({ simPlayers: v } as any)} min={0} max={100000} />
+          <TextField label="Fichas de apuesta en tickets (ej. 10, 25, 50)" value={(d.stakes ?? []).join(", ")} onChange={(v) => onChange({ stakes: v.split(",").map((x) => Number(x.trim())).filter((x) => Number.isFinite(x)) } as any)} />
+          <div className="grid grid-cols-2 gap-3">
+            <NumberField label="Tickets en juego (cartel)" value={d.volume ?? 0} onChange={(v) => onChange({ volume: v } as any)} min={0} max={10000000} />
+            <NumberField label="Jugadores (cartel)" value={d.traders ?? 0} onChange={(v) => onChange({ traders: v } as any)} min={0} max={1000000} />
+          </div>
+        </>
+      );
+
     case "prediction_bet":
       return (
         <>
