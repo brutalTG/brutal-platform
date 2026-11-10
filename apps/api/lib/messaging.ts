@@ -3,9 +3,9 @@ import { env } from './env';
 import { from, must } from './db';
 import { newCode, sha256 } from './crypto';
 import { command, inboundGate, render, sendText, type Inbound } from './whatsapp';
-import { createDropsLink } from './drops';
+import { claimWebTickets, createDropsLink } from './drops';
 import { selectAudience, type Audience, type Candidate } from './launch-rules';
-import { isGuestPhone } from './drops-game';
+import { isGuestPhone, parseClaimCode, webClaimText } from './drops-game';
 
 const cfg = () => ({ mode: env.whatsappMode, endpoint: env.watiEndpoint, token: env.watiToken, channel: env.watiChannel });
 
@@ -68,6 +68,17 @@ export async function queueDropResult(nodeId: string, vars: { drop: string; usd:
   return sendToContact({ id: contactId, phone: node.phone_e164, nodeId }, text, 'drop_result', 'drop_result');
 }
 
+/** Al que invitó: un amigo jugó con su link. Fuera de la ventana de 24 h de WhatsApp puede no salir; queda registrado. */
+export async function notifyReferrer(nodeId: string, vars: { friend: string | null; tickets: number }) {
+  const node = await must(from('core', 'nodes').select('phone_e164').eq('id', nodeId).single(), 'nodo') as { phone_e164: string };
+  if (isGuestPhone(node.phone_e164)) return null;
+  const existing = await must(from('messaging', 'contacts').select('id, opted_out_at').eq('node_id', nodeId).maybeSingle(), 'contacto') as { id: string; opted_out_at: string | null } | null;
+  if (existing?.opted_out_at) return null;
+  const contactId = existing?.id ?? await contactFor(node.phone_e164, nodeId);
+  const who = vars.friend ? `${vars.friend} jugó` : 'Un amigo jugó';
+  return sendToContact({ id: contactId, phone: node.phone_e164, nodeId }, `${who} el Drop con tu link: +${vars.tickets} Golden Tickets para vos. Escribí RANKING para ver cómo vas.`, 'referral');
+}
+
 /** Link personal al juego: 48 horas, hasta 5 aperturas. */
 export async function createPlayLink(nodeId: string, phone: string, experimentSlug: string) {
   const code = newCode();
@@ -103,6 +114,10 @@ export async function handleInbound(m: Inbound) {
   const dup = await must(from('messaging', 'messages').select('id').eq('provider_message_id', m.providerMessageId).maybeSingle(), 'dedupe');
   if (dup) return { handled: false, reason: 'duplicate' };
 
+  // Viene del final de un Drop jugado en la web: el código pasa la partida a este número.
+  const claimCode = parseClaimCode(m.text);
+  const claim = claimCode ? await claimWebTickets(m.phone, claimCode) : null;
+
   let node = await must(from('core', 'nodes').select('id, status').eq('phone_e164', m.phone).maybeSingle(), 'nodo') as { id: string; status: string } | null;
   // Llega desde el botón de la landing: si no lo conocemos, lo anotamos y sigue al perfil.
   if (inboundGate(node) === 'create') {
@@ -137,6 +152,10 @@ export async function handleInbound(m: Inbound) {
   }
   if (contact.opted_out_at) await from('messaging', 'contacts').update({ opted_out_at: null }).eq('id', contact.id);
 
+  if (claim) {
+    await sendToContact(to, webClaimText(claim.reply), 'web_claim');
+    return { handled: true, reply: `web_claim:${claim.reply.status}` };
+  }
   if (cmd === 'ranking') {
     await sendToContact(to, await rankingText(nodeId), 'ranking', 'ranking');
     return { handled: true, reply: 'ranking' };
@@ -179,7 +198,8 @@ async function candidates(dropId: string): Promise<(Candidate & { ready: boolean
   const out = new Set((await must(from('messaging', 'contacts').select('node_id').not('opted_out_at', 'is', null).limit(20000), 'bajas') as any[]).map((c) => c.node_id));
   const ps = new Map((await must(from('core', 'node_pseudonyms').select('node_id, pseudonym_id').limit(20000), 'seudónimos') as any[]).map((p) => [p.pseudonym_id, p.node_id]));
   const played = new Set((await must(from('drops', 'sessions').select('pseudonym_id').eq('drop_id', dropId).eq('status', 'completed').limit(20000), 'jugaron') as any[]).map((x) => ps.get(x.pseudonym_id)));
-  return nodes.map((n) => {
+  // Invitados sin WhatsApp (link de grupo o anuncio sin reclamar): no hay a quién mandarle.
+  return nodes.filter((n) => !isGuestPhone(n.phone_e164)).map((n) => {
     const f = facts.get(n.id) ?? {};
     return {
       id: n.id, phone: n.phone_e164, status: n.status, age: f.age ?? null, is_minor: Boolean(f.is_minor), gender: f.gender ?? null, province: f.province ?? n.province ?? null,

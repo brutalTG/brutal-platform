@@ -41,14 +41,15 @@ test('Tu tribu: las ráfagas de botones tienen de 2 a 4 opciones y consigna visi
   for (const c of cards.filter((x) => x.format === 'rafaga_emoji')) assert.ok(c.content.labelA && c.content.labelB, c.label);
 });
 
-test('Tu tribu: cada mercado va justo después de su carta, con un precio y un % simulado por opción', () => {
+test('Tu tribu: cada predicción va justo después de su carta, paga lo mismo por opción y tiene un % simulado por opción', () => {
   for (const m of cards.filter((c) => c.format === 'market')) {
     const ref = cards.find((c) => c.label === m.content.ref)!;
     assert.ok(ref, m.label);
     assert.equal(ref.pos, m.pos - 1, `${m.label} va pegado a ${ref.label}`);
-    assert.equal(m.content.prices.length, ref.content.options.length, m.label);
+    assert.equal(m.content.prices, undefined, `${m.label} sin precios`);
+    assert.equal(m.content.stakes, undefined, `${m.label} sin apuesta`);
+    assert.ok(m.content.payout > 0, `${m.label} tiene premio`);
     assert.equal(m.content.sim.length, ref.content.options.length, m.label);
-    for (const p of m.content.prices) assert.ok(p >= 1 && p <= 99, m.label);
     assert.ok(!ref.tags.includes('politica'), 'los mercados no apuestan sobre política');
   }
 });

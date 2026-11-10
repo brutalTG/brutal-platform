@@ -322,7 +322,7 @@ export const QUESTION_TYPE_CATEGORIES: Record<string, { label: string; types: Qu
 };
 
 export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
-  market: "Mercado (Polymarket)", choice: "Elegir", prediction_bet: "Apuesta", ranking: "Ordenar", confesionario: "Confesionario",
+  market: "Predicción (adiviná la mayoría)", choice: "Elegir", prediction_bet: "Apuesta", ranking: "Ordenar", confesionario: "Confesionario",
   slider: "Escala", binary_media: "Imagen A/B", rafaga: "Ráfaga", dead_drop: "Dead Drop",
   trap: "Trampa", hot_take: "Hot Take", trap_silent: "Trampa silenciosa", choice_emoji: "Elegir emoji",
   choice_hybrid: "Elegir mixto", slider_emoji: "Escala emoji", rafaga_emoji: "Ráfaga emoji",
@@ -348,7 +348,7 @@ export function getDefaultQuestionData(type: QuestionType): Question {
     case "slider_emoji": return { ...base, type: "slider_emoji", text: "", min: 0, max: 10, labelLeft: "🫣", labelRight: "😏" };
     case "confesionario": return { ...base, timer: 30, type: "confesionario", text: "" };
     case "prediction_bet": return { ...base, type: "prediction_bet", text: "", optionA: "", optionB: "", maxTickets: 100 };
-    case "market": return { ...base, timer: 25, type: "market", text: "¿Qué eligió la mayoría del club?", ref: "", prices: [50, 50], sim: [50, 50], simPlayers: 300, stakes: [10, 25, 50], volume: 12000, traders: 300 };
+    case "market": return { ...base, timer: 25, type: "market", text: "¿Qué eligió la mayoría del club?", ref: "", payout: 50, sim: [50, 50], simPlayers: 300, traders: 300 };
     case "ranking": return { ...base, type: "ranking", text: "", options: ["", "", ""] };
     case "binary_media": return { ...base, type: "binary_media", imageUrl: "", optionA: "", optionB: "" };
     case "rafaga": return { ...base, timer: 0, type: "rafaga", prompt: "", promptBold: "", items: [{ text: "", optionA: "", optionB: "" }], secondsPerItem: 3 };

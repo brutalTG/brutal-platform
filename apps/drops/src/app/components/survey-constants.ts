@@ -13,7 +13,7 @@ const ACTION_HINTS: Partial<Record<Question["type"], string>> = {
   choice_emoji: "Reaccioná",
   choice_hybrid: "Elegí una",
   prediction_bet: "Apostá",
-  market: "Comprá una opción",
+  market: "Adiviná",
   ranking: "Ordená",
   confesionario: "Confesionario",
   slider: "Deslizá",

@@ -124,8 +124,7 @@ function answerToPayloadFields(answer: UserAnswer, index: number): Record<string
       fields.choice = answer.side;
       break;
     case "market":
-      // El precio no se manda: el servidor usa el de la carta.
-      fields.market = { outcome_index: answer.outcomeIndex, stake: answer.stake };
+      fields.market = { outcome_index: answer.outcomeIndex };
       break;
     case "mayor_menor":
       // La mano la guarda el servidor; acá solo se avisa que terminó.
@@ -292,7 +291,7 @@ export interface DetectorVerdict {
 }
 
 /** Un mercado ya resuelto (lo arma el servidor al cerrar la partida). */
-export type MarketResult = { position: number; text: string; outcome: string; stake: number; price: number; winner: string | null; shares: { label: string; pct: number }[]; won: boolean; payout: number; net: number };
+export type MarketResult = { position: number; text: string; outcome: string; winner: string | null; shares: { label: string; pct: number }[]; won: boolean; payout: number; net: number };
 export type CompleteResult = { ok: boolean; detector: DetectorVerdict | null; markets?: MarketResult[] };
 
 export async function completeSession(params: {
@@ -389,13 +388,16 @@ export async function waitForUpload(): Promise<void> {
  * Claim rewards for a completed drop.
  * Idempotent: server checks if already claimed.
  */
+/** Invitado web (vino de un anuncio): los tickets se reclaman mandando este código por WhatsApp. */
+export type WebClaim = { code: string; url: string | null; tickets: number; referralTickets: number; claimed: boolean };
+
 export async function claimRewards(params: {
   dropId: string;
   coins: number;
   tickets: number;
   finalTickets: number;
   multiplier?: number;
-}): Promise<{ ok: boolean; alreadyClaimed?: boolean; credited?: { coins: number; tickets: number; dropsCompleted: number }; cashPending?: number }> {
+}): Promise<{ ok: boolean; alreadyClaimed?: boolean; credited?: { coins: number; tickets: number; dropsCompleted: number }; cashPending?: number; whatsapp?: WebClaim }> {
   console.log(`[BRUTAL] Claiming rewards: dropId=${params.dropId}, cash=${params.coins}, tickets=${params.finalTickets}`);
 
   const res = await fetch(`${API_BASE}/claim-rewards`, {

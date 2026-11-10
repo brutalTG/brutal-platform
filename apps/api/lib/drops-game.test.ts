@@ -264,28 +264,57 @@ test('Drops con edad mínima: sin edad o menores no entran; sin mínimo entra cu
   assert.equal(ageAllowed('18', 25), true);
 });
 
-import { clubShares, marketBet, marketOutcomes, settleMarket } from './drops-game.ts';
+import { clubShares, marketBet, marketOutcomes, marketPayout, settleMarket } from './drops-game.ts';
 
-test('mercado: opciones y precios salen de la carta de referencia; precios raros se reparten parejo', () => {
-  assert.deepEqual(marketOutcomes({ prices: [38, 62] }, ['Sí', 'No']), [{ label: 'Sí', price: 38 }, { label: 'No', price: 62 }]);
-  assert.deepEqual(marketOutcomes({ prices: [0, 'x'] }, ['A', 'B']).map((o) => o.price), [50, 50]);
+test('predicción: las opciones salen de la carta de referencia y todas pagan lo mismo', () => {
+  assert.deepEqual(marketOutcomes({ prices: [38, 62] }, ['Sí', 'No']), [{ label: 'Sí' }, { label: 'No' }]);
+  assert.equal(marketPayout({ payout: 80 }), 80);
+  assert.equal(marketPayout({}), 50);
+  assert.equal(marketPayout({ payout: 0 }), 50);
 });
 
-test('mercado: la apuesta usa el precio de la carta y rechaza tickets o opciones inválidas', () => {
-  const content = { outcomes: [{ label: 'Sí', price: 23 }, { label: 'No', price: 77 }] };
-  assert.deepEqual(marketBet(content, { outcome_index: 0, stake: 25 }), { outcome_index: 0, outcome: 'Sí', stake: 25, price: 23 });
-  assert.equal(marketBet(content, { outcome_index: 2, stake: 25 }), null);
-  assert.equal(marketBet(content, { outcome_index: 0, stake: 0 }), null);
-  assert.equal(marketBet(content, { outcome_index: 0, stake: 5000 }), null);
+test('predicción: guarda la opción elegida y rechaza opciones inválidas (el monto no lo manda el teléfono)', () => {
+  const content = { outcomes: [{ label: 'Sí' }, { label: 'No' }] };
+  assert.deepEqual(marketBet(content, { outcome_index: 0 }), { outcome_index: 0, outcome: 'Sí' });
+  assert.equal(marketBet(content, { outcome_index: 2 }), null);
+  assert.equal(marketBet(content, {}), null);
 });
 
-test('mercado: el club mezcla reales con simulados; sin simulados, solo reales', () => {
+test('predicción: el club mezcla reales con simulados; sin simulados, solo reales', () => {
   assert.deepEqual(clubShares([0, 0], [40, 60], 100), [40, 60]);
   assert.deepEqual(clubShares([10, 0], [40, 60], 0), [100, 0]);
   assert.deepEqual(clubShares([100, 0], [40, 60], 100), [70, 30]);
 });
 
-test('mercado: ganar paga apuesta × 100 / precio; perder pierde la apuesta', () => {
-  assert.deepEqual(settleMarket({ outcome_index: 0, stake: 25, price: 23 }, [55, 45]), { winner: 0, won: true, payout: 109, net: 84 });
-  assert.deepEqual(settleMarket({ outcome_index: 1, stake: 25, price: 77 }, [55, 45]), { winner: 0, won: false, payout: 0, net: -25 });
+test('predicción: acertar suma el premio; errar no suma ni resta', () => {
+  assert.deepEqual(settleMarket({ outcome_index: 0 }, [55, 45], 50), { winner: 0, won: true, payout: 50, net: 50 });
+  assert.deepEqual(settleMarket({ outcome_index: 1 }, [55, 45], 50), { winner: 0, won: false, payout: 0, net: 0 });
+});
+
+import { claimPrefill, newClaimCode, parseClaimCode, webChannel, webClaimText, whatsappUrl, cleanReferral } from './drops-game.ts';
+
+test('reclamo web: el código del mensaje armado se lee aunque lo editen un poco', () => {
+  const code = newClaimCode(() => 0.5);
+  assert.match(code, /^[A-HJ-NP-Z2-9]{6}$/);
+  assert.equal(parseClaimCode(claimPrefill('K7Q2XM')), 'K7Q2XM');
+  assert.equal(parseClaimCode('hola quiero mis tickets # k7q2xm gracias'), 'K7Q2XM');
+  assert.equal(parseClaimCode('hola'), null);
+  assert.equal(parseClaimCode('#K7Q2XMZ'), null);
+  assert.equal(parseClaimCode('#K0Q2XM'), null, 'sin ceros ni O');
+});
+
+test('reclamo web: link de WhatsApp con el mensaje armado; invitaciones y canal limpios', () => {
+  assert.equal(whatsappUrl('+54 9 11 3189-7653', 'hola #A'), 'https://wa.me/5491131897653?text=hola%20%23A');
+  assert.equal(cleanReferral(' AB12CD '), 'ab12cd');
+  assert.equal(cleanReferral('ab-12'), null);
+  assert.equal(webChannel('ig-tribu-01'), 'ads:ig-tribu-01');
+  assert.equal(webChannel(null), 'web');
+});
+
+test('reclamo web: el bot confirma tickets, posición y manda el link para invitar', () => {
+  const t = webClaimText({ status: 'credited', nickname: 'Juli', drop: 'TU TRIBU', tickets: 340, position: 12, players: 80, inviteUrl: 'https://drops.brutal.lat/jugar?r=ab12cd', profileUrl: 'https://drops.brutal.lat/a/x', referralTickets: 100 });
+  assert.match(t, /Listo, Juli\. Sumaste 340 Golden Tickets en TU TRIBU\. Vas #12 de 80/);
+  assert.match(t, /\+100 🎟:\nhttps:\/\/drops\.brutal\.lat\/jugar\?r=ab12cd/);
+  assert.match(t, /BAJA/);
+  assert.match(webClaimText({ status: 'used_by_other' }), /otro número/);
 });
