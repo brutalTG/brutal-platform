@@ -30,6 +30,19 @@ export interface PredictionBetQuestion {
   maxTickets?: number;
 }
 
+/** Mercado tipo Polymarket. ref = etiqueta de la carta cuyo resultado se apuesta; prices en ¢ por opción; sim = club simulado (%). */
+export interface MarketQuestion {
+  type: "market";
+  text: string;
+  ref: string;
+  prices: number[];
+  sim?: number[];
+  simPlayers?: number;
+  stakes?: number[];
+  volume?: number;
+  traders?: number;
+}
+
 export interface RankingQuestion {
   type: "ranking";
   text: string;
@@ -291,6 +304,7 @@ export type QuestionContent =
   | MayorMenorQuestion
   | ChoiceQuestion
   | PredictionBetQuestion
+  | MarketQuestion
   | RankingQuestion
   | ConfesionarioQuestion
   | SliderQuestion

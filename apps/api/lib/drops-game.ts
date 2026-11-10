@@ -27,6 +27,53 @@ export function ageAllowed(minAge: unknown, age: number | null) {
   return age !== null && age >= min;
 }
 
+// ---------- Mercados (tipo Polymarket) ----------
+// Una carta "market" apunta a otra carta del Drop (content.ref = su etiqueta) y pregunta qué eligió la mayoría.
+// Cada opción cotiza (content.prices, 1–99 ¢). El jugador compra una con tickets; si gana cobra apuesta × 100 / precio.
+// Quién gana sale de lo que contestó el club: respuestas reales + un club simulado (content.sim en %, con
+// content.simPlayers jugadores) mientras haya poca gente. Para pasar a solo real: simPlayers = 0.
+
+export const MARKET_MAX_STAKE = 1000;
+
+/** Opciones y precios del mercado. Precios inválidos o faltantes: reparte parejo. */
+export function marketOutcomes(content: Record<string, any>, refOptions: unknown[]) {
+  const labels = refOptions.map((o) => String(o)).filter(Boolean);
+  const raw: unknown[] = Array.isArray(content.prices) ? content.prices : [];
+  return labels.map((label, i) => {
+    const p = Math.round(Number(raw[i]));
+    return { label, price: Number.isFinite(p) && p >= 1 && p <= 99 ? p : Math.max(1, Math.round(100 / Math.max(1, labels.length))) };
+  });
+}
+
+/** La apuesta tal como la guardamos, con el precio de la carta (no el que mande el teléfono). Inválida: null. */
+export function marketBet(content: Record<string, any>, raw: AnswerBody['market']) {
+  const outcomes: { label: string; price: number }[] = Array.isArray(content.outcomes) ? content.outcomes : [];
+  const i = Number(raw?.outcome_index);
+  const stake = Math.round(Number(raw?.stake));
+  if (!Number.isInteger(i) || i < 0 || i >= outcomes.length) return null;
+  if (!Number.isFinite(stake) || stake < 1 || stake > MARKET_MAX_STAKE) return null;
+  return { outcome_index: i, outcome: outcomes[i].label, stake, price: outcomes[i].price };
+}
+
+/** Porcentaje del club por opción: respuestas reales + el club simulado. */
+export function clubShares(realCounts: number[], simPct: unknown, simPlayers: unknown) {
+  const n = realCounts.length;
+  const sim: number[] = Array.isArray(simPct) ? simPct.map((x) => Math.max(0, Number(x) || 0)) : [];
+  const simTotal = sim.slice(0, n).reduce((a, b) => a + b, 0);
+  const simN = Math.max(0, Math.round(Number(simPlayers) || 0));
+  const votes = realCounts.map((c, i) => c + (simTotal > 0 ? (simN * (sim[i] ?? 0)) / simTotal : 0));
+  const total = votes.reduce((a, b) => a + b, 0);
+  return votes.map((v) => (total > 0 ? Math.round((v / total) * 1000) / 10 : Math.round(1000 / Math.max(1, n)) / 10));
+}
+
+/** Gana la opción más elegida (empate: la primera). Ganar paga apuesta × 100 / precio; perder, nada. */
+export function settleMarket(bet: { outcome_index: number; stake: number; price: number }, shares: number[]) {
+  const winner = shares.reduce((b, s, i) => (s > shares[b] ? i : b), 0);
+  const won = bet.outcome_index === winner;
+  const payout = won ? Math.round((bet.stake * 100) / Math.max(1, bet.price)) : 0;
+  return { winner, won, payout, net: payout - bet.stake };
+}
+
 export function displayReward(r: { cash: number; tickets: number }) {
   if (r.cash > 0) return { type: 'coins' as const, value: r.cash };
   if (r.tickets > 0) return { type: 'tickets' as const, value: r.tickets };
@@ -86,6 +133,8 @@ export type AnswerBody = {
   choice_index?: number | null; slider_value?: number | null; ranking_result?: unknown[] | null;
   rafaga_choices?: unknown[] | null; text_response?: string | null; choice?: string | null;
   voice?: VoiceAnswer | null; hilo?: HiloResult | null;
+  /** Mercado: qué opción compró y cuántos tickets puso. El precio lo pone el servidor. */
+  market?: { outcome_index?: unknown; stake?: unknown } | null;
   /** Detalle fino que manda el reproductor: latencia por ítem, toques, correcciones, apuesta, salidas de la app. */
   meta?: unknown;
 };
@@ -114,6 +163,11 @@ function observationCore(format: string, content: Record<string, any>, b: Answer
     if (!v) return { kind: 'voice', value: { silent: true }, text: null, number: null };
     const word = v.stated === 'a' ? content.optionA ?? 'A' : v.stated === 'b' ? content.optionB ?? 'B' : v.stated;
     return { kind: 'voice', value: { ...v }, text: word && !['open', 'unclear'].includes(word) ? String(word) : v.transcript || null, number: v.number };
+  }
+  if (format === 'market') {
+    const bet = marketBet(content, b.market);
+    if (!bet) return { kind: 'behavior', value: { timeout: true, viewed: false }, text: null, number: null };
+    return { kind: 'bet', value: bet, text: bet.outcome, number: bet.stake };
   }
   if (format === 'mayor_menor') {
     const h = b.hilo;

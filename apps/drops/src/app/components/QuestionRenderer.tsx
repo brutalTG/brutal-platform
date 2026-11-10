@@ -30,6 +30,7 @@ import { resolveDeadDrop } from "./dead-drop-resolver";
 import { RafagaBurstQuestion } from "./rafaga-burst-question";
 import { VoiceQuestion, type DetectorBudget } from "./voice-question";
 import { MayorMenorQuestion } from "./mayor-menor-question";
+import { MarketQuestion } from "./market-question";
 
 interface Props {
   question: Question;
@@ -46,11 +47,13 @@ interface Props {
   tickets?: number;
   /** Lo que dejó una mano de mayor o menor: duplica/borra tickets o activa un multiplicador. */
   onHand?: (r: { mode: "ladder" | "multiplier" | "double"; multiplier: number; busted: boolean; steps: number }) => void;
+  /** Mercado: tickets que quedan apostados hasta que se resuelve. */
+  onBet?: (stake: number) => void;
 }
 
 export function QuestionRenderer({
   question: q, questionIndex, pipeline, reactionText,
-  advanceWithMultiplierCheck, setResultConfig, setScreen, detectorBudget, tickets = 0, onHand,
+  advanceWithMultiplierCheck, setResultConfig, setScreen, detectorBudget, tickets = 0, onHand, onBet,
 }: Props) {
   const actionHint = getActionHint(q);
 
@@ -240,6 +243,26 @@ export function QuestionRenderer({
             const latencyMs = pipeline.captureLatency();
             const side = option === q.optionA ? "A" : "B";
             pipeline.submitStandard({ type: "prediction_bet", side: side as "A" | "B", latencyMs, meta: { bet } });
+          }}
+        />
+      )}
+
+      {q.type === "market" && (
+        <MarketQuestion
+          actionHint={actionHint}
+          text={q.text}
+          refText={q.refText}
+          outcomes={q.outcomes}
+          available={tickets}
+          stakes={q.stakes}
+          volume={q.volume}
+          traders={q.traders}
+          onConfirm={(outcomeIndex, stake, price) => {
+            if (!pipeline.acquireLock()) return;
+            pipeline.markFirstAnswered();
+            const latencyMs = pipeline.captureLatency();
+            onBet?.(stake);
+            pipeline.submitStandard({ type: "market", outcomeIndex, stake, price, latencyMs, meta: { stake, price } });
           }}
         />
       )}
