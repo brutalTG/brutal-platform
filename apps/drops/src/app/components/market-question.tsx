@@ -7,7 +7,7 @@
 // El precio es lo que cree el resto; quién gana lo decide lo que el club contestó de verdad.
 // ============================================================
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { hapticLight, hapticMedium } from "./haptics";
 import { flyTickets } from "./ticket-shower";
 
@@ -48,6 +48,9 @@ export function MarketQuestion({ actionHint, text, refText, outcomes, available,
   const leader = outcomes.reduce((b, o, i) => (o.price > outcomes[b].price ? i : b), 0);
   const chosen = pick == null ? null : outcomes[pick];
   const win = chosen ? payoutOf(stake, chosen.price) : 0;
+  // Al elegir una opción, el cartel de compra sube a la vista (en pantallas chicas quedaba abajo).
+  const slip = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (pick != null) slip.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [pick]);
   const fg = "var(--dynamic-fg, #fff)";
   const bg = "var(--dynamic-bg, #000)";
 
@@ -90,7 +93,7 @@ export function MarketQuestion({ actionHint, text, refText, outcomes, available,
       </div>
 
       {chosen && (
-        <div className="flex flex-col gap-3 rounded-2xl p-4" style={{ backgroundColor: `color-mix(in srgb, ${fg} 12%, transparent)`, color: fg }}>
+        <div ref={slip} className="flex flex-col gap-3 rounded-2xl p-4" style={{ backgroundColor: `color-mix(in srgb, ${fg} 12%, transparent)`, color: fg }}>
           <div className="flex gap-2">
             {chips.map((c) => (
               <button key={c} onClick={() => { hapticLight(); setStake(c); }}
