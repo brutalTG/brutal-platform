@@ -388,13 +388,16 @@ export async function waitForUpload(): Promise<void> {
  * Claim rewards for a completed drop.
  * Idempotent: server checks if already claimed.
  */
+/** Invitado web (vino de un anuncio): los tickets se reclaman mandando este código por WhatsApp. */
+export type WebClaim = { code: string; url: string | null; tickets: number; referralTickets: number; claimed: boolean };
+
 export async function claimRewards(params: {
   dropId: string;
   coins: number;
   tickets: number;
   finalTickets: number;
   multiplier?: number;
-}): Promise<{ ok: boolean; alreadyClaimed?: boolean; credited?: { coins: number; tickets: number; dropsCompleted: number }; cashPending?: number }> {
+}): Promise<{ ok: boolean; alreadyClaimed?: boolean; credited?: { coins: number; tickets: number; dropsCompleted: number }; cashPending?: number; whatsapp?: WebClaim }> {
   console.log(`[BRUTAL] Claiming rewards: dropId=${params.dropId}, cash=${params.coins}, tickets=${params.finalTickets}`);
 
   const res = await fetch(`${API_BASE}/claim-rewards`, {

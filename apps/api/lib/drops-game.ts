@@ -450,3 +450,56 @@ export function guestPhone(rand: () => number = Math.random) {
   return `${GUEST_PREFIX}${digits}`;
 }
 export const isGuestPhone = (phone: string | null | undefined) => Boolean(phone && phone.startsWith(GUEST_PREFIX));
+
+// ---------- Entrada web (anuncios) y reclamo por WhatsApp ----------
+// Se juega sin WhatsApp; al final la persona manda un código al bot y recién ahí los tickets quedan a su nombre.
+
+/** Tickets que gana quien invita, por cada amigo que juega el Drop con su link y reclama por WhatsApp. */
+export const REFERRAL_TICKETS = 100;
+
+const CLAIM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sin 0/O ni 1/I
+export function newClaimCode(rand: () => number = Math.random) {
+  let s = '';
+  for (let i = 0; i < 6; i++) s += CLAIM_ALPHABET[Math.floor(rand() * CLAIM_ALPHABET.length)];
+  return s;
+}
+
+/** Busca "#K7Q2XM" en el mensaje (el texto que deja armado el botón). Mayúsculas o minúsculas da igual. */
+export function parseClaimCode(text: string | null | undefined): string | null {
+  const m = String(text ?? '').toUpperCase().match(/#\s?([A-HJ-NP-Z2-9]{6})(?![A-Z0-9])/);
+  return m ? m[1] : null;
+}
+
+/** El mensaje que deja armado el botón de reclamo. */
+export const claimPrefill = (code: string) => `Quiero mis Golden Tickets de BRUTAL 🎟 #${code}`;
+
+export function whatsappUrl(number: string, text: string) {
+  return `https://wa.me/${number.replace(/\D/g, '')}?text=${encodeURIComponent(text)}`;
+}
+
+/** Código público para el link de invitación: 6 letras/números en minúscula. */
+export function newReferralCode(rand: () => number = Math.random) {
+  return newClaimCode(rand).toLowerCase();
+}
+export const cleanReferral = (raw: unknown) => { const s = String(raw ?? '').trim().toLowerCase(); return /^[a-z0-9]{6}$/.test(s) ? s : null; };
+
+/** Canal de adquisición de un invitado web: "ads:<campaña>" o "web". */
+export const webChannel = (source: string | null) => (source ? `ads:${source}`.slice(0, 60) : 'web');
+
+export type WebClaimReply =
+  | { status: 'credited'; nickname: string | null; drop: string; tickets: number; position: number | null; players: number | null; inviteUrl: string; profileUrl: string; referralTickets: number }
+  | { status: 'already_yours'; inviteUrl: string; profileUrl: string; referralTickets: number }
+  | { status: 'already_played' }
+  | { status: 'used_by_other' };
+
+/** Lo que contesta el bot cuando alguien manda su código. */
+export function webClaimText(r: WebClaimReply) {
+  if (r.status === 'used_by_other') return 'Ese código ya lo reclamó otro número. Si es un error, escribinos acá.';
+  if (r.status === 'already_played') return 'Ese número ya había jugado este Drop, así que los tickets de esta partida no se suman. Escribí RANKING para ver cómo vas.';
+  if (r.status !== 'credited' && r.status !== 'already_yours') return '';
+  const invite = `Por cada amigo que juegue el Drop con tu link sumás +${r.referralTickets} 🎟:\n${r.inviteUrl}`;
+  if (r.status === 'already_yours') return `Esos tickets ya están a tu nombre.\n\n${invite}\n\nTu perfil y el ranking:\n${r.profileUrl}`;
+  const hi = r.nickname ? `Listo, ${r.nickname}.` : 'Listo.';
+  const rank = r.position && r.players ? ` Vas #${r.position} de ${r.players} en la temporada.` : '';
+  return `${hi} Sumaste ${r.tickets} Golden Tickets en ${r.drop}.${rank}\n\n${invite}\n\nTu perfil y el ranking:\n${r.profileUrl}\n\nPara no recibir más mensajes, escribí BAJA.`;
+}

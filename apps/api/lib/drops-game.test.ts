@@ -290,3 +290,31 @@ test('predicción: acertar suma el premio; errar no suma ni resta', () => {
   assert.deepEqual(settleMarket({ outcome_index: 0 }, [55, 45], 50), { winner: 0, won: true, payout: 50, net: 50 });
   assert.deepEqual(settleMarket({ outcome_index: 1 }, [55, 45], 50), { winner: 0, won: false, payout: 0, net: 0 });
 });
+
+import { claimPrefill, newClaimCode, parseClaimCode, webChannel, webClaimText, whatsappUrl, cleanReferral } from './drops-game.ts';
+
+test('reclamo web: el código del mensaje armado se lee aunque lo editen un poco', () => {
+  const code = newClaimCode(() => 0.5);
+  assert.match(code, /^[A-HJ-NP-Z2-9]{6}$/);
+  assert.equal(parseClaimCode(claimPrefill('K7Q2XM')), 'K7Q2XM');
+  assert.equal(parseClaimCode('hola quiero mis tickets # k7q2xm gracias'), 'K7Q2XM');
+  assert.equal(parseClaimCode('hola'), null);
+  assert.equal(parseClaimCode('#K7Q2XMZ'), null);
+  assert.equal(parseClaimCode('#K0Q2XM'), null, 'sin ceros ni O');
+});
+
+test('reclamo web: link de WhatsApp con el mensaje armado; invitaciones y canal limpios', () => {
+  assert.equal(whatsappUrl('+54 9 11 3189-7653', 'hola #A'), 'https://wa.me/5491131897653?text=hola%20%23A');
+  assert.equal(cleanReferral(' AB12CD '), 'ab12cd');
+  assert.equal(cleanReferral('ab-12'), null);
+  assert.equal(webChannel('ig-tribu-01'), 'ads:ig-tribu-01');
+  assert.equal(webChannel(null), 'web');
+});
+
+test('reclamo web: el bot confirma tickets, posición y manda el link para invitar', () => {
+  const t = webClaimText({ status: 'credited', nickname: 'Juli', drop: 'TU TRIBU', tickets: 340, position: 12, players: 80, inviteUrl: 'https://drops.brutal.lat/jugar?r=ab12cd', profileUrl: 'https://drops.brutal.lat/a/x', referralTickets: 100 });
+  assert.match(t, /Listo, Juli\. Sumaste 340 Golden Tickets en TU TRIBU\. Vas #12 de 80/);
+  assert.match(t, /\+100 🎟:\nhttps:\/\/drops\.brutal\.lat\/jugar\?r=ab12cd/);
+  assert.match(t, /BAJA/);
+  assert.match(webClaimText({ status: 'used_by_other' }), /otro número/);
+});

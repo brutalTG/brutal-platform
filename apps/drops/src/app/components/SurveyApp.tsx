@@ -43,7 +43,7 @@ import { getNextDuotonePair } from "./color-generator";
 import { startSession as signalStartSession, finalizeSession, exportSessionJSON, updateCurrentPosition } from "./signal-store";
 import { computeDimensionsWithOptions, pickArchetype, resolveScoring } from "./archetype-engine";
 import { getReferralLink } from "./referral";
-import { serverStartSession, uploadResponse, completeSession, uploadSession, waitForUpload, claimRewards, type DetectorVerdict } from "./session-uploader";
+import { serverStartSession, uploadResponse, completeSession, uploadSession, waitForUpload, claimRewards, type DetectorVerdict, type WebClaim } from "./session-uploader";
 import type { DetectorBudget } from "./voice-question";
 import { fetchActiveDrop, fetchPreviewDrop } from "./drop-api";
 import { AccessNotice } from "./AccessNotice";
@@ -375,6 +375,7 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
   const [currentMultiplier, setCurrentMultiplier] = useState(1);
   // Plata ganada que no se acreditó porque la edad no está verificada.
   const [cashPending, setCashPending] = useState(0);
+  const [webClaim, setWebClaim] = useState<WebClaim | null>(null);
   const [pendingMultiplier, setPendingMultiplier] = useState<{ multiplier: number; label: string } | null>(null);
   const [trapPenaltyValue, setTrapPenaltyValue] = useState(0);
 
@@ -655,6 +656,7 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
         markets={markets}
         isMinor={isMinor}
         cashPending={cashPending}
+        whatsappClaim={webClaim}
         onClaim={() => { setScreen("leaderboard"); }}
         onClaimRewards={async () => {
           try {
@@ -666,6 +668,7 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
                   const result = await claimRewards({ dropId: drop.id, coins, tickets, finalTickets, multiplier: currentMultiplier });
                   console.log("[BRUTAL] Claim rewards result:", result);
                   setCashPending(Number(result.cashPending) || 0);
+                  if (result.whatsapp) setWebClaim(result.whatsapp);
                   return result.ok;
                 } catch (e) {
                   if (i === 4) throw e;

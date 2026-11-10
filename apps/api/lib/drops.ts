@@ -5,12 +5,12 @@ import { newCode, sha256, signToken, verifyToken } from './crypto';
 import { HttpError } from './http';
 import {
   ageAllowed, applyDetector, birthDateFromAge, clubShares, marketOutcomes, marketPayout, settleMarket, cleanNickname, cleanSource, cleanTypedAnswer, refSource, computeClaim, guestPhone, joinConfig, consistencyOf, detectorConfig, detectorLabel, detectorOutcome, detectorReason, voiceScript, displayReward, firstCardDraw, hiloLadder, hiloMode, hiloStep, hiloView, winningDraw, multiplierFor, normalizeWallet, observationOf, parseLocation, POLICY,
-  resolveReward, sessionMultiplier, type AnswerBody, type DetectorItem, type DetectorResult, type DetectorVerdictOut, type Hand, type HiloAction, type VoiceAnswer,
+  resolveReward, sessionMultiplier, REFERRAL_TICKETS, claimPrefill, cleanReferral, isGuestPhone, newClaimCode, newReferralCode, webChannel, whatsappUrl, type WebClaimReply, type AnswerBody, type DetectorItem, type DetectorResult, type DetectorVerdictOut, type Hand, type HiloAction, type VoiceAnswer,
 } from './drops-game';
 import { countFillers, parseAnswer } from './game';
 import { db } from './db';
 import { stt, tts, wordFeatures } from './elevenlabs';
-import { queueDropResult } from './messaging';
+import { queueDropResult, notifyReferrer } from './messaging';
 
 // API del reproductor de Drops (traído del sandbox). Mismo contrato que el servidor viejo,
 // sobre la base nueva: nodos en core, señal en signal.observations, tickets y plata en economy.ledger.
@@ -129,10 +129,10 @@ export async function joinShared(b: { code?: unknown; client?: unknown; source?:
 }
 
 // ---------- Nodo ----------
-type Node = { id: string; status: string; nickname: string | null; age: number | null; is_minor: boolean; adult_verified: boolean; province: string | null; birth_date: string | null; pseudonym_id: string };
+type Node = { id: string; status: string; acquisition_channel?: string | null; nickname: string | null; age: number | null; is_minor: boolean; adult_verified: boolean; province: string | null; birth_date: string | null; pseudonym_id: string };
 
 async function nodeOf(nodeId: string): Promise<Node> {
-  const n = await must(from('core', 'nodes').select('id, status, nickname, birth_date, province').eq('id', nodeId).maybeSingle(), 'nodo') as any;
+  const n = await must(from('core', 'nodes').select('id, status, acquisition_channel, nickname, birth_date, province, gender, city').eq('id', nodeId).maybeSingle(), 'nodo') as any;
   if (!n) throw new HttpError(404, 'node_not_found', 'Node not found');
   const f = await must(from('core', 'node_facts').select('age, is_minor').eq('id', nodeId).maybeSingle(), 'datos del nodo') as any;
   const ps = await must(from('core', 'node_pseudonyms').select('pseudonym_id').eq('node_id', nodeId).single(), 'seudónimo') as any;
@@ -434,16 +434,11 @@ async function runDetector(sessionId: string, d: DropRow, cards: DQ[]): Promise<
 }
 
 /** Acredita lo ganado en el Drop. Idempotente: dos veces no paga dos veces. */
-export async function claimDrop(a: Access, body: { dropId?: string; drop_id?: string }) {
-  const slug = body.dropId ?? body.drop_id;
-  if (!slug) throw new HttpError(400, 'drop_required', 'Retiros de plata: todavía se piden por WhatsApp.');
-  const node = await nodeOf(a.nodeId);
-  const d = await must(from('drops', 'drops').select('id, slug, name, season_id, config').eq('slug', slug).maybeSingle(), 'drop') as any;
-  if (!d) throw new HttpError(404, 'session_not_found', 'Session not found');
-  const s = await must(from('drops', 'sessions').select('id, status, position, multiplier, claimed_at, started_at, detector, markets').eq('pseudonym_id', node.pseudonym_id).eq('drop_id', d.id).maybeSingle(), 'sesión') as any;
-  if (!s) throw new HttpError(404, 'session_not_found', 'Session not found');
-  if (s.claimed_at) return { ok: true, alreadyClaimed: true };
-  if (s.status !== 'completed') throw new HttpError(409, 'not_completed', 'Session is not completed');
+type ClaimSession = { id: string; status: string; position: number; multiplier: number; claimed_at: string | null; started_at: string; detector: any; markets: any };
+const CLAIM_SESSION_COLS = 'id, status, position, multiplier, claimed_at, started_at, detector, markets';
+
+/** Lo que ganó una partida terminada (tickets y plata), con todas las reglas del Drop. */
+async function sessionTotal(d: { id: string }, s: ClaimSession) {
   const answers = await must(from('drops', 'answers').select('position, reward_currency, reward_value, reward_granted, trap_correct, questions(content)').eq('session_id', s.id), 'respuestas') as any[];
   // Doble o nada: cada mano jugada duplica o borra lo que se llevaba hasta ahí.
   const cards = await cardsOf(d.id);
@@ -452,16 +447,18 @@ export async function claimDrop(a: Access, body: { dropId?: string; drop_id?: st
     .filter((h) => hiloMode(cards[h.position]?.questions.content) === 'double' && (h.status === 'busted' || (h.status === 'stood' && Number(h.multiplier) > 1)))
     .map((h) => ({ position: Number(h.position), won: h.status !== 'busted' }));
   const base = computeClaim(answers.map((x) => ({ ...x, reward_value: Number(x.reward_value), penalty: Number(x.questions?.content?.penalty) || 0 })), Number(s.multiplier) || 1, doubles);
-  // Lo que dio la máquina se suma después del multiplicador: es un premio fijo, no se multiplica.
-  // Los mercados también van después del multiplicador: ganancia o pérdida de cada apuesta.
+  // Lo que dio la máquina y las predicciones se suman después del multiplicador: son premios fijos.
   const marketNet = (Array.isArray(s.markets) ? s.markets : []).reduce((t: number, m: any) => t + (Number(m.net) || 0), 0);
-  const total = { usd: base.usd, tickets: Math.max(0, applyDetector(base.tickets, s.detector) + marketNet) };
-  const season = d.season_id ?? (await must(from('economy', 'seasons').select('id').eq('status', 'active').maybeSingle(), 'temporada') as any)?.id ?? null;
-  if (a.test) {
-    // Prueba: muestra lo que hubiera cobrado, sin acreditar nada.
-    await from('drops', 'sessions').update({ claimed_at: new Date().toISOString() }).eq('id', s.id).is('claimed_at', null);
-    return { ok: true, alreadyClaimed: false, test: true, credited: { usd: node.is_minor ? 0 : total.usd, coins: node.is_minor ? 0 : total.usd, tickets: total.tickets } };
-  }
+  return { usd: base.usd, tickets: Math.max(0, applyDetector(base.tickets, s.detector) + marketNet) };
+}
+
+async function activeSeasonId(d: { season_id?: string | null }) {
+  return d.season_id ?? (await must(from('economy', 'seasons').select('id').eq('status', 'active').maybeSingle(), 'temporada') as any)?.id ?? null;
+}
+
+/** Acredita la partida en el ledger (idempotente por sesión) y la marca cobrada. */
+async function creditSession(node: Node, d: { id: string; season_id?: string | null }, s: ClaimSession, total: { usd: number; tickets: number }) {
+  const season = await activeSeasonId(d);
   const entries = [
     total.usd > 0 && node.adult_verified && { currency: 'cash_usd', amount: total.usd, key: `drop_cash:${s.id}` },
     total.tickets > 0 && { currency: 'tickets', amount: total.tickets, key: `drop_tickets:${s.id}` },
@@ -474,6 +471,31 @@ export async function claimDrop(a: Access, body: { dropId?: string; drop_id?: st
     if (error && !error.message.includes('idempotency_key')) throw new HttpError(409, 'claim_failed', error.message);
   }
   await from('drops', 'sessions').update({ claimed_at: new Date().toISOString() }).eq('id', s.id).is('claimed_at', null);
+}
+
+export async function claimDrop(a: Access, body: { dropId?: string; drop_id?: string }) {
+  const slug = body.dropId ?? body.drop_id;
+  if (!slug) throw new HttpError(400, 'drop_required', 'Retiros de plata: todavía se piden por WhatsApp.');
+  const node = await nodeOf(a.nodeId);
+  const d = await must(from('drops', 'drops').select('id, slug, name, season_id, config').eq('slug', slug).maybeSingle(), 'drop') as any;
+  if (!d) throw new HttpError(404, 'session_not_found', 'Session not found');
+  const s = await must(from('drops', 'sessions').select(CLAIM_SESSION_COLS).eq('pseudonym_id', node.pseudonym_id).eq('drop_id', d.id).maybeSingle(), 'sesión') as ClaimSession | null;
+  if (!s) throw new HttpError(404, 'session_not_found', 'Session not found');
+  // Invitado web (vino de un anuncio): los tickets se reclaman por WhatsApp, recién ahí se acreditan.
+  const phone = (await must(from('core', 'nodes').select('phone_e164').eq('id', node.id).single(), 'teléfono') as any).phone_e164 as string;
+  if (!a.test && isGuestPhone(phone) && String(node.acquisition_channel ?? '').match(/^(ads:|web$)/)) {
+    if (s.status !== 'completed') throw new HttpError(409, 'not_completed', 'Session is not completed');
+    return webClaimOffer(node, d, s);
+  }
+  if (s.claimed_at) return { ok: true, alreadyClaimed: true };
+  if (s.status !== 'completed') throw new HttpError(409, 'not_completed', 'Session is not completed');
+  const total = await sessionTotal(d, s);
+  if (a.test) {
+    // Prueba: muestra lo que hubiera cobrado, sin acreditar nada.
+    await from('drops', 'sessions').update({ claimed_at: new Date().toISOString() }).eq('id', s.id).is('claimed_at', null);
+    return { ok: true, alreadyClaimed: false, test: true, credited: { usd: node.is_minor ? 0 : total.usd, coins: node.is_minor ? 0 : total.usd, tickets: total.tickets } };
+  }
+  await creditSession(node, d, s, total);
   const usd = node.adult_verified ? total.usd : 0;
   // Ganó plata pero no tiene la edad verificada: queda pendiente hasta que la confirme.
   const cashPending = !node.adult_verified && !node.is_minor ? total.usd : 0;
@@ -483,6 +505,140 @@ export async function claimDrop(a: Access, body: { dropId?: string; drop_id?: st
     await queueDropResult(node.id, { drop: d.name ?? slug, usd, tickets: total.tickets, verdict: s.detector?.verdict ?? null, link: link.url });
   } catch (e) { console.error('aviso de resultado', e); }
   return { ok: true, alreadyClaimed: false, credited: { usd, coins: usd, tickets: total.tickets }, cashPending };
+}
+
+// ---------- Entrada web desde anuncios ----------
+/** Alguien llega desde un anuncio (o el link de un amigo): nodo invitado sin teléfono y link al onboarding. */
+export async function webStart(b: { ref?: unknown; source?: unknown; client?: unknown }) {
+  const d = await dropFor({ linkId: '', nodeId: '', purpose: 'drop', destination: 'drop', dropSlug: null, expiresAt: '', test: false });
+  if (!d) throw new HttpError(410, 'no_drop', 'Ahora no hay ningún Drop en juego. Volvé en unos días.');
+  const ref = cleanReferral(b.ref);
+  const referrer = ref ? await must(from('core', 'nodes').select('id').eq('referral_code', ref).maybeSingle(), 'invitó') as { id: string } | null : null;
+  const source = cleanSource(b.source) ?? (referrer ? 'amigo' : null);
+  let nodeId: string | null = null;
+  for (let i = 0; i < 3 && !nodeId; i++) {
+    const { data, error } = await from('core', 'nodes').insert({
+      phone_e164: guestPhone(), status: 'pending', acquisition_channel: webChannel(source), referred_by: referrer?.id ?? null, last_active_at: new Date().toISOString(),
+    }).select('id').single();
+    if (!error) nodeId = (data as any).id;
+    else if (!/duplicate/i.test(error.message)) throw new Error(`nodo web: ${error.message}`);
+  }
+  if (!nodeId) throw new Error('nodo web: no se pudo crear');
+  const link = await createDropsLink(nodeId, { purpose: 'onboarding', hours: 72 });
+  await from('drops', 'join_events').insert({ drop_slug: d.slug, event: 'web_start', node_id: nodeId, client_id: clientId(b.client), source });
+  return { ok: true, url: link.url, code: link.code };
+}
+
+/** Final de un invitado web: el código para reclamar por WhatsApp (uno por partida) y cuánto va a sumar. */
+async function webClaimOffer(node: Node, d: { id: string; name: string }, s: ClaimSession) {
+  const total = await sessionTotal(d, s);
+  let row = await must(from('drops', 'web_claims').select('code, claimed_at').eq('session_id', s.id).maybeSingle(), 'reclamo') as { code: string; claimed_at: string | null } | null;
+  for (let i = 0; i < 5 && !row; i++) {
+    const code = newClaimCode();
+    const { error } = await from('drops', 'web_claims').insert({ code, node_id: node.id, drop_id: d.id, session_id: s.id, tickets: total.tickets });
+    if (!error) row = { code, claimed_at: null };
+    else if (!/duplicate/i.test(error.message)) throw new Error(`reclamo: ${error.message}`);
+    else row = await must(from('drops', 'web_claims').select('code, claimed_at').eq('session_id', s.id).maybeSingle(), 'reclamo') as any;
+  }
+  if (!row) throw new Error('reclamo: no se pudo crear el código');
+  if (!row.claimed_at) await from('drops', 'web_claims').update({ tickets: total.tickets }).eq('code', row.code);
+  return {
+    ok: true, alreadyClaimed: Boolean(row.claimed_at), pendingWhatsapp: true, credited: { usd: 0, coins: 0, tickets: total.tickets }, cashPending: 0,
+    whatsapp: { code: row.code, url: env.watiChannel ? whatsappUrl(env.watiChannel, claimPrefill(row.code)) : null, tickets: total.tickets, referralTickets: REFERRAL_TICKETS, claimed: Boolean(row.claimed_at) },
+  };
+}
+
+async function ensureReferralCode(nodeId: string) {
+  const n = await must(from('core', 'nodes').select('referral_code').eq('id', nodeId).single(), 'código') as { referral_code: string | null };
+  if (n.referral_code) return n.referral_code;
+  for (let i = 0; i < 5; i++) {
+    const code = newReferralCode();
+    const { data, error } = await from('core', 'nodes').update({ referral_code: code }).eq('id', nodeId).is('referral_code', null).select('referral_code');
+    if (!error && data?.length) return code;
+    if (!error) return (await must(from('core', 'nodes').select('referral_code').eq('id', nodeId).single(), 'código') as any).referral_code as string;
+  }
+  throw new Error('no se pudo crear el código de invitación');
+}
+
+const inviteUrl = (code: string) => `${env.dropsOrigin}/jugar?r=${code}`;
+
+/**
+ * Llegó un código por WhatsApp. El invitado web toma ese número (o se une al nodo que ya lo tenía),
+ * se le acredita la partida y, si es su primera vez, el amigo que lo invitó suma REFERRAL_TICKETS.
+ * null: el código no existe (el mensaje sigue el camino normal).
+ */
+export async function claimWebTickets(phone: string, code: string): Promise<{ nodeId: string; reply: WebClaimReply } | null> {
+  const claim = await must(from('drops', 'web_claims').select('code, node_id, drop_id, session_id, claimed_at, claimed_node_id').eq('code', code).maybeSingle(), 'reclamo') as any;
+  if (!claim) return null;
+  const byPhone = await must(from('core', 'nodes').select('id, status').eq('phone_e164', phone).maybeSingle(), 'nodo') as { id: string; status: string } | null;
+  if (byPhone && ['blocked', 'archived'].includes(byPhone.status)) return null;
+  const links = async (nodeId: string) => {
+    const ref = await ensureReferralCode(nodeId);
+    const profile = await createDropsLink(nodeId, { purpose: 'drop', destination: 'profile', hours: 168 });
+    return { inviteUrl: inviteUrl(ref), profileUrl: profile.url, referralTickets: REFERRAL_TICKETS };
+  };
+  if (claim.claimed_at) {
+    if (byPhone && byPhone.id === claim.claimed_node_id) return { nodeId: byPhone.id, reply: { status: 'already_yours', ...(await links(byPhone.id)) } };
+    return byPhone ? { nodeId: byPhone.id, reply: { status: 'used_by_other' } } : null;
+  }
+  const guest = await must(from('core', 'nodes').select('id, phone_e164, nickname, birth_date, gender, province, city, referred_by').eq('id', claim.node_id).single(), 'invitado') as any;
+  const d = await must(from('drops', 'drops').select('id, slug, name, season_id').eq('id', claim.drop_id).single(), 'drop') as any;
+  const now = new Date().toISOString();
+  let targetId: string;
+  let firstTime: boolean;
+  if (!byPhone) {
+    // Número nuevo: el invitado pasa a ser este número.
+    await must(from('core', 'nodes').update({ phone_e164: phone, status: 'active', phone_verified_at: now, last_active_at: now }).eq('id', guest.id), 'activar nodo');
+    targetId = guest.id;
+    firstTime = true;
+  } else {
+    // El número ya estaba: su partida web pasa a ese nodo, salvo que ya haya jugado este Drop.
+    targetId = byPhone.id;
+    const target = await nodeOf(targetId);
+    const guestPs = (await must(from('core', 'node_pseudonyms').select('pseudonym_id').eq('node_id', guest.id).single(), 'seudónimo') as any).pseudonym_id;
+    const theirs = await must(from('drops', 'sessions').select('id, status').eq('pseudonym_id', target.pseudonym_id).eq('drop_id', d.id).maybeSingle(), 'sesión previa') as { id: string; status: string } | null;
+    if (theirs?.status === 'completed') {
+      await from('drops', 'web_claims').update({ claimed_at: now, claimed_node_id: targetId, tickets: 0 }).eq('code', code);
+      return { nodeId: targetId, reply: { status: 'already_played' } };
+    }
+    if (!theirs) {
+      await must(from('drops', 'sessions').update({ pseudonym_id: target.pseudonym_id }).eq('id', claim.session_id), 'mover partida');
+      await from('signal', 'observations').update({ pseudonym_id: target.pseudonym_id }).eq('pseudonym_id', guestPs);
+    }
+    const fill: Record<string, unknown> = {};
+    for (const k of ['nickname', 'birth_date', 'gender', 'province', 'city']) if (guest[k] && !(target as any)[k]) fill[k] = guest[k];
+    const prev = await must(from('core', 'nodes').select('referred_by').eq('id', targetId).single(), 'invitó') as any;
+    if (!prev.referred_by && guest.referred_by && guest.referred_by !== targetId) fill.referred_by = guest.referred_by;
+    await from('core', 'nodes').update({ ...fill, ...(byPhone.status === 'pending' ? { status: 'active' } : {}), last_active_at: now }).eq('id', targetId);
+    await from('core', 'nodes').update({ status: 'archived' }).eq('id', guest.id);
+    const { count } = await from('economy', 'ledger').select('id', { count: 'exact', head: true }).eq('node_id', targetId);
+    firstTime = (count ?? 0) === 0;
+  }
+  const node = await nodeOf(targetId);
+  const s = await must(from('drops', 'sessions').select(CLAIM_SESSION_COLS).eq('id', claim.session_id).single(), 'sesión') as ClaimSession;
+  const total = await sessionTotal(d, s);
+  await creditSession(node, d, s, total);
+  await from('drops', 'web_claims').update({ claimed_at: now, claimed_node_id: targetId, tickets: total.tickets }).eq('code', code);
+  await from('drops', 'join_events').insert({ drop_slug: d.slug, event: 'web_claimed', node_id: targetId });
+
+  // Premio al que invitó: una vez por amigo nuevo.
+  const referrer = (await must(from('core', 'nodes').select('referred_by').eq('id', targetId).single(), 'invitó') as any).referred_by as string | null;
+  if (firstTime && referrer && referrer !== targetId) {
+    const { error } = await from('economy', 'ledger').insert({
+      node_id: referrer, season_id: await activeSeasonId(d), currency: 'tickets', amount: REFERRAL_TICKETS, app_slug: 'drops', activity: 'referral',
+      source_type: 'node', source_id: targetId, idempotency_key: `referral:${targetId}`,
+    });
+    if (!error) {
+      try { await notifyReferrer(referrer, { friend: node.nickname, tickets: REFERRAL_TICKETS }); } catch (e) { console.error('aviso al que invitó', e); }
+    } else if (!error.message.includes('idempotency_key')) console.error('premio por invitar', error.message);
+  }
+
+  const season = await activeSeasonId(d);
+  const me = season ? await must(from('economy', 'season_ranking').select('position, players').eq('season_id', season).eq('node_id', targetId).maybeSingle(), 'posición') as any : null;
+  return {
+    nodeId: targetId,
+    reply: { status: 'credited', nickname: node.nickname, drop: d.name, tickets: total.tickets, position: me ? Number(me.position) : null, players: me ? Number(me.players) : null, ...(await links(targetId)) },
+  };
 }
 
 // ---------- Perfil, billetera, ranking ----------

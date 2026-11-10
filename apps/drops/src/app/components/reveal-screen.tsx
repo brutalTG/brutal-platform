@@ -4,7 +4,7 @@ import { hapticHeavy, hapticSuccess, hapticRigid } from "./haptics";
 import { getRandomDuotonePair } from "./color-generator";
 import { BrutalLogo } from "./brutal-ui";
 import { showsCash } from "./economy";
-import type { MarketResult } from "./session-uploader";
+import type { MarketResult, WebClaim } from "./session-uploader";
 
 interface RevealScreenProps {
   title: string;
@@ -27,6 +27,8 @@ interface RevealScreenProps {
   isMinor?: boolean;
   /** Plata ganada que queda guardada hasta que confirme su edad. */
   cashPending?: number;
+  /** Vino de un anuncio: los tickets se reclaman por WhatsApp con este código. */
+  whatsappClaim?: WebClaim | null;
   onClaim: () => void;
   /** Async function that claims rewards on the server — called before animation */
   onClaimRewards: () => Promise<boolean>;
@@ -79,6 +81,7 @@ export function RevealScreen({
   markets = [],
   isMinor = false,
   cashPending = 0,
+  whatsappClaim = null,
   onClaim,
   onClaimRewards,
   onNotifyAndClose,
@@ -430,10 +433,30 @@ export function RevealScreen({
             </div>
           )}
 
-          {!showsCash(isMinor) && claimPhase === "done" && (
+          {!showsCash(isMinor) && claimPhase === "done" && !whatsappClaim && (
             <p className="max-w-[290px] text-center font-['Fira_Code'] text-[11px] leading-snug" style={{ color: "var(--dynamic-bg, #000)" }}>
               Ya están en el ranking. Cada dos semanas se cierra y arranca de cero.
             </p>
+          )}
+
+          {/* Vino de un anuncio: los tickets quedan a su nombre recién cuando manda el mensaje por WhatsApp. */}
+          {whatsappClaim && claimPhase === "done" && (
+            <div className="flex flex-col items-center gap-3 w-full max-w-[300px]" data-testid="web-claim">
+              <p className="text-center font-['Roboto'] font-bold text-[16px] leading-snug" style={{ color: "var(--dynamic-bg, #000)" }}>
+                {whatsappClaim.claimed ? "Ya están a tu nombre." : "Todavía no tienen dueño. Mandá el mensaje por WhatsApp y quedan a tu nombre en el ranking."}
+              </p>
+              {whatsappClaim.url && (
+                <a href={whatsappClaim.url} onClick={() => hapticHeavy()}
+                  className="w-full h-[64px] rounded-full flex items-center justify-center gap-2 select-none active:scale-[0.98]"
+                  style={{ backgroundColor: "var(--dynamic-bg, #000)", color: "var(--dynamic-fg, #fff)" }}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8s-.4-.1-.6.1-.7.8-.8 1-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.3-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6a2.7 2.7 0 0 0 1.8-1.2 2.2 2.2 0 0 0 .1-1.3c0-.1-.2-.2-.4-.3Z"/></svg>
+                  <span className="font-['Roboto'] font-extrabold text-[19px]">{whatsappClaim.claimed ? "Abrir WhatsApp" : "Reclamá tus tickets"}</span>
+                </a>
+              )}
+              <p className="text-center font-['Fira_Code'] text-[12px] leading-snug" style={{ color: "var(--dynamic-bg, #000)" }}>
+                Por cada amigo que juegue el Drop con tu link sumás <b>+{whatsappClaim.referralTickets} 🎟</b>. El link te llega en ese mismo mensaje.
+              </p>
+            </div>
           )}
 
           {showsCash(isMinor) && cashPending > 0 && claimPhase === "done" && (
@@ -444,7 +467,7 @@ export function RevealScreen({
 
           {/* CTA: invitar a otro. El final del Drop es el ranking. */}
           <div className="flex flex-col items-center gap-2 w-full max-w-[290px]">
-            {passAlong ?? (
+            {whatsappClaim ? null : passAlong ?? (
               <button
                 onClick={onNotifyAndClose}
                 className="w-full h-[60px] rounded-full flex items-center justify-center select-none active:scale-[0.98]"
@@ -453,7 +476,7 @@ export function RevealScreen({
                 <span className="font-['Roboto'] font-semibold text-[21px]" style={{ color: "var(--dynamic-fg, #fff)" }}>Ver el ranking</span>
               </button>
             )}
-            {passAlong && (
+            {(passAlong || whatsappClaim) && (
               <button onClick={onNotifyAndClose} className="mt-1 font-['Roboto'] text-[15px] font-semibold underline underline-offset-4" style={{ color: "var(--dynamic-bg, #000)" }}>
                 Ver el ranking
               </button>
