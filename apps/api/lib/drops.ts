@@ -4,7 +4,7 @@ import { from, must } from './db';
 import { newCode, sha256, signToken, verifyToken } from './crypto';
 import { HttpError } from './http';
 import {
-  ageAllowed, applyDetector, birthDateFromAge, clubShares, marketOutcomes, settleMarket, cleanNickname, cleanSource, cleanTypedAnswer, refSource, computeClaim, guestPhone, joinConfig, consistencyOf, detectorConfig, detectorLabel, detectorOutcome, detectorReason, voiceScript, displayReward, firstCardDraw, hiloLadder, hiloMode, hiloStep, hiloView, winningDraw, multiplierFor, normalizeWallet, observationOf, parseLocation, POLICY,
+  ageAllowed, applyDetector, birthDateFromAge, clubShares, marketOutcomes, marketPayout, settleMarket, cleanNickname, cleanSource, cleanTypedAnswer, refSource, computeClaim, guestPhone, joinConfig, consistencyOf, detectorConfig, detectorLabel, detectorOutcome, detectorReason, voiceScript, displayReward, firstCardDraw, hiloLadder, hiloMode, hiloStep, hiloView, winningDraw, multiplierFor, normalizeWallet, observationOf, parseLocation, POLICY,
   resolveReward, sessionMultiplier, type AnswerBody, type DetectorItem, type DetectorResult, type DetectorVerdictOut, type Hand, type HiloAction, type VoiceAnswer,
 } from './drops-game';
 import { countFillers, parseAnswer } from './game';
@@ -176,11 +176,12 @@ const rewardOf = (c: DQ) => ({
   minor: c.reward_minor_tickets ?? c.questions.reward_minor_tickets ?? null,
 });
 
-/** Mercado: arma opciones, precios y el texto de la carta a la que apunta (content.ref = su etiqueta). */
+/** Predicción: arma opciones, premio y el texto de la carta a la que apunta (content.ref = su etiqueta). */
 function marketContent(content: Record<string, any>, cards: DQ[]): Record<string, any> {
   const ref = cards.find((c) => c.questions.label === content.ref)?.questions;
   const options: unknown[] = Array.isArray(ref?.content?.options) ? ref!.content.options : [];
-  return { ...content, outcomes: marketOutcomes(content, options), refText: ref?.content?.text ?? null, refQuestionId: ref?.id ?? null };
+  const outcomes = marketOutcomes(content, options);
+  return { ...content, outcomes, options: outcomes.map((o) => o.label), payout: marketPayout(content), refText: ref?.content?.text ?? null, refQuestionId: ref?.id ?? null };
 }
 
 /** El club de cada mercado de esta partida: respuestas reales a la carta de referencia + el simulado. */
@@ -197,8 +198,8 @@ async function settleMarkets(sessionId: string, cards: DQ[]) {
       for (const r of real) { const i = Number(r.value?.index); if (Number.isInteger(i) && i >= 0 && i < counts.length) counts[i] += 1; }
     }
     const shares = clubShares(counts, m.sim, m.simPlayers ?? 0);
-    const r = settleMarket(b.value, shares);
-    out.push({ position: b.position, text: m.text, outcome: b.value.outcome, stake: b.value.stake, price: b.value.price, winner: m.outcomes[r.winner]?.label ?? null, shares: m.outcomes.map((o: { label: string }, i: number) => ({ label: o.label, pct: shares[i] })), won: r.won, payout: r.payout, net: r.net });
+    const r = settleMarket(b.value, shares, m.payout);
+    out.push({ position: b.position, text: m.text, outcome: b.value.outcome, winner: m.outcomes[r.winner]?.label ?? null, shares: m.outcomes.map((o: { label: string }, i: number) => ({ label: o.label, pct: shares[i] })), won: r.won, payout: r.payout, net: r.net });
   }
   return out;
 }
@@ -219,7 +220,7 @@ function playableDrop(d: DropRow, cards: DQ[], node: Node) {
       const q = c.questions;
       const base = q.format === 'market' ? marketContent(q.content ?? {}, cards) : (q.content ?? {});
       // El club simulado y la referencia interna no viajan al teléfono.
-      const { profileEnrichment: _p, minorReward: _m, reward: _r, sim: _s, simPlayers: _sp, prices: _pr, ref: _rf, refQuestionId: _rq, ...content } = base;
+      const { profileEnrichment: _p, minorReward: _m, reward: _r, sim: _s, simPlayers: _sp, prices: _pr, stakes: _st, volume: _v, outcomes: _o, ref: _rf, refQuestionId: _rq, ...content } = base;
       const reward = displayReward(resolveReward(rewardOf(c), node.is_minor));
       return {
         questionId: q.id,

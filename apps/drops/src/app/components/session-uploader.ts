@@ -124,8 +124,7 @@ function answerToPayloadFields(answer: UserAnswer, index: number): Record<string
       fields.choice = answer.side;
       break;
     case "market":
-      // El precio no se manda: el servidor usa el de la carta.
-      fields.market = { outcome_index: answer.outcomeIndex, stake: answer.stake };
+      fields.market = { outcome_index: answer.outcomeIndex };
       break;
     case "mayor_menor":
       // La mano la guarda el servidor; acá solo se avisa que terminó.
@@ -292,7 +291,7 @@ export interface DetectorVerdict {
 }
 
 /** Un mercado ya resuelto (lo arma el servidor al cerrar la partida). */
-export type MarketResult = { position: number; text: string; outcome: string; stake: number; price: number; winner: string | null; shares: { label: string; pct: number }[]; won: boolean; payout: number; net: number };
+export type MarketResult = { position: number; text: string; outcome: string; winner: string | null; shares: { label: string; pct: number }[]; won: boolean; payout: number; net: number };
 export type CompleteResult = { ok: boolean; detector: DetectorVerdict | null; markets?: MarketResult[] };
 
 export async function completeSession(params: {

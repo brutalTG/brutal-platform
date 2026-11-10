@@ -409,18 +409,18 @@ export function RevealScreen({
 
           {hasMultiplier && claimPhase === "done" && (
             <p className="font-['Fira_Code'] text-[11px] text-center -mt-1" style={{ color: "var(--dynamic-bg, #000)" }}>
-              Tickets: {tickets.toLocaleString("es-AR")} × {multiplier.toFixed(2).replace(/\.?0+$/, "")}{bonusTickets !== 0 ? ` ${bonusTickets > 0 ? "+" : "−"} ${Math.abs(bonusTickets)} (la máquina)` : ""}{marketTickets !== 0 ? ` ${marketTickets > 0 ? "+" : "−"} ${Math.abs(marketTickets)} (mercados)` : ""} = {finalTickets.toLocaleString("es-AR")}
+              Tickets: {tickets.toLocaleString("es-AR")} × {multiplier.toFixed(2).replace(/\.?0+$/, "")}{bonusTickets !== 0 ? ` ${bonusTickets > 0 ? "+" : "−"} ${Math.abs(bonusTickets)} (la máquina)` : ""}{marketTickets !== 0 ? ` ${marketTickets > 0 ? "+" : "−"} ${Math.abs(marketTickets)} (predicciones)` : ""} = {finalTickets.toLocaleString("es-AR")}
             </p>
           )}
 
           {markets.length > 0 && (
             <div className="w-full max-w-[340px] flex flex-col gap-2">
-              <p className="font-['Fira_Code'] text-[11px] uppercase tracking-widest text-center" style={{ color: "var(--dynamic-bg, #000)" }}>Tus mercados</p>
+              <p className="font-['Fira_Code'] text-[11px] uppercase tracking-widest text-center" style={{ color: "var(--dynamic-bg, #000)" }}>Tus predicciones</p>
               {markets.map((m) => (
                 <div key={m.position} className="rounded-xl px-3 py-2 border-2" style={{ borderColor: "var(--dynamic-bg, #000)", color: "var(--dynamic-bg, #000)" }}>
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-bold text-[14px] leading-tight">{m.won ? "✓" : "✗"} Compraste “{m.outcome}” a {m.price}¢</span>
-                    <span className="font-['Fira_Code'] font-extrabold text-[15px] shrink-0">{m.net > 0 ? "+" : m.net < 0 ? "−" : ""}{Math.abs(m.net)} 🎟</span>
+                    <span className="font-bold text-[14px] leading-tight">{m.won ? "✓" : "✗"} Dijiste “{m.outcome}”</span>
+                    <span className="font-['Fira_Code'] font-extrabold text-[15px] shrink-0">{m.net > 0 ? `+${m.net} 🎟` : "0"}</span>
                   </div>
                   <p className="font-['Fira_Code'] text-[11px] opacity-75 mt-1">
                     Ganó “{m.winner}” · {m.shares.map((s) => `${s.label} ${Math.round(s.pct)}%`).join(" · ")}

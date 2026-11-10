@@ -366,11 +366,9 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
   const [coins, setCoins] = useState(0);
   const [tickets, setTickets] = useState(0);
   const [rewardEvent, setRewardEvent] = useState<RewardEvent | null>(null);
-  // Apuestas en mercados: los tickets se ven descontados mientras la apuesta está abierta.
-  const [staked, setStaked] = useState(0);
   const [markets, setMarkets] = useState<MarketResult[]>([]);
   // El contador sube de a poco (cuenta animada), no salta.
-  const shownTickets = useCountUp(Math.max(0, tickets - staked));
+  const shownTickets = useCountUp(tickets);
   const rewardIdRef = useRef(0);
 
   // --- Multiplier ---
@@ -721,9 +719,8 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
         setResultConfig={setResultConfig}
         setScreen={setScreen as (s: string) => void}
         detectorBudget={detectorBudget}
-        tickets={Math.max(0, tickets - staked)}
+        tickets={tickets}
         onHand={onHand}
-        onBet={(stake) => setStaked((x) => x + stake)}
       />
     );
   }
@@ -799,9 +796,8 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
             setResultConfig={setResultConfig}
             setScreen={setScreen as (s: string) => void}
             detectorBudget={detectorBudget}
-            tickets={Math.max(0, tickets - staked)}
+            tickets={tickets}
             onHand={onHand}
-            onBet={(stake) => setStaked((x) => x + stake)}
           />
         </div>
       </div>

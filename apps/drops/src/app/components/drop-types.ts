@@ -30,16 +30,15 @@ export interface PredictionBetQuestion {
   maxTickets?: number;
 }
 
-/** Mercado tipo Polymarket: "¿qué eligió la mayoría del club?" con opciones que cotizan en centavos. */
+/** Predicción: "¿qué eligió la mayoría del club?". Todas las opciones pagan lo mismo (payout). */
 export interface MarketQuestion {
   type: "market";
   text: string;
   /** El texto de la carta a la que apunta (lo arma el servidor). */
   refText?: string;
-  /** Opciones con su precio (1–99 = % de chance que les da el mercado). Las arma el servidor desde la carta de referencia. */
-  outcomes: { label: string; price: number }[];
-  stakes?: number[];
-  volume?: number;
+  /** Las opciones de la carta de referencia (las arma el servidor). */
+  options: string[];
+  payout?: number;
   traders?: number;
 }
 

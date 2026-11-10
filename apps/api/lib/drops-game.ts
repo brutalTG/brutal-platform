@@ -27,32 +27,31 @@ export function ageAllowed(minAge: unknown, age: number | null) {
   return age !== null && age >= min;
 }
 
-// ---------- Mercados (tipo Polymarket) ----------
+// ---------- Predicciones ("¿qué eligió la mayoría del club?") ----------
 // Una carta "market" apunta a otra carta del Drop (content.ref = su etiqueta) y pregunta qué eligió la mayoría.
-// Cada opción cotiza (content.prices, 1–99 ¢). El jugador compra una con tickets; si gana cobra apuesta × 100 / precio.
-// Quién gana sale de lo que contestó el club: respuestas reales + un club simulado (content.sim en %, con
-// content.simPlayers jugadores) mientras haya poca gente. Para pasar a solo real: simPlayers = 0.
+// Todas las opciones pagan lo mismo (content.payout tickets): sin precios ni apuesta, para que nadie conteste
+// por la cuota. Acertar suma payout; errar no resta. Quién gana sale de lo que contestó el club: respuestas
+// reales + un club simulado (content.sim en %, con content.simPlayers jugadores). Para pasar a solo real: simPlayers = 0.
 
-export const MARKET_MAX_STAKE = 1000;
+export const MARKET_DEFAULT_PAYOUT = 50;
 
-/** Opciones y precios del mercado. Precios inválidos o faltantes: reparte parejo. */
-export function marketOutcomes(content: Record<string, any>, refOptions: unknown[]) {
-  const labels = refOptions.map((o) => String(o)).filter(Boolean);
-  const raw: unknown[] = Array.isArray(content.prices) ? content.prices : [];
-  return labels.map((label, i) => {
-    const p = Math.round(Number(raw[i]));
-    return { label, price: Number.isFinite(p) && p >= 1 && p <= 99 ? p : Math.max(1, Math.round(100 / Math.max(1, labels.length))) };
-  });
+/** Lo que paga acertar: content.payout entre 1 y 1000; si no, 50. */
+export function marketPayout(content: Record<string, any>) {
+  const p = Math.round(Number(content?.payout));
+  return Number.isFinite(p) && p >= 1 && p <= 1000 ? p : MARKET_DEFAULT_PAYOUT;
 }
 
-/** La apuesta tal como la guardamos, con el precio de la carta (no el que mande el teléfono). Inválida: null. */
+/** Las opciones del mercado son las de la carta a la que apunta. */
+export function marketOutcomes(_content: Record<string, any>, refOptions: unknown[]) {
+  return refOptions.map((o) => String(o)).filter(Boolean).map((label) => ({ label }));
+}
+
+/** La elección tal como la guardamos. Inválida: null. */
 export function marketBet(content: Record<string, any>, raw: AnswerBody['market']) {
-  const outcomes: { label: string; price: number }[] = Array.isArray(content.outcomes) ? content.outcomes : [];
+  const outcomes: { label: string }[] = Array.isArray(content.outcomes) ? content.outcomes : [];
   const i = Number(raw?.outcome_index);
-  const stake = Math.round(Number(raw?.stake));
   if (!Number.isInteger(i) || i < 0 || i >= outcomes.length) return null;
-  if (!Number.isFinite(stake) || stake < 1 || stake > MARKET_MAX_STAKE) return null;
-  return { outcome_index: i, outcome: outcomes[i].label, stake, price: outcomes[i].price };
+  return { outcome_index: i, outcome: outcomes[i].label };
 }
 
 /** Porcentaje del club por opción: respuestas reales + el club simulado. */
@@ -66,12 +65,12 @@ export function clubShares(realCounts: number[], simPct: unknown, simPlayers: un
   return votes.map((v) => (total > 0 ? Math.round((v / total) * 1000) / 10 : Math.round(1000 / Math.max(1, n)) / 10));
 }
 
-/** Gana la opción más elegida (empate: la primera). Ganar paga apuesta × 100 / precio; perder, nada. */
-export function settleMarket(bet: { outcome_index: number; stake: number; price: number }, shares: number[]) {
+/** Gana la opción más elegida (empate: la primera). Acertar paga `payout`; errar, nada. */
+export function settleMarket(bet: { outcome_index: number }, shares: number[], payout: number) {
   const winner = shares.reduce((b, s, i) => (s > shares[b] ? i : b), 0);
   const won = bet.outcome_index === winner;
-  const payout = won ? Math.round((bet.stake * 100) / Math.max(1, bet.price)) : 0;
-  return { winner, won, payout, net: payout - bet.stake };
+  const paid = won ? payout : 0;
+  return { winner, won, payout: paid, net: paid };
 }
 
 export function displayReward(r: { cash: number; tickets: number }) {
@@ -134,7 +133,7 @@ export type AnswerBody = {
   rafaga_choices?: unknown[] | null; text_response?: string | null; choice?: string | null;
   voice?: VoiceAnswer | null; hilo?: HiloResult | null;
   /** Mercado: qué opción compró y cuántos tickets puso. El precio lo pone el servidor. */
-  market?: { outcome_index?: unknown; stake?: unknown } | null;
+  market?: { outcome_index?: unknown } | null;
   /** Detalle fino que manda el reproductor: latencia por ítem, toques, correcciones, apuesta, salidas de la app. */
   meta?: unknown;
 };
@@ -167,7 +166,7 @@ function observationCore(format: string, content: Record<string, any>, b: Answer
   if (format === 'market') {
     const bet = marketBet(content, b.market);
     if (!bet) return { kind: 'behavior', value: { timeout: true, viewed: false }, text: null, number: null };
-    return { kind: 'bet', value: bet, text: bet.outcome, number: bet.stake };
+    return { kind: 'bet', value: bet, text: bet.outcome, number: null };
   }
   if (format === 'mayor_menor') {
     const h = b.hilo;

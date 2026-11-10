@@ -47,13 +47,11 @@ interface Props {
   tickets?: number;
   /** Lo que dejó una mano de mayor o menor: duplica/borra tickets o activa un multiplicador. */
   onHand?: (r: { mode: "ladder" | "multiplier" | "double"; multiplier: number; busted: boolean; steps: number }) => void;
-  /** Mercado: tickets que quedan apostados hasta que se resuelve. */
-  onBet?: (stake: number) => void;
 }
 
 export function QuestionRenderer({
   question: q, questionIndex, pipeline, reactionText,
-  advanceWithMultiplierCheck, setResultConfig, setScreen, detectorBudget, tickets = 0, onHand, onBet,
+  advanceWithMultiplierCheck, setResultConfig, setScreen, detectorBudget, tickets = 0, onHand,
 }: Props) {
   const actionHint = getActionHint(q);
 
@@ -252,17 +250,14 @@ export function QuestionRenderer({
           actionHint={actionHint}
           text={q.text}
           refText={q.refText}
-          outcomes={q.outcomes}
-          available={tickets}
-          stakes={q.stakes}
-          volume={q.volume}
+          options={q.options}
+          payout={q.payout ?? 50}
           traders={q.traders}
-          onConfirm={(outcomeIndex, stake, price) => {
+          onConfirm={(outcomeIndex) => {
             if (!pipeline.acquireLock()) return;
             pipeline.markFirstAnswered();
             const latencyMs = pipeline.captureLatency();
-            onBet?.(stake);
-            pipeline.submitStandard({ type: "market", outcomeIndex, stake, price, latencyMs, meta: { stake, price } });
+            pipeline.submitStandard({ type: "market", outcomeIndex, latencyMs });
           }}
         />
       )}

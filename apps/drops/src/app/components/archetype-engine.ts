@@ -76,7 +76,7 @@ export type UserAnswer = (
   | { type: "ranking"; order: string[]; latencyMs?: number }
   | { type: "rafaga"; answers: (string | null)[]; latencyMs?: number }
   | { type: "prediction_bet"; side: "A" | "B"; latencyMs?: number }
-  | { type: "market"; outcomeIndex: number; stake: number; price: number; latencyMs?: number }
+  | { type: "market"; outcomeIndex: number; latencyMs?: number }
   | { type: "trap"; correct: boolean; selectedIndex: number; latencyMs?: number }
   | { type: "trap_silent"; correct: boolean; selectedIndex: number; latencyMs?: number }
   | { type: "confesionario"; latencyMs?: number }
