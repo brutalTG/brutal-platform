@@ -30,6 +30,19 @@ export interface PredictionBetQuestion {
   maxTickets?: number;
 }
 
+/** Mercado tipo Polymarket. ref = etiqueta de la carta cuyo resultado se apuesta; prices en ¢ por opción; sim = club simulado (%). */
+export interface MarketQuestion {
+  type: "market";
+  text: string;
+  ref: string;
+  prices: number[];
+  sim?: number[];
+  simPlayers?: number;
+  stakes?: number[];
+  volume?: number;
+  traders?: number;
+}
+
 export interface RankingQuestion {
   type: "ranking";
   text: string;
@@ -168,6 +181,9 @@ export interface RafagaEmojiQuestion {
   promptBold: string;
   items: RafagaItem[];
   secondsPerItem?: number;
+  /** Texto debajo de cada emoji (ej. "SÍ" / "NO"). */
+  labelA?: string;
+  labelB?: string;
 }
 
 export interface HotTakeVisualQuestion {
@@ -206,7 +222,7 @@ export interface RafagaBurstTrigger {
 
 export interface RafagaBurstInteraction {
   /** Tipo de interacción */
-  type: "emoji_binary" | "button_binary" | "slider";
+  type: "emoji_binary" | "button_binary" | "button_multi" | "slider";
   
   // Para emoji_binary
   /** Emoji opción A (requerido para emoji_binary) */
@@ -220,6 +236,9 @@ export interface RafagaBurstInteraction {
   /** Texto/emoji opción B (requerido para button_binary) */
   buttonB?: string;
   
+  // Para button_multi: de 2 a 4 botones apilados (tier list, "mirás / no bancás / ni idea", dilemas con "me da igual").
+  options?: string[];
+
   // Para slider
   /** Configuración del slider (requerido para slider) */
   sliderConfig?: {
@@ -248,6 +267,8 @@ export interface RafagaBurstQuestion {
     /** Duración en ms de la pantalla previa (default: 2500) */
     durationMs?: number;
   };
+  /** La consigna, visible arriba durante toda la ráfaga (ej. "Armá tu tier list"). */
+  prompt?: string;
   /** Items de la ráfaga */
   items: RafagaBurstItem[];
   /** Segundos por item antes de auto-avanzar (default: 3) */
@@ -283,6 +304,7 @@ export type QuestionContent =
   | MayorMenorQuestion
   | ChoiceQuestion
   | PredictionBetQuestion
+  | MarketQuestion
   | RankingQuestion
   | ConfesionarioQuestion
   | SliderQuestion

@@ -4,9 +4,12 @@ import { hapticHeavy, hapticSuccess, hapticRigid } from "./haptics";
 import { getRandomDuotonePair } from "./color-generator";
 import { BrutalLogo } from "./brutal-ui";
 import { showsCash } from "./economy";
+import type { MarketResult } from "./session-uploader";
 
 interface RevealScreenProps {
   title: string;
+  /** Etiqueta arriba del título (default "Tu perfil"). */
+  label?: string;
   description: string;
   metrics: {
     latency: string;
@@ -19,6 +22,8 @@ interface RevealScreenProps {
   multiplier: number; // 1, 1.25, or 1.5
   /** Lo que dio la máquina (se suma después del multiplicador; puede ser negativo). */
   bonusTickets?: number;
+  /** Mercados resueltos al cerrar la partida (ganancia o pérdida de cada apuesta). */
+  markets?: MarketResult[];
   isMinor?: boolean;
   /** Plata ganada que queda guardada hasta que confirme su edad. */
   cashPending?: number;
@@ -64,12 +69,14 @@ function DashedLine() {
 
 export function RevealScreen({
   title,
+  label = "Tu perfil",
   description,
   metrics,
   coins,
   tickets,
   multiplier,
   bonusTickets = 0,
+  markets = [],
   isMinor = false,
   cashPending = 0,
   onClaim,
@@ -94,8 +101,9 @@ export function RevealScreen({
     document.body.style.color = revealColors.fg;
   }, [revealColors]);
 
-  const finalTickets = Math.max(0, Math.round(tickets * multiplier) + bonusTickets);
-  const hasMultiplier = multiplier > 1 || bonusTickets !== 0;
+  const marketTickets = markets.reduce((t, m) => t + (Number(m.net) || 0), 0);
+  const finalTickets = Math.max(0, Math.round(tickets * multiplier) + bonusTickets + marketTickets);
+  const hasMultiplier = multiplier > 1 || bonusTickets !== 0 || marketTickets !== 0;
 
   const formattedCoins = coins % 1 === 0 ? coins.toString() : coins.toFixed(2).replace(".", ",");
   const formattedTickets = displayTickets.toLocaleString("es-AR");
@@ -241,7 +249,7 @@ export function RevealScreen({
           {/* "Tu perfil" pill */}
           <div className="inline-flex items-center justify-center rounded-full px-[14px] py-[6px] mb-5" style={{ backgroundColor: "var(--dynamic-bg, #000)", color: "var(--dynamic-fg, #fff)" }}>
             <span className="font-['Roboto'] font-semibold text-[12px] tracking-[-0.12px]">
-              Tu perfil
+              {label}
             </span>
           </div>
 
@@ -401,8 +409,25 @@ export function RevealScreen({
 
           {hasMultiplier && claimPhase === "done" && (
             <p className="font-['Fira_Code'] text-[11px] text-center -mt-1" style={{ color: "var(--dynamic-bg, #000)" }}>
-              Tickets: {tickets.toLocaleString("es-AR")} × {multiplier.toFixed(2).replace(/\.?0+$/, "")}{bonusTickets !== 0 ? ` ${bonusTickets > 0 ? "+" : "−"} ${Math.abs(bonusTickets)} (la máquina)` : ""} = {finalTickets.toLocaleString("es-AR")}
+              Tickets: {tickets.toLocaleString("es-AR")} × {multiplier.toFixed(2).replace(/\.?0+$/, "")}{bonusTickets !== 0 ? ` ${bonusTickets > 0 ? "+" : "−"} ${Math.abs(bonusTickets)} (la máquina)` : ""}{marketTickets !== 0 ? ` ${marketTickets > 0 ? "+" : "−"} ${Math.abs(marketTickets)} (mercados)` : ""} = {finalTickets.toLocaleString("es-AR")}
             </p>
+          )}
+
+          {markets.length > 0 && (
+            <div className="w-full max-w-[340px] flex flex-col gap-2">
+              <p className="font-['Fira_Code'] text-[11px] uppercase tracking-widest text-center" style={{ color: "var(--dynamic-bg, #000)" }}>Tus mercados</p>
+              {markets.map((m) => (
+                <div key={m.position} className="rounded-xl px-3 py-2 border-2" style={{ borderColor: "var(--dynamic-bg, #000)", color: "var(--dynamic-bg, #000)" }}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold text-[14px] leading-tight">{m.won ? "✓" : "✗"} Compraste “{m.outcome}” a {m.price}¢</span>
+                    <span className="font-['Fira_Code'] font-extrabold text-[15px] shrink-0">{m.net > 0 ? "+" : m.net < 0 ? "−" : ""}{Math.abs(m.net)} 🎟</span>
+                  </div>
+                  <p className="font-['Fira_Code'] text-[11px] opacity-75 mt-1">
+                    Ganó “{m.winner}” · {m.shares.map((s) => `${s.label} ${Math.round(s.pct)}%`).join(" · ")}
+                  </p>
+                </div>
+              ))}
+            </div>
           )}
 
           {!showsCash(isMinor) && claimPhase === "done" && (

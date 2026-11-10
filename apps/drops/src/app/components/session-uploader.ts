@@ -123,6 +123,10 @@ function answerToPayloadFields(answer: UserAnswer, index: number): Record<string
     case "prediction_bet":
       fields.choice = answer.side;
       break;
+    case "market":
+      // El precio no se manda: el servidor usa el de la carta.
+      fields.market = { outcome_index: answer.outcomeIndex, stake: answer.stake };
+      break;
     case "mayor_menor":
       // La mano la guarda el servidor; acá solo se avisa que terminó.
       break;
@@ -287,7 +291,9 @@ export interface DetectorVerdict {
   cards?: { position: number; text: string; label: string; said: string; lied: boolean; accused: boolean }[];
 }
 
-export type CompleteResult = { ok: boolean; detector: DetectorVerdict | null };
+/** Un mercado ya resuelto (lo arma el servidor al cerrar la partida). */
+export type MarketResult = { position: number; text: string; outcome: string; stake: number; price: number; winner: string | null; shares: { label: string; pct: number }[]; won: boolean; payout: number; net: number };
+export type CompleteResult = { ok: boolean; detector: DetectorVerdict | null; markets?: MarketResult[] };
 
 export async function completeSession(params: {
   archetype_result?: { id: string; title: string };
@@ -319,7 +325,7 @@ export async function completeSession(params: {
       if (!res) return { ok: false, detector: null };
       const data = await res.json().catch(() => ({}));
       console.log("[BRUTAL] Session completed:", data);
-      return { ok: Boolean(data?.ok ?? res.ok), detector: data?.detector ?? null };
+      return { ok: Boolean(data?.ok ?? res.ok), detector: data?.detector ?? null, markets: Array.isArray(data?.markets) ? data.markets : [] };
     } catch (err) {
       console.error("[BRUTAL] completeSession error:", err);
       return { ok: false, detector: null };

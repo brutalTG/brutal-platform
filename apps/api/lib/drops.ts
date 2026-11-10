@@ -4,7 +4,7 @@ import { from, must } from './db';
 import { newCode, sha256, signToken, verifyToken } from './crypto';
 import { HttpError } from './http';
 import {
-  applyDetector, birthDateFromAge, cleanNickname, cleanSource, cleanTypedAnswer, refSource, computeClaim, guestPhone, joinConfig, consistencyOf, detectorConfig, detectorLabel, detectorOutcome, detectorReason, voiceScript, displayReward, firstCardDraw, hiloLadder, hiloMode, hiloStep, hiloView, winningDraw, multiplierFor, normalizeWallet, observationOf, parseLocation, POLICY,
+  ageAllowed, applyDetector, birthDateFromAge, clubShares, marketOutcomes, settleMarket, cleanNickname, cleanSource, cleanTypedAnswer, refSource, computeClaim, guestPhone, joinConfig, consistencyOf, detectorConfig, detectorLabel, detectorOutcome, detectorReason, voiceScript, displayReward, firstCardDraw, hiloLadder, hiloMode, hiloStep, hiloView, winningDraw, multiplierFor, normalizeWallet, observationOf, parseLocation, POLICY,
   resolveReward, sessionMultiplier, type AnswerBody, type DetectorItem, type DetectorResult, type DetectorVerdictOut, type Hand, type HiloAction, type VoiceAnswer,
 } from './drops-game';
 import { countFillers, parseAnswer } from './game';
@@ -176,6 +176,33 @@ const rewardOf = (c: DQ) => ({
   minor: c.reward_minor_tickets ?? c.questions.reward_minor_tickets ?? null,
 });
 
+/** Mercado: arma opciones, precios y el texto de la carta a la que apunta (content.ref = su etiqueta). */
+function marketContent(content: Record<string, any>, cards: DQ[]): Record<string, any> {
+  const ref = cards.find((c) => c.questions.label === content.ref)?.questions;
+  const options: unknown[] = Array.isArray(ref?.content?.options) ? ref!.content.options : [];
+  return { ...content, outcomes: marketOutcomes(content, options), refText: ref?.content?.text ?? null, refQuestionId: ref?.id ?? null };
+}
+
+/** El club de cada mercado de esta partida: respuestas reales a la carta de referencia + el simulado. */
+async function settleMarkets(sessionId: string, cards: DQ[]) {
+  const bets = await must(from('signal', 'observations').select('position, value').eq('session_id', sessionId).eq('kind', 'bet'), 'apuestas') as any[];
+  const out: Record<string, unknown>[] = [];
+  for (const b of bets) {
+    const card = cards[b.position];
+    if (!card || card.questions.format !== 'market') continue;
+    const m = marketContent(card.questions.content ?? {}, cards);
+    const counts = m.outcomes.map(() => 0);
+    if (m.refQuestionId) {
+      const real = await must(from('signal', 'observations').select('value').eq('stimulus_id', m.refQuestionId).eq('kind', 'choice').eq('quality', 'valid').limit(20000), 'club') as any[];
+      for (const r of real) { const i = Number(r.value?.index); if (Number.isInteger(i) && i >= 0 && i < counts.length) counts[i] += 1; }
+    }
+    const shares = clubShares(counts, m.sim, m.simPlayers ?? 0);
+    const r = settleMarket(b.value, shares);
+    out.push({ position: b.position, text: m.text, outcome: b.value.outcome, stake: b.value.stake, price: b.value.price, winner: m.outcomes[r.winner]?.label ?? null, shares: m.outcomes.map((o: { label: string }, i: number) => ({ label: o.label, pct: shares[i] })), won: r.won, payout: r.payout, net: r.net });
+  }
+  return out;
+}
+
 /** El Drop tal como lo espera el reproductor (dbToPlayableDrop del sandbox). */
 function playableDrop(d: DropRow, cards: DQ[], node: Node) {
   const cfg = d.config ?? {};
@@ -190,7 +217,9 @@ function playableDrop(d: DropRow, cards: DQ[], node: Node) {
     ...(detectorConfig(cfg.detector) ? { detector: detectorConfig(cfg.detector) } : {}),
     questions: cards.map((c) => {
       const q = c.questions;
-      const { profileEnrichment: _p, minorReward: _m, reward: _r, ...content } = q.content ?? {};
+      const base = q.format === 'market' ? marketContent(q.content ?? {}, cards) : (q.content ?? {});
+      // El club simulado y la referencia interna no viajan al teléfono.
+      const { profileEnrichment: _p, minorReward: _m, reward: _r, sim: _s, simPlayers: _sp, prices: _pr, ref: _rf, refQuestionId: _rq, ...content } = base;
       const reward = displayReward(resolveReward(rewardOf(c), node.is_minor));
       return {
         questionId: q.id,
@@ -212,6 +241,7 @@ export async function activeDrop(a: Access) {
   if (!playable(node, a.test)) throw new HttpError(403, 'not_authorized', 'Not authorized');
   const d = await dropFor(a);
   if (!d) throw new HttpError(404, 'no_active_drop', 'No active drop');
+  if (!ageAllowed(d.config?.minAge, node.age)) throw new HttpError(403, 'age_restricted', 'Este Drop es para mayores de edad');
   const cards = await cardsOf(d.id);
   if (!cards.length) throw new HttpError(404, 'no_questions', 'Active drop has no questions for this user');
   return playableDrop(d, cards, node);
@@ -228,6 +258,7 @@ export async function gate(a: Access) {
   if (!a.test && ['blocked', 'archived'].includes(node.status)) return { status: 'denied', reason: 'blocked' };
   if (!a.test && node.status === 'waitlisted') return { status: 'denied', reason: 'pending' };
   const d = await dropFor(a);
+  if (d && !ageAllowed(d.config?.minAge, node.age)) return { status: 'denied', reason: 'age' };
   if (d && !a.test) {
     const s = await sessionOf(node.pseudonym_id, d.id);
     if (s?.claimed_at) return { status: 'completed' };
@@ -313,7 +344,7 @@ export async function recordResponse(a: Access, body: AnswerBody & { session_id?
     if (hand && hand.status === 'playing') await from('drops', 'hilo_hands').update({ status: 'timeout', multiplier: 1, updated_at: new Date().toISOString() }).eq('session_id', s.id).eq('position', position!);
     body = { ...body, hilo: hand ? { status: hand.status === 'playing' ? 'timeout' : hand.status, multiplier: hand.status === 'playing' ? 1 : Number(hand.multiplier), steps: hand.status === 'busted' ? hand.decisions.length - 1 : hand.decisions.length, cards: hand.cards, decisions: hand.decisions } : null };
   }
-  const obs = observationOf(q.format, q.content ?? {}, body);
+  const obs = observationOf(q.format, q.format === 'market' ? marketContent(q.content ?? {}, cards) : (q.content ?? {}), body);
   const { data: ob, error: obErr } = await from('signal', 'observations').insert({
     pseudonym_id: node.pseudonym_id, app_slug: 'drops', instrument_type: 'drop', instrument_id: d.slug, instrument_version: String(s.drop_version),
     stimulus_id: q.id, stimulus: { format: q.format, label: q.label, text: q.content?.text ?? q.content?.prompt ?? null, card_type: q.card_type, signal_pair_id: q.signal_pair_id },
@@ -350,6 +381,7 @@ export async function completeSession(a: Access, body: { session_id?: string; ar
   const lat = answers.map((x) => x.latency_ms).filter((x) => typeof x === 'number');
   const now = new Date();
   const detector = await runDetector(s.id, d, cards);
+  const markets = await settleMarkets(s.id, cards);
   await must(from('drops', 'sessions').update({
     status: 'completed', completed_at: now.toISOString(), total_ms: Math.max(0, now.getTime() - Date.parse(s.started_at)),
     multiplier: sessionMultiplier(multiplierFor(d.config?.multiplierCheckpoints, answers.length),
@@ -358,9 +390,9 @@ export async function completeSession(a: Access, body: { session_id?: string; ar
     traps_passed: passed, traps_failed: traps.length - passed,
     avg_latency_ms: lat.length ? Math.round(lat.reduce((p, c) => p + c, 0) / lat.length) : null,
     consistency: consistencyOf(answers), archetype: body.archetype_result ?? null, bic_scores: body.bic_scores ?? null,
-    detector,
+    detector, markets: markets.length ? markets : null,
   }).eq('id', s.id).eq('status', 'started'), 'cerrar sesión');
-  return { ok: true, trap_score: `${passed}/${traps.length}`, detector };
+  return { ok: true, trap_score: `${passed}/${traps.length}`, detector, markets };
 }
 
 // ---------- La máquina: acusa al cerrar la partida ----------
@@ -407,7 +439,7 @@ export async function claimDrop(a: Access, body: { dropId?: string; drop_id?: st
   const node = await nodeOf(a.nodeId);
   const d = await must(from('drops', 'drops').select('id, slug, name, season_id, config').eq('slug', slug).maybeSingle(), 'drop') as any;
   if (!d) throw new HttpError(404, 'session_not_found', 'Session not found');
-  const s = await must(from('drops', 'sessions').select('id, status, position, multiplier, claimed_at, started_at, detector').eq('pseudonym_id', node.pseudonym_id).eq('drop_id', d.id).maybeSingle(), 'sesión') as any;
+  const s = await must(from('drops', 'sessions').select('id, status, position, multiplier, claimed_at, started_at, detector, markets').eq('pseudonym_id', node.pseudonym_id).eq('drop_id', d.id).maybeSingle(), 'sesión') as any;
   if (!s) throw new HttpError(404, 'session_not_found', 'Session not found');
   if (s.claimed_at) return { ok: true, alreadyClaimed: true };
   if (s.status !== 'completed') throw new HttpError(409, 'not_completed', 'Session is not completed');
@@ -420,7 +452,9 @@ export async function claimDrop(a: Access, body: { dropId?: string; drop_id?: st
     .map((h) => ({ position: Number(h.position), won: h.status !== 'busted' }));
   const base = computeClaim(answers.map((x) => ({ ...x, reward_value: Number(x.reward_value), penalty: Number(x.questions?.content?.penalty) || 0 })), Number(s.multiplier) || 1, doubles);
   // Lo que dio la máquina se suma después del multiplicador: es un premio fijo, no se multiplica.
-  const total = { usd: base.usd, tickets: applyDetector(base.tickets, s.detector) };
+  // Los mercados también van después del multiplicador: ganancia o pérdida de cada apuesta.
+  const marketNet = (Array.isArray(s.markets) ? s.markets : []).reduce((t: number, m: any) => t + (Number(m.net) || 0), 0);
+  const total = { usd: base.usd, tickets: Math.max(0, applyDetector(base.tickets, s.detector) + marketNet) };
   const season = d.season_id ?? (await must(from('economy', 'seasons').select('id').eq('status', 'active').maybeSingle(), 'temporada') as any)?.id ?? null;
   if (a.test) {
     // Prueba: muestra lo que hubiera cobrado, sin acreditar nada.
@@ -507,7 +541,7 @@ export async function leaderboard(limit = 20) {
 // ---------- Onboarding ----------
 async function nextAfterOnboarding(node: Node) {
   const d = await dropFor({ linkId: '', nodeId: node.id, purpose: 'drop', destination: 'drop', dropSlug: null, expiresAt: '', test: false });
-  if (!d) return { nextAction: 'waitlist', dropUrl: null, dropId: null, dropName: null };
+  if (!d || !ageAllowed(d.config?.minAge, node.age)) return { nextAction: 'waitlist', dropUrl: null, dropId: null, dropName: null };
   const s = await sessionOf(node.pseudonym_id, d.id);
   if (s?.claimed_at) return { nextAction: 'waitlist', dropUrl: null, dropId: null, dropName: null };
   const link = await createDropsLink(node.id, { purpose: 'drop', dropSlug: d.slug, hours: 48 });

@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { hiloStep, hiloView, sessionMultiplier, birthDateFromAge, computeClaim, consistencyOf, multiplierFor, normalizeWallet, observationOf, parseLocation, resolveReward } from './drops-game.ts';
+import { ageAllowed } from './drops-game.ts';
 
 test('un menor nunca cobra plata', () => {
   assert.deepEqual(resolveReward({ cash: 0.2, tickets: 0, minor: null }, true), { cash: 0, tickets: 1 });
@@ -252,4 +253,39 @@ test('mano a favor: la carta siempre le da la razón', () => {
   const h = hiloStep(null, 'start', [2], () => 1, undefined, () => 7);
   assert.equal(hiloStep(h, 'lower', [2], winningDraw(7, 'lower', () => 0.5)).status, 'stood');
   assert.equal(hiloStep(h, 'higher', [2], winningDraw(7, 'higher', () => 0.5)).multiplier, 2);
+});
+
+test('Drops con edad mínima: sin edad o menores no entran; sin mínimo entra cualquiera', () => {
+  assert.equal(ageAllowed(undefined, null), true);
+  assert.equal(ageAllowed(undefined, 16), true);
+  assert.equal(ageAllowed(18, 18), true);
+  assert.equal(ageAllowed(18, 17), false);
+  assert.equal(ageAllowed(18, null), false);
+  assert.equal(ageAllowed('18', 25), true);
+});
+
+import { clubShares, marketBet, marketOutcomes, settleMarket } from './drops-game.ts';
+
+test('mercado: opciones y precios salen de la carta de referencia; precios raros se reparten parejo', () => {
+  assert.deepEqual(marketOutcomes({ prices: [38, 62] }, ['Sí', 'No']), [{ label: 'Sí', price: 38 }, { label: 'No', price: 62 }]);
+  assert.deepEqual(marketOutcomes({ prices: [0, 'x'] }, ['A', 'B']).map((o) => o.price), [50, 50]);
+});
+
+test('mercado: la apuesta usa el precio de la carta y rechaza tickets o opciones inválidas', () => {
+  const content = { outcomes: [{ label: 'Sí', price: 23 }, { label: 'No', price: 77 }] };
+  assert.deepEqual(marketBet(content, { outcome_index: 0, stake: 25 }), { outcome_index: 0, outcome: 'Sí', stake: 25, price: 23 });
+  assert.equal(marketBet(content, { outcome_index: 2, stake: 25 }), null);
+  assert.equal(marketBet(content, { outcome_index: 0, stake: 0 }), null);
+  assert.equal(marketBet(content, { outcome_index: 0, stake: 5000 }), null);
+});
+
+test('mercado: el club mezcla reales con simulados; sin simulados, solo reales', () => {
+  assert.deepEqual(clubShares([0, 0], [40, 60], 100), [40, 60]);
+  assert.deepEqual(clubShares([10, 0], [40, 60], 0), [100, 0]);
+  assert.deepEqual(clubShares([100, 0], [40, 60], 100), [70, 30]);
+});
+
+test('mercado: ganar paga apuesta × 100 / precio; perder pierde la apuesta', () => {
+  assert.deepEqual(settleMarket({ outcome_index: 0, stake: 25, price: 23 }, [55, 45]), { winner: 0, won: true, payout: 109, net: 84 });
+  assert.deepEqual(settleMarket({ outcome_index: 1, stake: 25, price: 77 }, [55, 45]), { winner: 0, won: false, payout: 0, net: -25 });
 });

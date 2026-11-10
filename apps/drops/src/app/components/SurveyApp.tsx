@@ -29,6 +29,9 @@ import { StoryProgressBar, TimerBar, PlayingBadge, StatPills } from "./SurveyHea
 import { QuestionRenderer } from "./QuestionRenderer";
 import { useAnswerPipeline } from "./useAnswerPipeline";
 import { showsCash } from "./economy";
+import { TicketShower } from "./ticket-shower";
+import type { MarketResult } from "./session-uploader";
+import { useCountUp } from "./use-count-up";
 import {
   REACTION_MS,
   pickTimeoutMessage, buildQuestionOptionsMap, FULLSCREEN_TYPES,
@@ -363,6 +366,11 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
   const [coins, setCoins] = useState(0);
   const [tickets, setTickets] = useState(0);
   const [rewardEvent, setRewardEvent] = useState<RewardEvent | null>(null);
+  // Apuestas en mercados: los tickets se ven descontados mientras la apuesta está abierta.
+  const [staked, setStaked] = useState(0);
+  const [markets, setMarkets] = useState<MarketResult[]>([]);
+  // El contador sube de a poco (cuenta animada), no salta.
+  const shownTickets = useCountUp(Math.max(0, tickets - staked));
   const rewardIdRef = useRef(0);
 
   // --- Multiplier ---
@@ -554,7 +562,7 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
     if (screen !== "verdict") return;
     const p = finalizeOnce();
     if (!p) return;
-    p.then((r) => setDetectorVerdict(r.detector)).catch(() => setDetectorVerdict(null));
+    p.then((r) => { setDetectorVerdict(r.detector); setMarkets(r.markets ?? []); }).catch(() => setDetectorVerdict(null));
   }, [screen, finalizeOnce]);
 
   // Arranca la partida: limpia lo local, abre la sesión en el servidor y muestra la primera carta.
@@ -628,22 +636,25 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
     const revealTitle = archetype ? archetype.title : drop.reveal.title;
     const revealDescription = archetype ? archetype.description : drop.reveal.description;
 
-    finalizeOnce();
+    finalizeOnce()?.then((r) => setMarkets(r.markets ?? [])).catch(() => {});
+    const marketTickets = markets.reduce((t, m) => t + (Number(m.net) || 0), 0);
     const bonusTickets = detectorVerdict && detectorVerdict !== "pending" ? Number(detectorVerdict.tickets) || 0 : 0;
 
     const referralLink = passAlongLink() ?? getReferralLink();
     const shareUrl = buildShareUrl({ title: revealTitle, description: revealDescription, dropName: drop.name, latency: formatLatency(avgLatency), totalTime });
-    const finalTickets = Math.max(0, Math.round(tickets * currentMultiplier) + bonusTickets);
+    const finalTickets = Math.max(0, Math.round(tickets * currentMultiplier) + bonusTickets + marketTickets);
 
     return (
       <RevealScreen
         title={revealTitle}
+        label={drop.reveal.label}
         description={revealDescription}
         metrics={{ latency: formatLatency(avgLatency), instinctiveResponses: `${instinctive}/${totalQuestions}`, doubtMoments: `${doubts}`, totalTime }}
         coins={coins}
         tickets={tickets}
         multiplier={currentMultiplier}
         bonusTickets={bonusTickets}
+        markets={markets}
         isMinor={isMinor}
         cashPending={cashPending}
         onClaim={() => { setScreen("leaderboard"); }}
@@ -674,6 +685,7 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
         shareCard={
           <ShareCard
             title={revealTitle}
+            label={drop.reveal.label}
             description={revealDescription}
             dropName={drop.name}
             metrics={{ latency: formatLatency(avgLatency), instinctiveResponses: `${instinctive}/${totalQuestions}`, totalTime }}
@@ -709,14 +721,15 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
         setResultConfig={setResultConfig}
         setScreen={setScreen as (s: string) => void}
         detectorBudget={detectorBudget}
-        tickets={tickets}
+        tickets={Math.max(0, tickets - staked)}
         onHand={onHand}
+        onBet={(stake) => setStaked((x) => x + stake)}
       />
     );
   }
 
   const formattedCoins = coins % 1 === 0 ? coins.toString() : coins.toFixed(2).replace(".", ",");
-  const formattedTickets = tickets.toLocaleString("es-AR");
+  const formattedTickets = shownTickets.toLocaleString("es-AR");
   const isPenalty = !!rewardEvent?.penalty;
 
   return (
@@ -775,7 +788,7 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
           </div>
         </div>
 
-        <div className="flex-1 flex flex-col gap-8 overflow-y-auto overflow-x-hidden">
+        <div className="flex-1 flex flex-col gap-8 overflow-y-auto overflow-x-hidden" data-ticket-zone>
           <QuestionRenderer
             key={questionIndex}
             question={currentQuestion}
@@ -786,11 +799,14 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
             setResultConfig={setResultConfig}
             setScreen={setScreen as (s: string) => void}
             detectorBudget={detectorBudget}
-            tickets={tickets}
+            tickets={Math.max(0, tickets - staked)}
             onHand={onHand}
+            onBet={(stake) => setStaked((x) => x + stake)}
           />
         </div>
       </div>
+
+      <TicketShower event={rewardEvent} />
 
       {reactionText && currentQuestion.type !== "hot_take" && currentQuestion.type !== "hot_take_visual" && (
         <MicroReaction text={reactionText} duration={REACTION_MS} />

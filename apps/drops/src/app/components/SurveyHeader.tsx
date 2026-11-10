@@ -130,14 +130,17 @@ export function StatPills({ formattedCoins, formattedTickets, rewardEvent, isPen
         flash={!isPenalty && rewardEvent?.type === "coins"}
         key={`coins-${!isPenalty && rewardEvent?.type === "coins" ? rewardEvent.id : "stable"}`}
       />}
-      <AnimatedStatPill
-        icon={Ticket}
-        value={formattedTickets}
-        className={`${isMinor ? "rounded-full" : "rounded-r-full rounded-l-[5px]"} flex-1 px-2`}
-        flash={!isPenalty && rewardEvent?.type === "tickets"}
-        shake={isPenalty && rewardEvent?.type === "tickets"}
-        key={`tickets-${rewardEvent?.type === "tickets" ? rewardEvent.id : "stable"}`}
-      />
+      {/* id="ticket-pill": a dónde vuelan los tickets de cada toque (ticket-shower.tsx) */}
+      <div id="ticket-pill" className="flex-1 flex min-w-0">
+        <AnimatedStatPill
+          icon={Ticket}
+          value={formattedTickets}
+          className={`${isMinor ? "rounded-full" : "rounded-r-full rounded-l-[5px]"} flex-1 px-2`}
+          flash={!isPenalty && rewardEvent?.type === "tickets"}
+          shake={isPenalty && rewardEvent?.type === "tickets"}
+          key={`tickets-${rewardEvent?.type === "tickets" ? rewardEvent.id : "stable"}`}
+        />
+      </div>
       <RewardAnimation event={rewardEvent} />
     </div>
   );
