@@ -453,6 +453,11 @@ export function RevealScreen({
                   <span className="font-['Roboto'] font-extrabold text-[19px]">{whatsappClaim.claimed ? "Abrir WhatsApp" : "Reclamá tus tickets"}</span>
                 </a>
               )}
+              {!whatsappClaim.url && (
+                <p className="text-center font-['Fira_Code'] text-[14px] font-bold" style={{ color: "var(--dynamic-bg, #000)" }}>
+                  Mandá #{whatsappClaim.code} al WhatsApp de BRUTAL.
+                </p>
+              )}
               <p className="text-center font-['Fira_Code'] text-[12px] leading-snug" style={{ color: "var(--dynamic-bg, #000)" }}>
                 Por cada amigo que juegue el Drop con tu link sumás <b>+{whatsappClaim.referralTickets} 🎟</b>. El link te llega en ese mismo mensaje.
               </p>
