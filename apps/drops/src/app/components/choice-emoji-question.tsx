@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { emojiBoxStyle } from "./emoji-utils";
 import { hapticLight } from "./haptics";
 
 interface ChoiceEmojiQuestionProps {
@@ -40,8 +41,8 @@ export function ChoiceEmojiQuestion({
         </h2>
       )}
 
-      {/* Emoji buttons — no frame, just big emojis */}
-      <div className="flex items-center justify-center gap-10">
+      {/* Emoji buttons — dentro de un cuadro, como la ráfaga de emojis */}
+      <div className="flex items-center justify-center gap-6 flex-wrap">
         {options.map((emoji, i) => {
           const isSelected = selected === i;
           const isDimmed = selected !== null && !isSelected;
@@ -50,14 +51,15 @@ export function ChoiceEmojiQuestion({
             <button
               key={i}
               onClick={() => handleSelect(i)}
-              className="relative flex items-center justify-center select-none active:scale-110"
+              className="relative flex items-center justify-center select-none active:scale-95"
               style={{
-                transform: isSelected ? "scale(1.2)" : isDimmed ? "scale(0.85)" : "scale(1)",
+                ...emojiBoxStyle(isSelected, options.length > 2 ? 100 : 124),
+                transform: isSelected ? "scale(1.08)" : isDimmed ? "scale(0.92)" : "scale(1)",
                 opacity: isDimmed ? 0.25 : 1,
                 transition: "transform 0.2s ease, opacity 0.2s ease",
               }}
             >
-              <span className="select-none" style={{ fontSize: 80, lineHeight: 1 }}>
+              <span className="select-none" style={{ fontSize: options.length > 2 ? 56 : 68, lineHeight: 1 }}>
                 {emoji}
               </span>
             </button>

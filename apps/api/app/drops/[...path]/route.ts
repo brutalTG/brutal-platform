@@ -1,7 +1,7 @@
 import { handle, json, preflight, HttpError } from '@/lib/http';
 import {
   accessContext, accessFrom, activeDrop, apply, applyInit, claimDrop, completeSession, economyPolicy, exchangeCode, gate,
-  dropHilo, dropTts, joinGroup, joinOpened, webStart, joinShared, leaderboard, recordResponse, recordVoice, setWallet, startSession, userProfile,
+  dropHilo, dropTts, joinGroup, joinOpened, webStart, resolveMarket, joinShared, leaderboard, recordResponse, recordVoice, setWallet, startSession, userProfile,
 } from '@/lib/drops';
 import { cors } from '@/lib/http';
 
@@ -49,6 +49,7 @@ async function route(req: Request, ctx: Ctx) {
     const audio = await dropTts(a, await body(req));
     return new Response(audio, { headers: { 'Content-Type': 'audio/mpeg', 'Cache-Control': 'private, max-age=3600', ...cors(req.headers.get('origin')) } });
   }
+  if (m === 'POST' && path === 'markets/resolve') return json(req, await resolveMarket(a, await body(req)));
   if (m === 'POST' && path === 'sessions/complete') return json(req, await completeSession(a, await body(req)));
   if (m === 'POST' && path === 'claim-rewards') return json(req, await claimDrop(a, await body(req)));
   if (m === 'GET' && path === 'user/profile') return json(req, await userProfile(a));

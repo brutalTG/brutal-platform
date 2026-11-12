@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { emojiBoxStyle } from "./emoji-utils";
 import { hapticLight, hapticSelection, hapticMedium } from "./haptics";
 
 interface MediaReactionQuestionProps {
@@ -126,15 +127,16 @@ function EmojiOverlay({
           <button
             key={i}
             onClick={() => handleSelect(i)}
-            className="flex items-center justify-center select-none active:scale-110"
+            className="flex items-center justify-center select-none active:scale-95"
             style={{
-              transform: isSelected ? "scale(1.2)" : isDimmed ? "scale(0.85)" : "scale(1)",
+              ...emojiBoxStyle(isSelected, 104),
+              transform: isSelected ? "scale(1.08)" : isDimmed ? "scale(0.92)" : "scale(1)",
               opacity: isDimmed ? 0.25 : 1,
               transition: "transform 0.2s ease, opacity 0.2s ease",
               filter: "drop-shadow(0 2px 8px rgba(0,0,0,0.5))",
             }}
           >
-            <span className="select-none" style={{ fontSize: 80, lineHeight: 1 }}>
+            <span className="select-none" style={{ fontSize: 60, lineHeight: 1 }}>
               {emoji}
             </span>
           </button>

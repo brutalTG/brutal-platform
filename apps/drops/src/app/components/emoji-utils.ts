@@ -110,3 +110,19 @@ export function isEmojiOnly(str: string): boolean {
   const graphemes = getGraphemes(trimmed);
   return graphemes.every((g) => isEmojiGrapheme(g) || g.trim() === "");
 }
+
+/**
+ * Cuadro para los emojis grandes que se tocan (el mismo de la ráfaga de emojis): vidrio sutil, borde fino,
+ * y más marcado cuando está elegido. Todas las cartas con emojis para tocar lo usan.
+ */
+export function emojiBoxStyle(on: boolean, size = 112): import("react").CSSProperties {
+  return {
+    width: size,
+    height: size,
+    borderRadius: 16,
+    backgroundColor: `color-mix(in srgb, var(--dynamic-fg, #fff) ${on ? 16 : 7}%, transparent)`,
+    border: `1px solid color-mix(in srgb, var(--dynamic-fg, #fff) ${on ? 55 : 14}%, transparent)`,
+    backdropFilter: "blur(14px)",
+    WebkitBackdropFilter: "blur(14px)",
+  };
+}

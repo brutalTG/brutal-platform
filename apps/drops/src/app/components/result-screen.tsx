@@ -1,12 +1,15 @@
 import { useState, useEffect } from "react";
+import type { MarketReveal } from "./drop-types";
 
 interface ResultScreenProps {
   percentage: number;
   text?: string;
+  /** Predicción: arriba "La mayoría", abajo si acertó y cuánto sumó. */
+  market?: MarketReveal;
   onContinue?: () => void;
 }
 
-export function ResultScreen({ percentage, text = "Opina igual que vos.", onContinue }: ResultScreenProps) {
+export function ResultScreen({ percentage, text = "Opina igual que vos.", market, onContinue }: ResultScreenProps) {
   const [animatedPercent, setAnimatedPercent] = useState(0);
   const [showText, setShowText] = useState(false);
 
@@ -41,10 +44,10 @@ export function ResultScreen({ percentage, text = "Opina igual que vos.", onCont
     if (showText && onContinue) {
       const timer = setTimeout(() => {
         onContinue();
-      }, 2200);
+      }, market ? 3200 : 2200);
       return () => clearTimeout(timer);
     }
-  }, [showText, onContinue]);
+  }, [showText, onContinue, market]);
 
   // SVG parameters
   const size = 240;
@@ -75,6 +78,11 @@ export function ResultScreen({ percentage, text = "Opina igual que vos.", onCont
       }}
     >
       <div className="w-full max-w-[420px] flex flex-col items-center justify-center h-dvh px-5 py-6 gap-10">
+        {market && (
+          <p className="font-['Fira_Code'] text-[13px] uppercase tracking-widest -mb-4" style={{ color: "var(--dynamic-bg, #000)" }}>
+            La mayoría
+          </p>
+        )}
         {/* Circular Progress */}
         <div className="relative" style={{ width: size, height: size }}>
           <svg
@@ -158,6 +166,25 @@ export function ResultScreen({ percentage, text = "Opina igual que vos.", onCont
         >
           {text}
         </p>
+
+        {market && (
+          <div
+            className="flex flex-col items-center gap-2 -mt-4"
+            style={{ opacity: showText ? 1 : 0, transform: showText ? "scale(1)" : "scale(0.9)", transition: "opacity 0.4s ease 0.15s, transform 0.4s ease 0.15s" }}
+          >
+            <span
+              className="px-5 py-2 rounded-full font-['Roboto'] font-extrabold text-[22px]"
+              style={market.won
+                ? { backgroundColor: "var(--dynamic-bg, #000)", color: "var(--dynamic-fg, #fff)" }
+                : { border: "2px solid var(--dynamic-bg, #000)", color: "var(--dynamic-bg, #000)" }}
+            >
+              {market.won ? `Acertaste · +${market.payout} 🎟` : "No era esa"}
+            </span>
+            {!market.won && market.mine && (
+              <p className="font-['Roboto'] text-[15px] text-center opacity-80" style={{ color: "var(--dynamic-bg, #000)" }}>Vos dijiste “{market.mine}”.</p>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

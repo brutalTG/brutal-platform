@@ -8,6 +8,7 @@ const LinkRedeem = lazy(() => import("./components/LinkRedeem"));
 const GroupJoin = lazy(() => import("./components/GroupJoin"));
 const WebEntry = lazy(() => import("./components/WebEntry"));
 const PrivacyPage = lazy(() => import("./components/PrivacyPage"));
+const BasesPage = lazy(() => import("./components/BasesPage"));
 
 function RouteLoading() {
   return (
@@ -74,6 +75,7 @@ const router = createBrowserRouter([
   { path: "/j/:code", Component: () => <Suspense fallback={<RouteLoading />}><GroupJoin /></Suspense>, errorElement: <CrashScreen /> },
   { path: "/jugar", Component: () => <Suspense fallback={<RouteLoading />}><WebEntry /></Suspense>, errorElement: <CrashScreen /> },
   { path: "/entrar", Component: OnboardingRoute, errorElement: <CrashScreen /> },
+  { path: "/bases", Component: () => <Suspense fallback={<RouteLoading />}><BasesPage /></Suspense>, errorElement: <CrashScreen /> },
   { path: "/privacidad", Component: () => <Suspense fallback={<RouteLoading />}><PrivacyPage /></Suspense>, errorElement: <CrashScreen /> },
   { path: "/*", Component: SurveyRoute, errorElement: <CrashScreen /> },
 ]);

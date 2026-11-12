@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { emojiBoxStyle } from "./emoji-utils";
 import { hapticLight, hapticRigid, hapticSelection } from "./haptics";
 import type { RafagaBurstQuestion as RafagaBurstQuestionType, RafagaBurstItem } from "./drop-types";
 
@@ -256,9 +257,12 @@ function InteractionRenderer({ interaction, selectedValue, onSelect }: { interac
   if (interaction.type === "emoji_binary") {
     const { emojiA = "👍", emojiB = "👎" } = interaction;
     return (
-      <div className="flex justify-center gap-12 w-full">
-        <button onClick={() => onSelect(emojiA)} className="active:scale-90 transition-transform text-[100px]">{emojiA}</button>
-        <button onClick={() => onSelect(emojiB)} className="active:scale-90 transition-transform text-[100px]">{emojiB}</button>
+      <div className="flex justify-center gap-8 w-full">
+        {[emojiA, emojiB].map((e) => (
+          <button key={e} onClick={() => onSelect(e)} className="flex items-center justify-center active:scale-95 transition-transform" style={emojiBoxStyle(selectedValue === e, 124)}>
+            <span style={{ fontSize: 68, lineHeight: 1 }}>{e}</span>
+          </button>
+        ))}
       </div>
     );
   }

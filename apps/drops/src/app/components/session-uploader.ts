@@ -391,13 +391,29 @@ export async function waitForUpload(): Promise<void> {
 /** Invitado web (vino de un anuncio): los tickets se reclaman mandando este código por WhatsApp. */
 export type WebClaim = { code: string; url: string | null; tickets: number; referralTickets: number; claimed: boolean };
 
+/** Resuelve una predicción apenas se contesta (queda congelada en la partida). null si no se pudo. */
+export async function resolveMarket(position: number, outcomeIndex: number): Promise<MarketResult | null> {
+  const sessionId = await waitForSession();
+  if (!sessionId) return null;
+  try {
+    const res = await fetch(`${API_BASE}/markets/resolve`, {
+      method: "POST", headers: authHeaders(),
+      body: JSON.stringify({ session_id: sessionId, position, outcome_index: outcomeIndex }),
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as MarketResult;
+  } catch {
+    return null;
+  }
+}
+
 export async function claimRewards(params: {
   dropId: string;
   coins: number;
   tickets: number;
   finalTickets: number;
   multiplier?: number;
-}): Promise<{ ok: boolean; alreadyClaimed?: boolean; credited?: { coins: number; tickets: number; dropsCompleted: number }; cashPending?: number; whatsapp?: WebClaim }> {
+}): Promise<{ ok: boolean; alreadyClaimed?: boolean; credited?: { coins: number; tickets: number; dropsCompleted: number }; cashPending?: number; whatsapp?: WebClaim; botUrl?: string | null }> {
   console.log(`[BRUTAL] Claiming rewards: dropId=${params.dropId}, cash=${params.coins}, tickets=${params.finalTickets}`);
 
   const res = await fetch(`${API_BASE}/claim-rewards`, {

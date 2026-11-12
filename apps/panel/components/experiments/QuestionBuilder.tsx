@@ -789,7 +789,7 @@ function TypeSpecificFields({
       return (
         <>
           <TextField label="Pregunta" value={d.text} onChange={(v) => onChange({ text: v } as any)} multiline />
-          <StringListField label="Items a ordenar" values={d.options || []} onChange={(v) => onChange({ options: v } as any)} min={3} max={5} />
+          <StringListField label="Items a ordenar (3 a 10; tier list: hasta 10)" values={d.options || []} onChange={(v) => onChange({ options: v } as any)} min={3} max={10} />
         </>
       );
 

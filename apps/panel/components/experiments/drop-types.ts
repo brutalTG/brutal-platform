@@ -382,6 +382,8 @@ export interface RevealConfig {
   description: string;
   /** Archetype definitions — the engine picks one based on answers */
   archetypes?: RevealArchetype[];
+  /** El premio que se sortea: es lo que muestra la pantalla final del Drop. */
+  prize?: PrizeConfig;
   /** Scoring rules mapping answers → dimension scores */
   scoring?: RevealScoringConfig;
 }
@@ -450,4 +452,13 @@ export interface Drop {
 
   /** The ordered sequence of interactions */
   questions: Question[];
+}
+
+/** Premio del sorteo (pantalla final del Drop). */
+export interface PrizeConfig {
+  imageUrl?: string;
+  title?: string;
+  lines?: string[];
+  drawDate?: string;
+  ticketsPerChance?: number;
 }

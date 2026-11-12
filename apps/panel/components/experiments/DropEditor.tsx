@@ -49,6 +49,7 @@ import {
 import { QuestionLibrary } from "./QuestionLibrary";
 import { QuestionBuilder } from "./QuestionBuilder";
 import { SplashEditor } from "./SplashEditor";
+import { PrizeEditor } from "./PrizeEditor";
 // Unused import removed — API calls handled by panel-sync
 import { DropSegmentSelector } from "./DropSegmentSelector";
 
@@ -734,6 +735,9 @@ export function DropEditor({ dropId, onBack, onRefresh }: DropEditorProps) {
 
             {/* Splash screen config */}
             <SplashEditor splash={drop.splash} onSave={(splash) => save({ splash })} />
+
+            {/* Premio que muestra la pantalla final */}
+            <PrizeEditor prize={drop.reveal?.prize} onSave={(prize) => save({ reveal: { ...drop.reveal, prize } })} />
 
             {/* Segment restriction */}
             <DropSegmentSelector
