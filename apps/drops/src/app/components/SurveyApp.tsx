@@ -592,6 +592,7 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
         totalCards={totalQuestions}
         onProfile={getStandaloneAccessToken() ? () => setScreen("profile") : undefined}
         onLeaderboard={() => setScreen("leaderboard")}
+        prize={drop.reveal?.prize}
         splash={drop.splash}
       />
     );
