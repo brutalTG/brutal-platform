@@ -110,7 +110,11 @@ const queueQuestion = (id: string) => enqueue(`q:${id}`, async () => {
 });
 const queueDrop = (id: string) => enqueue(`d:${id}`, async () => {
   const d = drops.find((x) => x.id === id);
-  return d ? saveDropAction({ ...d, disabledQuestionIds: d.disabledQuestionIds ?? [] } as any) : { ok: true as const };
+  if (!d) return { ok: true as const };
+  const res = await saveDropAction({ ...d, disabledQuestionIds: d.disabledQuestionIds ?? [] } as any);
+  // La versión nueva de la base: los próximos guardados de esta pestaña ya no la ven como vieja.
+  if (res.ok && (res as any).serverVersion) (d as any).serverVersion = (res as any).serverVersion;
+  return res;
 });
 
 // ---------- Helpers ----------
@@ -243,7 +247,8 @@ export async function publishDropNow(id: string): Promise<boolean> {
   const r = await enqueue(null, () => publishDropAction(id));
   if (!r?.ok) return false;
   const at = (r as any).publishedAt ?? now();
-  drops = drops.map((d) => (d.id === id ? { ...d, status: "active", lastPublishedAt: at } : d.status === "active" ? { ...d, status: "archived" } : d));
+  const sv = (r as any).serverVersion;
+  drops = drops.map((d) => (d.id === id ? { ...d, status: "active", lastPublishedAt: at, ...(sv ? { serverVersion: sv } : {}) } : d.status === "active" ? { ...d, status: "archived" } : d));
   return true;
 }
 

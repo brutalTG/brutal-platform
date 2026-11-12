@@ -14,6 +14,8 @@ export type PanelDropRow = {
   id: string; name: string; dropId: string; status: 'draft' | 'active' | 'archived'; timeoutMessage: string;
   multiplierCheckpoints: Json; reveal: Json; questionIds: string[]; disabledQuestionIds: string[]; splash?: Json; segmentIds?: string[];
   lastPublishedAt?: string; studyId?: string | null; createdAt: string; updatedAt: string;
+  /** Versión de la base cuando el panel lo cargó (o lo guardó). Si la base es más nueva, no se pisa. */
+  serverVersion?: string;
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -71,7 +73,7 @@ function rowToDrop(r: any, cards: any[]): PanelDropRow {
     ...(r.segment_ids?.length ? { segmentIds: r.segment_ids } : {}),
     studyId: r.study_id ?? null,
     ...(r.published_at ? { lastPublishedAt: r.published_at } : {}),
-    createdAt: r.created_at, updatedAt: cfg.editedAt ?? r.updated_at,
+    createdAt: r.created_at, updatedAt: cfg.editedAt ?? r.updated_at, serverVersion: r.updated_at,
   };
 }
 
@@ -124,11 +126,16 @@ export async function removeQuestion(id: string): Promise<Saved> {
 }
 
 // ---------- Drops ----------
-export async function saveDrop(d: PanelDropRow): Promise<Saved> {
+export async function saveDrop(d: PanelDropRow): Promise<Saved & { serverVersion?: string }> {
   if (!UUID.test(d?.id ?? '')) return fail('Drop sin identificador.');
   if (!/^[a-z0-9-]{3,80}$/.test(d.dropId ?? '')) return fail('El identificador del Drop solo puede tener minúsculas, números y guiones.');
   // Lo que el editor no conoce (la máquina, la voz) se conserva tal como estaba en la base.
-  const { data: current } = await from('drops', 'drops').select('config').eq('id', d.id).maybeSingle();
+  const { data: current } = await from('drops', 'drops').select('config, updated_at').eq('id', d.id).maybeSingle();
+  // Pestaña vieja: si el Drop cambió en la base después de que este panel lo cargó, no se pisa.
+  const dbVersion = (current as any)?.updated_at as string | undefined;
+  if (d.serverVersion && dbVersion && new Date(dbVersion).getTime() > new Date(d.serverVersion).getTime() + 1000) {
+    return fail('Este Drop cambió desde que abriste el panel. Recargá la página antes de seguir editando (no se guardó nada).');
+  }
   const { timeoutMessage: _t, multiplierCheckpoints: _m, reveal: _r, splash: _s, editedAt: _e, ...keep } = ((current as any)?.config ?? {}) as Record<string, unknown>;
   const { error } = await db().schema('drops').rpc('panel_save_drop', {
     p: {
@@ -148,11 +155,12 @@ export async function saveDrop(d: PanelDropRow): Promise<Saved> {
   await from('drops', 'drops').update({ study_id: d.studyId && UUID.test(d.studyId) ? d.studyId : null }).eq('id', d.id);
   if (d.status === 'archived') await from('drops', 'drops').update({ status: 'archived' }).eq('id', d.id).neq('status', 'archived');
   if (d.status === 'draft') await from('drops', 'drops').update({ status: 'draft' }).eq('id', d.id).in('status', ['archived', 'closed']);
-  return { ok: true };
+  const { data: after } = await from('drops', 'drops').select('updated_at').eq('id', d.id).maybeSingle();
+  return { ok: true, serverVersion: (after as any)?.updated_at };
 }
 
 /** Publicar: queda como el Drop que juegan todos. El que estaba publicado se cierra. */
-export async function publishDrop(id: string): Promise<Saved & { publishedAt?: string }> {
+export async function publishDrop(id: string): Promise<Saved & { publishedAt?: string; serverVersion?: string }> {
   if (!UUID.test(id)) return fail('Drop inválido.');
   const { data: d } = await from('drops', 'drops').select('id, name, version, status').eq('id', id).maybeSingle();
   if (!d) return fail('No encuentro ese Drop. ¿Se terminó de guardar?');
@@ -164,7 +172,8 @@ export async function publishDrop(id: string): Promise<Saved & { publishedAt?: s
   if (error) return fail(error);
   await audit('publicó un Drop', 'drop', id, { name: (d as any).name });
   revalidatePath('/experimentos');
-  return { ok: true, publishedAt: now };
+  const { data: after } = await from('drops', 'drops').select('updated_at').eq('id', id).maybeSingle();
+  return { ok: true, publishedAt: now, serverVersion: (after as any)?.updated_at };
 }
 
 export async function removeDrop(id: string): Promise<Saved> {
