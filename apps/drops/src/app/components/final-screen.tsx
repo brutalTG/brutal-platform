@@ -90,9 +90,6 @@ export function FinalScreen({ prize, tickets, onClaim, webClaim, botUrl }: Props
             </a>
           )}
 
-          {webClaim && !webClaim.url && state === "ready" && (
-            <p className="font-['Fira_Code'] text-[14px] font-bold text-center">Mandá #{webClaim.code} al WhatsApp de BRUTAL.</p>
-          )}
           {webClaim && (
             <p className="font-['Roboto'] text-[15px] text-white/70 text-center leading-snug -mt-2">
               Por cada amigo que juegue el Drop con tu link sumás <b className="text-white">+{webClaim.referralTickets}</b> tickets. El link te llega por WhatsApp.

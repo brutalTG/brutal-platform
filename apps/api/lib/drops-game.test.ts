@@ -311,10 +311,13 @@ test('reclamo web: link de WhatsApp con el mensaje armado; invitaciones y canal 
   assert.equal(webChannel(null), 'web');
 });
 
-test('reclamo web: el bot confirma tickets, posición y manda el link para invitar', () => {
-  const t = webClaimText({ status: 'credited', nickname: 'Juli', drop: 'TU TRIBU', tickets: 340, position: 12, players: 80, inviteUrl: 'https://drops.brutal.lat/jugar?r=ab12cd', profileUrl: 'https://drops.brutal.lat/a/x', referralTickets: 100 });
-  assert.match(t, /Listo, Juli\. Sumaste 340 Golden Tickets en TU TRIBU\. Vas #12 de 80/);
-  assert.match(t, /\+100 🎟:\nhttps:\/\/drops\.brutal\.lat\/jugar\?r=ab12cd/);
+test('reclamo web: el bot dice cuántos tickets tiene, cuándo sorteamos, que al ganador le avisamos y el link para invitar', () => {
+  const t = webClaimText({ status: 'credited', nickname: 'Juli', tickets: 520, prize: { title: 'LOLLAPALOOZA', drawDate: '10-12-26', ticketsPerChance: 100 }, inviteUrl: 'https://drops.brutal.lat/jugar?r=ab12cd', referralTickets: 100 });
+  assert.match(t, /Listo, Juli/);
+  assert.match(t, /Tenés 520 Golden Tickets 🎟 \(5 chances\)/);
+  assert.match(t, /Sorteamos LOLLAPALOOZA el 10-12-26\. Al ganador le avisamos por acá, por WhatsApp\./);
+  assert.match(t, /\+100 tickets:\nhttps:\/\/drops\.brutal\.lat\/jugar\?r=ab12cd/);
   assert.match(t, /BAJA/);
   assert.match(webClaimText({ status: 'used_by_other' }), /otro número/);
+  assert.match(webClaimText({ status: 'credited', nickname: null, tickets: 40, prize: null, inviteUrl: 'x', referralTickets: 100 }), /Tenés 40 Golden Tickets 🎟\./);
 });

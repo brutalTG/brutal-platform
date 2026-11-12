@@ -5,7 +5,7 @@ import { newCode, sha256, signToken, verifyToken } from './crypto';
 import { HttpError } from './http';
 import {
   ageAllowed, applyDetector, birthDateFromAge, clubShares, marketOutcomes, marketPayout, settleMarket, cleanNickname, cleanSource, cleanTypedAnswer, refSource, computeClaim, guestPhone, joinConfig, consistencyOf, detectorConfig, detectorLabel, detectorOutcome, detectorReason, voiceScript, displayReward, firstCardDraw, hiloLadder, hiloMode, hiloStep, hiloView, winningDraw, multiplierFor, normalizeWallet, observationOf, parseLocation, POLICY,
-  resolveReward, sessionMultiplier, REFERRAL_TICKETS, claimPrefill, cleanReferral, isGuestPhone, newClaimCode, newReferralCode, webChannel, whatsappUrl, type WebClaimReply, type AnswerBody, type DetectorItem, type DetectorResult, type DetectorVerdictOut, type Hand, type HiloAction, type VoiceAnswer,
+  resolveReward, sessionMultiplier, REFERRAL_TICKETS, claimPrefill, cleanReferral, isGuestPhone, newClaimCode, newReferralCode, webChannel, whatsappUrl, prizeInfo, type WebClaimReply, type AnswerBody, type DetectorItem, type DetectorResult, type DetectorVerdictOut, type Hand, type HiloAction, type VoiceAnswer,
 } from './drops-game';
 import { countFillers, parseAnswer } from './game';
 import { db } from './db';
@@ -610,17 +610,20 @@ export async function claimWebTickets(phone: string, code: string): Promise<{ no
   if (!claim) return null;
   const byPhone = await must(from('core', 'nodes').select('id, status').eq('phone_e164', phone).maybeSingle(), 'nodo') as { id: string; status: string } | null;
   if (byPhone && ['blocked', 'archived'].includes(byPhone.status)) return null;
-  const links = async (nodeId: string) => {
+  const d = await must(from('drops', 'drops').select('id, slug, name, season_id, config').eq('id', claim.drop_id).single(), 'drop') as any;
+  // Lo que le cuenta el bot: tickets que tiene en la temporada, el sorteo y su link para invitar.
+  const holder = async (nodeId: string) => {
     const ref = await ensureReferralCode(nodeId);
-    const profile = await createDropsLink(nodeId, { purpose: 'drop', destination: 'profile', hours: 168 });
-    return { inviteUrl: inviteUrl(ref), profileUrl: profile.url, referralTickets: REFERRAL_TICKETS };
+    const season = await activeSeasonId(d);
+    const me = season ? await must(from('economy', 'season_ranking').select('tickets').eq('season_id', season).eq('node_id', nodeId).maybeSingle(), 'tickets') as any : null;
+    const nick = (await must(from('core', 'nodes').select('nickname').eq('id', nodeId).single(), 'apodo') as any).nickname as string | null;
+    return { nickname: nick, tickets: Math.max(0, Math.round(Number(me?.tickets) || 0)), prize: prizeInfo(d.config), inviteUrl: inviteUrl(ref), referralTickets: REFERRAL_TICKETS };
   };
   if (claim.claimed_at) {
-    if (byPhone && byPhone.id === claim.claimed_node_id) return { nodeId: byPhone.id, reply: { status: 'already_yours', ...(await links(byPhone.id)) } };
+    if (byPhone && byPhone.id === claim.claimed_node_id) return { nodeId: byPhone.id, reply: { status: 'already_yours', ...(await holder(byPhone.id)) } };
     return byPhone ? { nodeId: byPhone.id, reply: { status: 'used_by_other' } } : null;
   }
   const guest = await must(from('core', 'nodes').select('id, phone_e164, nickname, birth_date, gender, province, city, referred_by').eq('id', claim.node_id).single(), 'invitado') as any;
-  const d = await must(from('drops', 'drops').select('id, slug, name, season_id').eq('id', claim.drop_id).single(), 'drop') as any;
   const now = new Date().toISOString();
   let targetId: string;
   let firstTime: boolean;
@@ -671,12 +674,9 @@ export async function claimWebTickets(phone: string, code: string): Promise<{ no
     } else if (!error.message.includes('idempotency_key')) console.error('premio por invitar', error.message);
   }
 
-  const season = await activeSeasonId(d);
-  const me = season ? await must(from('economy', 'season_ranking').select('position, players').eq('season_id', season).eq('node_id', targetId).maybeSingle(), 'posición') as any : null;
-  return {
-    nodeId: targetId,
-    reply: { status: 'credited', nickname: node.nickname, drop: d.name, tickets: total.tickets, position: me ? Number(me.position) : null, players: me ? Number(me.players) : null, ...(await links(targetId)) },
-  };
+  const h = await holder(targetId);
+  // Si la vista del ranking todavía no lo cuenta, al menos lo que acaba de ganar.
+  return { nodeId: targetId, reply: { status: 'credited', ...h, tickets: Math.max(h.tickets, total.tickets) } };
 }
 
 // ---------- Perfil, billetera, ranking ----------

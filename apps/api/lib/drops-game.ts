@@ -486,20 +486,36 @@ export const cleanReferral = (raw: unknown) => { const s = String(raw ?? '').tri
 /** Canal de adquisición de un invitado web: "ads:<campaña>" o "web". */
 export const webChannel = (source: string | null) => (source ? `ads:${source}`.slice(0, 60) : 'web');
 
+export type PrizeInfo = { title: string | null; drawDate: string | null; ticketsPerChance: number };
+type Holder = { nickname: string | null; tickets: number; prize: PrizeInfo | null; inviteUrl: string; referralTickets: number };
 export type WebClaimReply =
-  | { status: 'credited'; nickname: string | null; drop: string; tickets: number; position: number | null; players: number | null; inviteUrl: string; profileUrl: string; referralTickets: number }
-  | { status: 'already_yours'; inviteUrl: string; profileUrl: string; referralTickets: number }
+  | ({ status: 'credited' } & Holder)
+  | ({ status: 'already_yours' } & Holder)
   | { status: 'already_played' }
   | { status: 'used_by_other' };
 
-/** Lo que contesta el bot cuando alguien manda su código. */
+/**
+ * Lo que contesta el bot cuando alguien manda su código: cuántos tickets tiene, cuándo sorteamos,
+ * que al ganador le avisamos por WhatsApp, y su link para invitar (+100 por amigo que juega el Drop).
+ */
 export function webClaimText(r: WebClaimReply) {
   if (r.status === 'used_by_other') return 'Ese código ya lo reclamó otro número. Si es un error, escribinos acá.';
-  if (r.status === 'already_played') return 'Ese número ya había jugado este Drop, así que los tickets de esta partida no se suman. Escribí RANKING para ver cómo vas.';
-  if (r.status !== 'credited' && r.status !== 'already_yours') return '';
-  const invite = `Por cada amigo que juegue el Drop con tu link sumás +${r.referralTickets} 🎟:\n${r.inviteUrl}`;
-  if (r.status === 'already_yours') return `Esos tickets ya están a tu nombre.\n\n${invite}\n\nTu perfil y el ranking:\n${r.profileUrl}`;
-  const hi = r.nickname ? `Listo, ${r.nickname}.` : 'Listo.';
-  const rank = r.position && r.players ? ` Vas #${r.position} de ${r.players} en la temporada.` : '';
-  return `${hi} Sumaste ${r.tickets} Golden Tickets en ${r.drop}.${rank}\n\n${invite}\n\nTu perfil y el ranking:\n${r.profileUrl}\n\nPara no recibir más mensajes, escribí BAJA.`;
+  if (r.status === 'already_played') return 'Ese número ya había jugado este Drop, así que los tickets de esta partida no se suman.';
+  const hi = r.status === 'already_yours' ? 'Esos tickets ya estaban a tu nombre.' : r.nickname ? `Listo, ${r.nickname}. Tus tickets quedaron a tu nombre.` : 'Listo. Tus tickets quedaron a tu nombre.';
+  const per = r.prize?.ticketsPerChance || 100;
+  const chances = Math.floor(r.tickets / per);
+  const have = `Tenés ${r.tickets.toLocaleString('es-AR')} Golden Tickets 🎟${chances > 0 ? ` (${chances} ${chances === 1 ? 'chance' : 'chances'})` : ''}.`;
+  const draw = r.prize?.drawDate
+    ? `Sorteamos ${r.prize.title ? `${r.prize.title} ` : ''}el ${r.prize.drawDate}. Al ganador le avisamos por acá, por WhatsApp.`
+    : 'Al ganador del sorteo le avisamos por acá, por WhatsApp.';
+  const cta = `¿Querés más chances? Por cada amigo que juegue el Drop desde tu link sumás +${r.referralTickets} tickets:\n${r.inviteUrl}`;
+  return `${hi}\n\n${have}\n${draw}\n\n${cta}\n\nPara no recibir más mensajes, escribí BAJA.`;
+}
+
+/** El premio del Drop (reveal.prize) como lo usa el bot. */
+export function prizeInfo(config: Record<string, any> | null | undefined): PrizeInfo | null {
+  const p = config?.reveal?.prize;
+  if (!p || typeof p !== 'object') return null;
+  const n = Number(p.ticketsPerChance);
+  return { title: p.title ? String(p.title) : null, drawDate: p.drawDate ? String(p.drawDate) : null, ticketsPerChance: Number.isFinite(n) && n > 0 ? n : 100 };
 }
