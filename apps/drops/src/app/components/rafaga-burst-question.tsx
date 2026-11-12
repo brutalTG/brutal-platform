@@ -178,7 +178,7 @@ export function RafagaBurstQuestion({
   
   if (phase === "countdown") {
     return (
-      <div className="flex items-center justify-center h-dvh" style={{ backgroundColor: "var(--dynamic-bg)" }}>
+      <div className="flex flex-1 items-center justify-center min-h-[60vh]" style={{ backgroundColor: "var(--dynamic-bg)" }}>
         <span className="font-['Roboto'] font-bold text-[128px]" style={{ color: "var(--dynamic-fg)" }}>
           {countdownValue}
         </span>
@@ -188,7 +188,7 @@ export function RafagaBurstQuestion({
 
   if (!item || !item.trigger) {
     return (
-      <div className="flex items-center justify-center h-dvh" style={{ backgroundColor: "var(--dynamic-bg)" }}>
+      <div className="flex flex-1 items-center justify-center min-h-[60vh]" style={{ backgroundColor: "var(--dynamic-bg)" }}>
         <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: "var(--dynamic-fg)", opacity: 0.2 }}></div>
       </div>
     );
@@ -197,9 +197,9 @@ export function RafagaBurstQuestion({
   const hasImage = item.trigger.type === "image" || item.trigger.type === "image_text";
 
   return (
-    <div className="relative h-dvh overflow-hidden flex flex-col" style={{ backgroundColor: transitioning ? "var(--dynamic-fg)" : "var(--dynamic-bg)" }}>
+    <div className="relative flex-1 min-h-0 overflow-hidden flex flex-col rounded-[24px]" style={{ backgroundColor: transitioning ? "var(--dynamic-fg)" : "var(--dynamic-bg)" }}>
       {/* Top Indicators */}
-      <div className="flex flex-col items-center pt-4 z-30" style={{ opacity: blinkOpacity }}>
+      <div className="flex flex-col items-center pt-0 z-30" style={{ opacity: blinkOpacity }}>
         <RafagaDots total={items.length} current={currentIdx} color="var(--dynamic-fg)" />
         {prompt && (
           <p className="font-['Roboto'] font-extrabold text-[18px] text-center mt-3 px-4" style={{ color: "var(--dynamic-fg)", opacity: 0.85 }}>
@@ -389,7 +389,7 @@ function PreScreen({ title, subtitle }: { title: string; subtitle?: string }) {
   }, [subtitle]);
 
   return (
-    <div className="flex flex-col items-center justify-center h-dvh px-8" style={{ backgroundColor: "var(--dynamic-bg)" }}>
+    <div className="flex flex-1 flex-col items-center justify-center min-h-[60vh] px-8" style={{ backgroundColor: "var(--dynamic-bg)" }}>
       <h1 className="font-bold text-4xl text-center leading-tight mb-4" style={{ color: "var(--dynamic-fg)" }}>{title}</h1>
       <p className="font-bold text-2xl text-center opacity-80" style={{ color: "var(--dynamic-fg)" }}>{displayedSubtitle}_</p>
     </div>

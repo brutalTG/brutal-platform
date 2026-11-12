@@ -135,7 +135,9 @@ export async function saveDrop(d: PanelDropRow): Promise<Saved> {
       id: d.id, slug: d.dropId, name: (d.name || 'Sin nombre').slice(0, 120), status: 'draft',
       config: {
         ...keep,
-        timeoutMessage: d.timeoutMessage, multiplierCheckpoints: d.multiplierCheckpoints ?? {}, reveal: d.reveal ?? {},
+        timeoutMessage: d.timeoutMessage, multiplierCheckpoints: d.multiplierCheckpoints ?? {},
+        // Si el editor abierto no conoce el premio (pestaña vieja), se conserva el que está en la base.
+        reveal: { ...((d.reveal ?? {}) as Record<string, unknown>), ...(!(d.reveal as any)?.prize && (current as any)?.config?.reveal?.prize ? { prize: (current as any).config.reveal.prize } : {}) },
         ...(d.splash ? { splash: d.splash } : {}), editedAt: d.updatedAt ?? new Date().toISOString(),
       },
       question_ids: d.questionIds ?? [], disabled_ids: d.disabledQuestionIds ?? [],
