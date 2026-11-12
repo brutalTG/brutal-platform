@@ -14,7 +14,7 @@ const SECTIONS: { title: string; body: string[] }[] = [
     title: "Qué datos pedimos",
     body: [
       "Tu número de WhatsApp, porque es el canal por el que jugás.",
-      "Los cinco datos del perfil: apodo, edad, género, dónde vivís y qué redes usás.",
+      "Los datos del perfil: apodo, edad, género y dónde vivís.",
       "Lo que contestás en cada Drop y cuánto tardás en contestar.",
     ],
   },

@@ -165,7 +165,7 @@ export async function handleInbound(m: Inbound) {
     const n = await must(from('core', 'nodes').select('nickname, birth_date, province').eq('id', nodeId).single(), 'perfil') as any;
     const ready = Boolean(n.nickname && n.birth_date && n.province);
     const l = await createDropsLink(nodeId, ready ? { purpose: 'drop', destination: cmd === 'profile' ? 'profile' : 'drop' } : { purpose: 'onboarding', hours: 72 });
-    const text = !ready ? `Bienvenido a BRUTAL. Cinco datos (un minuto) y entrás directo al Drop. Cada respuesta suma Golden Tickets para el ranking:\n\n${l.url}\n\nEl link es tuyo, no lo pases. Para no recibir más mensajes, escribí BAJA.`
+    const text = !ready ? `Bienvenido a BRUTAL. Cuatro datos (un minuto) y entrás directo al Drop. Cada respuesta suma Golden Tickets para el ranking:\n\n${l.url}\n\nEl link es tuyo, no lo pases. Para no recibir más mensajes, escribí BAJA.`
       : cmd === 'profile' ? `Tu perfil, tus tickets y el ranking:\n\n${l.url}` : `Tu Drop te está esperando:\n\n${l.url}\n\nEl link es tuyo, no lo pases.`;
     await sendToContact(to, text, ready ? `drops_${cmd === 'help' ? 'drop' : cmd}` : 'drops_onboarding');
     return { handled: true, reply: ready ? `drops_${cmd === 'help' ? 'drop' : cmd}` : 'drops_onboarding' };

@@ -5,7 +5,7 @@
 // en drops.* por acciones del servidor. Si algo falla, se avisa y se puede recargar.
 // ============================================================
 
-import type { Question, Drop, RevealArchetype, RevealScoringConfig, MultiplierCheckpoint, SplashConfig } from "./drop-types";
+import type { Question, Drop, RevealArchetype, RevealScoringConfig, MultiplierCheckpoint, SplashConfig, PrizeConfig } from "./drop-types";
 import {
   saveQuestion as saveQuestionAction,
   removeQuestion as removeQuestionAction,
@@ -35,7 +35,7 @@ export interface PanelDrop {
   status: DropStatus;
   timeoutMessage: string;
   multiplierCheckpoints: Record<string, MultiplierCheckpoint>;
-  reveal: { title: string; description: string; archetypes: RevealArchetype[]; scoring?: RevealScoringConfig };
+  reveal: { title: string; description: string; archetypes: RevealArchetype[]; scoring?: RevealScoringConfig; label?: string; prize?: PrizeConfig };
   questionIds: string[];
   disabledQuestionIds?: string[];
   splash?: SplashConfig;

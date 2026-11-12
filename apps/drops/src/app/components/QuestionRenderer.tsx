@@ -2,7 +2,7 @@
 // QUESTION RENDERER — Dispatches current question to the right component
 // ============================================================
 
-import type { Question } from "./drop-types";
+import type { Question, ResultConfig } from "./drop-types";
 import type { UserAnswer } from "./archetype-engine";
 import type { PipelineActions } from "./useAnswerPipeline";
 import { MicroReaction } from "./micro-reaction";
@@ -31,6 +31,7 @@ import { RafagaBurstQuestion } from "./rafaga-burst-question";
 import { VoiceQuestion, type DetectorBudget } from "./voice-question";
 import { MayorMenorQuestion } from "./mayor-menor-question";
 import { MarketQuestion } from "./market-question";
+import { resolveMarket } from "./session-uploader";
 
 interface Props {
   question: Question;
@@ -39,7 +40,7 @@ interface Props {
   reactionText: string | null;
   advanceWithMultiplierCheck: () => void;
   /** For media_reaction: setters needed for inline handler */
-  setResultConfig: (cfg: { percentage: number; text: string }) => void;
+  setResultConfig: (cfg: ResultConfig) => void;
   setScreen: (s: string) => void;
   /** Carta de la máquina: qué le queda por mentir. */
   detectorBudget?: DetectorBudget;
@@ -47,11 +48,13 @@ interface Props {
   tickets?: number;
   /** Lo que dejó una mano de mayor o menor: duplica/borra tickets o activa un multiplicador. */
   onHand?: (r: { mode: "ladder" | "multiplier" | "double"; multiplier: number; busted: boolean; steps: number }) => void;
+  /** Predicción acertada: suma al contador de arriba. */
+  onMarketWon?: (payout: number) => void;
 }
 
 export function QuestionRenderer({
   question: q, questionIndex, pipeline, reactionText,
-  advanceWithMultiplierCheck, setResultConfig, setScreen, detectorBudget, tickets = 0, onHand,
+  advanceWithMultiplierCheck, setResultConfig, setScreen, detectorBudget, tickets = 0, onHand, onMarketWon,
 }: Props) {
   const actionHint = getActionHint(q);
 
@@ -253,11 +256,17 @@ export function QuestionRenderer({
           options={q.options}
           payout={q.payout ?? 50}
           traders={q.traders}
-          onConfirm={(outcomeIndex) => {
+          onConfirm={async (outcomeIndex) => {
             if (!pipeline.acquireLock()) return;
             pipeline.markFirstAnswered();
             const latencyMs = pipeline.captureLatency();
-            pipeline.submitStandard({ type: "market", outcomeIndex, latencyMs });
+            const r = await resolveMarket(questionIndex, outcomeIndex);
+            if (r?.won) onMarketWon?.(r.payout);
+            const winnerPct = r ? Math.round(r.shares.find((x) => x.label === r.winner)?.pct ?? 0) : 0;
+            pipeline.submitMarket(
+              { type: "market", outcomeIndex, latencyMs },
+              r ? { percentage: winnerPct, text: r.winner ? `eligió “${r.winner}”` : "", market: { won: r.won, payout: r.payout, winner: r.winner, mine: r.outcome } } : null,
+            );
           }}
         />
       )}

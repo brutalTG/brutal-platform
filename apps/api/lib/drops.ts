@@ -5,7 +5,7 @@ import { newCode, sha256, signToken, verifyToken } from './crypto';
 import { HttpError } from './http';
 import {
   ageAllowed, applyDetector, birthDateFromAge, clubShares, marketOutcomes, marketPayout, settleMarket, cleanNickname, cleanSource, cleanTypedAnswer, refSource, computeClaim, guestPhone, joinConfig, consistencyOf, detectorConfig, detectorLabel, detectorOutcome, detectorReason, voiceScript, displayReward, firstCardDraw, hiloLadder, hiloMode, hiloStep, hiloView, winningDraw, multiplierFor, normalizeWallet, observationOf, parseLocation, POLICY,
-  resolveReward, sessionMultiplier, REFERRAL_TICKETS, claimPrefill, cleanReferral, isGuestPhone, newClaimCode, newReferralCode, webChannel, whatsappUrl, type WebClaimReply, type AnswerBody, type DetectorItem, type DetectorResult, type DetectorVerdictOut, type Hand, type HiloAction, type VoiceAnswer,
+  resolveReward, sessionMultiplier, REFERRAL_TICKETS, claimPrefill, cleanReferral, isGuestPhone, newClaimCode, newReferralCode, webChannel, whatsappUrl, prizeInfo, type WebClaimReply, type AnswerBody, type DetectorItem, type DetectorResult, type DetectorVerdictOut, type Hand, type HiloAction, type VoiceAnswer,
 } from './drops-game';
 import { countFillers, parseAnswer } from './game';
 import { db } from './db';
@@ -184,22 +184,57 @@ function marketContent(content: Record<string, any>, cards: DQ[]): Record<string
   return { ...content, outcomes, options: outcomes.map((o) => o.label), payout: marketPayout(content), refText: ref?.content?.text ?? null, refQuestionId: ref?.id ?? null };
 }
 
-/** El club de cada mercado de esta partida: respuestas reales a la carta de referencia + el simulado. */
+/** Cómo contestó el club la carta de referencia: respuestas reales + el club simulado, en %. */
+async function clubOf(m: Record<string, any>) {
+  const counts = m.outcomes.map(() => 0);
+  if (m.refQuestionId) {
+    const real = await must(from('signal', 'observations').select('value').eq('stimulus_id', m.refQuestionId).eq('kind', 'choice').eq('quality', 'valid').limit(20000), 'club') as any[];
+    for (const r of real) { const i = Number(r.value?.index); if (Number.isInteger(i) && i >= 0 && i < counts.length) counts[i] += 1; }
+  }
+  return clubShares(counts, m.sim, m.simPlayers ?? 0);
+}
+
+async function marketResult(position: number, m: Record<string, any>, outcomeIndex: number) {
+  const shares = await clubOf(m);
+  const r = settleMarket({ outcome_index: outcomeIndex }, shares, m.payout);
+  return {
+    position, text: m.text, outcome: m.outcomes[outcomeIndex]?.label ?? null, winner: m.outcomes[r.winner]?.label ?? null,
+    shares: m.outcomes.map((o: { label: string }, i: number) => ({ label: o.label, pct: shares[i] })), won: r.won, payout: r.payout, net: r.net,
+  };
+}
+
+/**
+ * El resultado de una predicción apenas se contesta (la pantalla siguiente lo muestra).
+ * Queda congelado en la partida: al cerrar se usa el mismo, aunque después haya jugado más gente.
+ */
+export async function resolveMarket(a: Access, body: { session_id?: string; position?: unknown; outcome_index?: unknown }) {
+  const { s, d } = await ownedSession(a, body.session_id);
+  if (s.status !== 'started') throw new HttpError(409, 'session_not_active', 'Session is not active');
+  const position = Number(body.position), idx = Number(body.outcome_index);
+  const cards = await cardsOf(d.id);
+  const card = cards[position];
+  if (!card || card.questions.format !== 'market') throw new HttpError(400, 'not_a_market', 'No es una predicción');
+  const m = marketContent(card.questions.content ?? {}, cards);
+  if (!Number.isInteger(idx) || idx < 0 || idx >= m.outcomes.length) throw new HttpError(400, 'invalid_outcome', 'Opción inválida');
+  const row = await must(from('drops', 'sessions').select('markets').eq('id', s.id).single(), 'partida') as { markets: any[] | null };
+  const frozen = (row.markets ?? []).find((x) => x.position === position);
+  if (frozen) return { ok: true, ...frozen };
+  const r = await marketResult(position, m, idx);
+  await from('drops', 'sessions').update({ markets: [...(row.markets ?? []), r] }).eq('id', s.id).eq('status', 'started');
+  return { ok: true, ...r };
+}
+
+/** Cada predicción de esta partida, resuelta: la congelada al contestar o, si no hay, la de ahora. */
 async function settleMarkets(sessionId: string, cards: DQ[]) {
   const bets = await must(from('signal', 'observations').select('position, value').eq('session_id', sessionId).eq('kind', 'bet'), 'apuestas') as any[];
+  const row = await must(from('drops', 'sessions').select('markets').eq('id', sessionId).single(), 'partida') as { markets: any[] | null };
   const out: Record<string, unknown>[] = [];
   for (const b of bets) {
     const card = cards[b.position];
     if (!card || card.questions.format !== 'market') continue;
     const m = marketContent(card.questions.content ?? {}, cards);
-    const counts = m.outcomes.map(() => 0);
-    if (m.refQuestionId) {
-      const real = await must(from('signal', 'observations').select('value').eq('stimulus_id', m.refQuestionId).eq('kind', 'choice').eq('quality', 'valid').limit(20000), 'club') as any[];
-      for (const r of real) { const i = Number(r.value?.index); if (Number.isInteger(i) && i >= 0 && i < counts.length) counts[i] += 1; }
-    }
-    const shares = clubShares(counts, m.sim, m.simPlayers ?? 0);
-    const r = settleMarket(b.value, shares, m.payout);
-    out.push({ position: b.position, text: m.text, outcome: b.value.outcome, winner: m.outcomes[r.winner]?.label ?? null, shares: m.outcomes.map((o: { label: string }, i: number) => ({ label: o.label, pct: shares[i] })), won: r.won, payout: r.payout, net: r.net });
+    const frozen = (row.markets ?? []).find((x) => x.position === b.position && x.outcome === b.value.outcome);
+    out.push(frozen ?? await marketResult(b.position, m, b.value.outcome_index));
   }
   return out;
 }
@@ -487,7 +522,7 @@ export async function claimDrop(a: Access, body: { dropId?: string; drop_id?: st
     if (s.status !== 'completed') throw new HttpError(409, 'not_completed', 'Session is not completed');
     return webClaimOffer(node, d, s);
   }
-  if (s.claimed_at) return { ok: true, alreadyClaimed: true };
+  if (s.claimed_at) return { ok: true, alreadyClaimed: true, botUrl: botUrl() };
   if (s.status !== 'completed') throw new HttpError(409, 'not_completed', 'Session is not completed');
   const total = await sessionTotal(d, s);
   if (a.test) {
@@ -504,7 +539,7 @@ export async function claimDrop(a: Access, body: { dropId?: string; drop_id?: st
     const link = await createDropsLink(node.id, { purpose: 'drop', destination: 'profile', hours: 168 });
     await queueDropResult(node.id, { drop: d.name ?? slug, usd, tickets: total.tickets, verdict: s.detector?.verdict ?? null, link: link.url });
   } catch (e) { console.error('aviso de resultado', e); }
-  return { ok: true, alreadyClaimed: false, credited: { usd, coins: usd, tickets: total.tickets }, cashPending };
+  return { ok: true, alreadyClaimed: false, credited: { usd, coins: usd, tickets: total.tickets }, cashPending, botUrl: botUrl() };
 }
 
 // ---------- Entrada web desde anuncios ----------
@@ -560,6 +595,9 @@ async function ensureReferralCode(nodeId: string) {
   throw new Error('no se pudo crear el código de invitación');
 }
 
+/** Chat con el bot (el botón de la pantalla final para quien ya tiene WhatsApp). */
+const botUrl = () => (env.watiChannel ? whatsappUrl(env.watiChannel, 'RANKING') : null);
+
 const inviteUrl = (code: string) => `${env.dropsOrigin}/jugar?r=${code}`;
 
 /**
@@ -572,17 +610,20 @@ export async function claimWebTickets(phone: string, code: string): Promise<{ no
   if (!claim) return null;
   const byPhone = await must(from('core', 'nodes').select('id, status').eq('phone_e164', phone).maybeSingle(), 'nodo') as { id: string; status: string } | null;
   if (byPhone && ['blocked', 'archived'].includes(byPhone.status)) return null;
-  const links = async (nodeId: string) => {
+  const d = await must(from('drops', 'drops').select('id, slug, name, season_id, config').eq('id', claim.drop_id).single(), 'drop') as any;
+  // Lo que le cuenta el bot: tickets que tiene en la temporada, el sorteo y su link para invitar.
+  const holder = async (nodeId: string) => {
     const ref = await ensureReferralCode(nodeId);
-    const profile = await createDropsLink(nodeId, { purpose: 'drop', destination: 'profile', hours: 168 });
-    return { inviteUrl: inviteUrl(ref), profileUrl: profile.url, referralTickets: REFERRAL_TICKETS };
+    const season = await activeSeasonId(d);
+    const me = season ? await must(from('economy', 'season_ranking').select('tickets').eq('season_id', season).eq('node_id', nodeId).maybeSingle(), 'tickets') as any : null;
+    const nick = (await must(from('core', 'nodes').select('nickname').eq('id', nodeId).single(), 'apodo') as any).nickname as string | null;
+    return { nickname: nick, tickets: Math.max(0, Math.round(Number(me?.tickets) || 0)), prize: prizeInfo(d.config), inviteUrl: inviteUrl(ref), referralTickets: REFERRAL_TICKETS };
   };
   if (claim.claimed_at) {
-    if (byPhone && byPhone.id === claim.claimed_node_id) return { nodeId: byPhone.id, reply: { status: 'already_yours', ...(await links(byPhone.id)) } };
+    if (byPhone && byPhone.id === claim.claimed_node_id) return { nodeId: byPhone.id, reply: { status: 'already_yours', ...(await holder(byPhone.id)) } };
     return byPhone ? { nodeId: byPhone.id, reply: { status: 'used_by_other' } } : null;
   }
   const guest = await must(from('core', 'nodes').select('id, phone_e164, nickname, birth_date, gender, province, city, referred_by').eq('id', claim.node_id).single(), 'invitado') as any;
-  const d = await must(from('drops', 'drops').select('id, slug, name, season_id').eq('id', claim.drop_id).single(), 'drop') as any;
   const now = new Date().toISOString();
   let targetId: string;
   let firstTime: boolean;
@@ -633,12 +674,9 @@ export async function claimWebTickets(phone: string, code: string): Promise<{ no
     } else if (!error.message.includes('idempotency_key')) console.error('premio por invitar', error.message);
   }
 
-  const season = await activeSeasonId(d);
-  const me = season ? await must(from('economy', 'season_ranking').select('position, players').eq('season_id', season).eq('node_id', targetId).maybeSingle(), 'posición') as any : null;
-  return {
-    nodeId: targetId,
-    reply: { status: 'credited', nickname: node.nickname, drop: d.name, tickets: total.tickets, position: me ? Number(me.position) : null, players: me ? Number(me.players) : null, ...(await links(targetId)) },
-  };
+  const h = await holder(targetId);
+  // Si la vista del ranking todavía no lo cuenta, al menos lo que acaba de ganar.
+  return { nodeId: targetId, reply: { status: 'credited', ...h, tickets: Math.max(h.tickets, total.tickets) } };
 }
 
 // ---------- Perfil, billetera, ranking ----------
@@ -726,7 +764,7 @@ export async function apply(a: Access, b: Record<string, any>) {
   const gender = String(b.gender ?? '').trim().slice(0, 40) || null;
   const loc = b.location_province ? { province: String(b.location_province).slice(0, 80), city: b.location_city ? String(b.location_city).slice(0, 80) : null } : parseLocation(b.location);
   const platforms = Array.isArray(b.platforms) ? [...new Set(b.platforms.map((p: unknown) => String(p).slice(0, 40)))].slice(0, 12) : [];
-  if (!nickname || !(age >= 15 && age <= 35) || !gender || !loc.province || platforms.length === 0) {
+  if (!nickname || !(age >= 15 && age <= 35) || !gender || !loc.province) {
     throw new HttpError(400, 'incomplete_profile', 'Incomplete or invalid onboarding profile');
   }
   const now = new Date().toISOString();
@@ -734,8 +772,8 @@ export async function apply(a: Access, b: Record<string, any>) {
     nickname, birth_date: birthDateFromAge(age), gender, province: loc.province, city: loc.city,
     ...(['pending', 'waitlisted'].includes(node.status) ? { status: 'active' } : {}), last_active_at: now,
   }).eq('id', node.id), 'guardar perfil');
-  // Lo que declaró queda como señal del nodo (las plataformas no tienen columna propia).
-  await from('signal', 'observations').insert({
+  // Las redes ya no se preguntan; si un onboarding viejo las manda, quedan como señal del nodo.
+  if (platforms.length) await from('signal', 'observations').insert({
     pseudonym_id: node.pseudonym_id, app_slug: 'drops', instrument_type: 'onboarding', instrument_id: 'onboarding', instrument_version: '1',
     stimulus_id: 'platforms', stimulus: { prompt: '¿Qué redes usás?' }, kind: 'declared', value: { platforms }, value_text: platforms.join(', '),
     observed_at: now, idempotency_key: `onboarding:platforms:${node.id}:${now.slice(0, 10)}`,

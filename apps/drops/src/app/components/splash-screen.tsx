@@ -122,35 +122,10 @@ function ImageSplash({
           </span>
         </button>
 
-        {/* Profile / Leaderboard links */}
-        {(onProfile || onLeaderboard) && (
-          <div
-            className="flex items-center justify-center gap-6 mt-4"
-            style={{ opacity: loaded ? 0.8 : 0, transition: "opacity 0.5s ease 0.2s" }}
-          >
-            {onProfile && (
-              <button
-                onClick={onProfile}
-                className="text-[12px] text-white/80 hover:text-white transition-colors"
-                style={{ fontFamily, textShadow: "0 1px 4px rgba(0,0,0,0.7)" }}
-              >
-                Mi Perfil
-              </button>
-            )}
-            {onProfile && onLeaderboard && (
-              <span className="text-white/30 text-[10px]">|</span>
-            )}
-            {onLeaderboard && (
-              <button
-                onClick={onLeaderboard}
-                className="text-[12px] text-white/80 hover:text-white transition-colors"
-                style={{ fontFamily, textShadow: "0 1px 4px rgba(0,0,0,0.7)" }}
-              >
-                Ranking
-              </button>
-            )}
-          </div>
-        )}
+        {/* Bases y condiciones (el ranking y el perfil ya no van acá) */}
+        <a href="/bases" className="block text-center mt-4 text-[12px] text-white/60 underline hover:text-white transition-colors" style={{ fontFamily }}>
+          Bases y condiciones
+        </a>
       </div>
     </div>
   );
@@ -305,24 +280,10 @@ function TerminalSplash({
         </span>
       </button>
 
-      {/* Profile / Leaderboard links */}
-      {(onProfile || onLeaderboard) && (
-        <div className="flex items-center justify-center gap-6 mt-4" style={{ opacity: typewriterDone ? 0.6 : 0, transition: "opacity 0.5s ease 0.2s" }}>
-          {onProfile && (
-            <button onClick={onProfile} className="text-[12px] text-white/60 hover:text-white transition-colors" style={{ fontFamily }}>
-              Mi Perfil
-            </button>
-          )}
-          {onProfile && onLeaderboard && (
-            <span className="text-white/20 text-[10px]">|</span>
-          )}
-          {onLeaderboard && (
-            <button onClick={onLeaderboard} className="text-[12px] text-white/60 hover:text-white transition-colors" style={{ fontFamily }}>
-              Ranking
-            </button>
-          )}
-        </div>
-      )}
+      {/* Bases y condiciones (el ranking y el perfil ya no van acá) */}
+      <a href="/bases" className="block text-center mt-4 text-[12px] text-white/60 underline hover:text-white transition-colors" style={{ fontFamily }}>
+        Bases y condiciones
+      </a>
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import { emojiBoxStyle, emojiInCircle } from "./emoji-utils";
 import { hapticLight } from "./haptics";
 import { extractTrailingEmoji, isEmojiOnly } from "./emoji-utils";
 
@@ -119,19 +120,13 @@ export function HotTakeVisualQuestion({
                     onClick={() => handleSelect(emoji)}
                     className="flex items-center justify-center select-none transition-all duration-200 active:scale-105"
                     style={{
-                      width: 96,
-                      height: 96,
-                      borderRadius: 20,
-                      backgroundColor: isSelected
-                        ? "color-mix(in srgb, var(--dynamic-fg, #fff) 20%, transparent)"
-                        : "color-mix(in srgb, var(--dynamic-fg, #fff) 6%, transparent)",
-                      border: "1px solid color-mix(in srgb, var(--dynamic-fg, #fff) 15%, transparent)",
+                      ...emojiBoxStyle(isSelected, 96),
                       transform: isSelected ? "scale(1.1)" : isDimmed ? "scale(0.95)" : "scale(1)",
                       opacity: isDimmed ? 0.3 : 1,
                       animation: `htv-stagger 0.3s ${i * 80}ms ease-out both`,
                     }}
                   >
-                    <span style={{ fontSize: 56, lineHeight: 1 }}>{emoji}</span>
+                    <span style={{ fontSize: emojiInCircle(96), lineHeight: 1 }}>{emoji}</span>
                   </button>
                 );
               })}

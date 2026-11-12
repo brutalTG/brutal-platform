@@ -45,7 +45,7 @@ export interface MarketQuestion {
 export interface RankingQuestion {
   type: "ranking";
   text: string;
-  /** 3–5 items to rank */
+  /** 3 a 10 opciones para ordenar (más de 5: botones compactos y puestos numerados, ej. tier list) */
   options: string[];
 }
 
@@ -413,6 +413,21 @@ export interface RevealConfig {
   archetypes?: RevealArchetype[];
   /** Scoring rules mapping answers → dimension scores */
   scoring?: RevealScoringConfig;
+  /** El premio que se sortea: es lo que muestra la pantalla final. */
+  prize?: PrizeConfig;
+}
+
+/** Premio del sorteo (pantalla final del Drop). */
+export interface PrizeConfig {
+  /** Logo o foto del premio (URL). Sin imagen se muestra `title` en grande. */
+  imageUrl?: string;
+  title?: string;
+  /** Renglones del premio, ej. ["1 FULL PASS", "2 DAY PASS"]. */
+  lines?: string[];
+  /** Fecha del sorteo tal como se muestra, ej. "10-12-26". */
+  drawDate?: string;
+  /** Cuántos tickets son una chance (default 100). */
+  ticketsPerChance?: number;
 }
 
 export interface RevealArchetype {
@@ -483,3 +498,8 @@ export interface Drop {
   /** The ordered sequence of interactions */
   questions: Question[];
 }
+
+/** Resultado de una predicción, para la pantalla que sigue a la carta. */
+export interface MarketReveal { won: boolean; payout: number; winner: string | null; mine: string | null }
+/** La pantalla de % (torta) que sigue a una carta. */
+export interface ResultConfig { percentage: number; text: string; market?: MarketReveal }

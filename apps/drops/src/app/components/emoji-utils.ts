@@ -110,3 +110,21 @@ export function isEmojiOnly(str: string): boolean {
   const graphemes = getGraphemes(trimmed);
   return graphemes.every((g) => isEmojiGrapheme(g) || g.trim() === "");
 }
+
+/**
+ * Círculo para los emojis grandes que se tocan (formato definido por Nacho, 11 nov 2026):
+ * círculo lleno del color del frente del duotono, emoji grande adentro y la etiqueta abajo en el mismo color.
+ * Todas las cartas con emojis para tocar lo usan. Elegido: un anillo alrededor.
+ */
+export function emojiBoxStyle(on: boolean, size = 140): import("react").CSSProperties {
+  return {
+    width: size,
+    height: size,
+    borderRadius: "9999px",
+    backgroundColor: "var(--dynamic-fg, #fff)",
+    boxShadow: on ? "0 0 0 5px var(--dynamic-bg, #000), 0 0 0 9px var(--dynamic-fg, #fff)" : "none",
+  };
+}
+
+/** Tamaño del emoji dentro del círculo. */
+export const emojiInCircle = (size: number) => Math.round(size * 0.6);

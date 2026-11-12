@@ -5,7 +5,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import type { RewardEvent } from "./reward-animation";
 import type { UserAnswer } from "./archetype-engine";
-import type { Question, MultiplierCheckpoint, Drop } from "./drop-types";
+import type { Question, MultiplierCheckpoint, Drop, ResultConfig } from "./drop-types";
 
 // --- Screens ---
 import { SplashScreen } from "./splash-screen";
@@ -14,7 +14,7 @@ import { TimeoutScreen } from "./timeout-screen";
 import { ResultScreen } from "./result-screen";
 import { MultiplierUnlockScreen } from "./multiplier-unlock-screen";
 import { TrapFailScreen } from "./trap-fail-screen";
-import { RevealScreen } from "./reveal-screen";
+import { FinalScreen } from "./final-screen";
 import { DetectorVerdictScreen } from "./detector-verdict-screen";
 import { SharedResultPage, parseSharedResult, buildShareUrl } from "./shared-result-page";
 import { ShareCard } from "./share-card";
@@ -25,7 +25,7 @@ import { LeaderboardScreen } from "./leaderboard-screen";
 // --- Extracted modules ---
 import { preloadVoices } from "./voice-cache";
 import { PassAlongButton, passAlongLink } from "./pass-along";
-import { StoryProgressBar, TimerBar, PlayingBadge, StatPills } from "./SurveyHeader";
+import { StoryProgressBar, TimerBar, PlayingBadge, StatPills, BrandMark } from "./SurveyHeader";
 import { QuestionRenderer } from "./QuestionRenderer";
 import { useAnswerPipeline } from "./useAnswerPipeline";
 import { showsCash } from "./economy";
@@ -360,7 +360,7 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
   const [screen, setScreen] = useState<ScreenType>(initialScreen);
   const [questionIndex, setQuestionIndex] = useState(0);
   const [interstitialMessage, setInterstitialMessage] = useState(drop.timeoutMessage || "Brutal eligio por vos.");
-  const [resultConfig, setResultConfig] = useState<{ percentage: number; text: string }>({ percentage: 50, text: "" });
+  const [resultConfig, setResultConfig] = useState<ResultConfig>({ percentage: 50, text: "" });
 
   // --- Rewards ---
   const [coins, setCoins] = useState(0);
@@ -368,7 +368,9 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
   const [rewardEvent, setRewardEvent] = useState<RewardEvent | null>(null);
   const [markets, setMarkets] = useState<MarketResult[]>([]);
   // El contador sube de a poco (cuenta animada), no salta.
-  const shownTickets = useCountUp(tickets);
+  // Predicciones acertadas: se ven en el contador apenas se resuelven (al final se suman después del multiplicador).
+  const [marketBonus, setMarketBonus] = useState(0);
+  const shownTickets = useCountUp(tickets + marketBonus);
   const rewardIdRef = useRef(0);
 
   // --- Multiplier ---
@@ -376,6 +378,9 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
   // Plata ganada que no se acreditó porque la edad no está verificada.
   const [cashPending, setCashPending] = useState(0);
   const [webClaim, setWebClaim] = useState<WebClaim | null>(null);
+  const [botUrl, setBotUrl] = useState<string | null>(null);
+  // Lo que el servidor dice que ganó (manda sobre la cuenta local).
+  const [serverTickets, setServerTickets] = useState<number | null>(null);
   const [pendingMultiplier, setPendingMultiplier] = useState<{ multiplier: number; label: string } | null>(null);
   const [trapPenaltyValue, setTrapPenaltyValue] = useState(0);
 
@@ -602,7 +607,7 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
   }
 
   if (screen === "result") {
-    return <ResultScreen percentage={resultConfig.percentage} text={resultConfig.text} onContinue={advanceWithMultiplierCheck} />;
+    return <ResultScreen percentage={resultConfig.percentage} text={resultConfig.text} market={resultConfig.market} onContinue={advanceWithMultiplierCheck} />;
   }
 
   if (screen === "multiplier" && pendingMultiplier) {
@@ -644,21 +649,12 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
     const finalTickets = Math.max(0, Math.round(tickets * currentMultiplier) + bonusTickets + marketTickets);
 
     return (
-      <RevealScreen
-        title={revealTitle}
-        label={drop.reveal.label}
-        description={revealDescription}
-        metrics={{ latency: formatLatency(avgLatency), instinctiveResponses: `${instinctive}/${totalQuestions}`, doubtMoments: `${doubts}`, totalTime }}
-        coins={coins}
-        tickets={tickets}
-        multiplier={currentMultiplier}
-        bonusTickets={bonusTickets}
-        markets={markets}
-        isMinor={isMinor}
-        cashPending={cashPending}
-        whatsappClaim={webClaim}
-        onClaim={() => { setScreen("leaderboard"); }}
-        onClaimRewards={async () => {
+      <FinalScreen
+        prize={drop.reveal.prize}
+        tickets={serverTickets ?? finalTickets}
+        webClaim={webClaim}
+        botUrl={botUrl}
+        onClaim={async () => {
           try {
             await waitForUpload();
             if (getStandaloneAccessToken()) {
@@ -666,9 +662,11 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
               for (let i = 0; i < 5; i++) {
                 try {
                   const result = await claimRewards({ dropId: drop.id, coins, tickets, finalTickets, multiplier: currentMultiplier });
-                  console.log("[BRUTAL] Claim rewards result:", result);
                   setCashPending(Number(result.cashPending) || 0);
                   if (result.whatsapp) setWebClaim(result.whatsapp);
+                  if (result.botUrl) setBotUrl(result.botUrl);
+                  const t = Number(result.whatsapp?.tickets ?? result.credited?.tickets);
+                  if (Number.isFinite(t) && t >= 0 && !result.alreadyClaimed) setServerTickets(t);
                   return result.ok;
                 } catch (e) {
                   if (i === 4) throw e;
@@ -682,19 +680,6 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
             return false;
           }
         }}
-        onNotifyAndClose={async () => { setScreen("leaderboard"); }}
-        shareCard={
-          <ShareCard
-            title={revealTitle}
-            label={drop.reveal.label}
-            description={revealDescription}
-            dropName={drop.name}
-            metrics={{ latency: formatLatency(avgLatency), instinctiveResponses: `${instinctive}/${totalQuestions}`, totalTime }}
-            referralLink={referralLink}
-            shareUrl={shareUrl}
-          />
-        }
-        passAlong={passAlongLink() ? <PassAlongButton primary label="Invitá a alguien" /> : undefined}
       />
     );
   }
@@ -724,6 +709,7 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
         detectorBudget={detectorBudget}
         tickets={tickets}
         onHand={onHand}
+        onMarketWon={(p) => setMarketBonus((x) => x + p)}
       />
     );
   }
@@ -734,7 +720,7 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
 
   return (
     <div
-      className="h-dvh flex justify-center font-['Roboto'] overflow-hidden"
+      className="relative h-dvh flex justify-center font-['Roboto'] overflow-hidden"
       style={{ backgroundColor: duotoneColors.bg, color: duotoneColors.fg }}
     >
       <div
@@ -744,16 +730,12 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
           paddingBottom: "calc(var(--tg-safe-bottom, 0px) + 24px)",
         }}
       >
-        <div className="w-full mb-3">
-          <StoryProgressBar total={totalQuestions} current={questionIndex} />
-        </div>
+        <StoryProgressBar total={totalQuestions} current={questionIndex} />
 
-        <div className="w-full flex flex-col gap-4 mb-6">
+        <div className="w-full flex flex-col gap-3 mb-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="font-['Silkscreen'] text-sm tracking-wide" style={{ color: duotoneColors.fg }}>
-                BRUTAL////////////////
-              </span>
+              <BrandMark />
               {currentMultiplier > 1 && (
                 <span
                   className="font-['Fira_Code'] text-[11px] px-2 py-0.5 rounded-full font-bold"
@@ -766,8 +748,8 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
             <PlayingBadge />
           </div>
 
-          <div className="flex items-center w-full gap-1.5">
-            <div className="w-[45%] shrink-0">
+          <div className="flex items-center w-full gap-3">
+            <div className="w-[60%] shrink-0">
               <TimerBar
                 key={questionIndex}
                 duration={currentQuestion.timer}
@@ -801,6 +783,7 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
             detectorBudget={detectorBudget}
             tickets={tickets}
             onHand={onHand}
+        onMarketWon={(p) => setMarketBonus((x) => x + p)}
           />
         </div>
       </div>

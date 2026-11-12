@@ -12,7 +12,7 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
     phase: "intro",
     title: "Entrá a Brutal",
     subtitle:
-      "Cinco datos y entrás directo al Drop.\nCada respuesta suma Golden Tickets para el ranking.",
+      "Cuatro datos y entrás directo al Drop.\nCada respuesta suma Golden Tickets para el ranking.",
   },
 
   // ── FASE A: DATOS DUROS ───────────────────────────────────
@@ -68,24 +68,6 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
       },
     ],
   },
-  {
-    id: "platforms",
-    type: "multi_select",
-    phase: "A",
-    copy: "¿Qué usás todos los días?",
-    options: [
-      "TikTok",
-      "Instagram",
-      "YouTube",
-      "X",
-      "Twitch",
-      "Discord",
-      "Spotify",
-    ],
-    minSelect: 1,
-    maxSelect: 3,
-  },
-
   // ── CIERRE ────────────────────────────────────────────────
   {
     id: "closing",

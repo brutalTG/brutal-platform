@@ -14,11 +14,16 @@ function AnimatedOption({
   variant,
   onClick,
   index,
+  compact = false,
+  rank,
 }: {
   option: string;
   variant: "ranked" | "unranked";
   onClick: () => void;
   index: number;
+  /** Con muchas opciones (tier list) los botones son más bajos y los puestos van numerados. */
+  compact?: boolean;
+  rank?: number;
 }) {
   const ref = useRef<HTMLButtonElement>(null);
   const [mounted, setMounted] = useState(false);
@@ -33,7 +38,7 @@ function AnimatedOption({
     <button
       ref={ref}
       onClick={onClick}
-      className="w-full h-[60px] rounded-[8px] flex items-center justify-center select-none active:scale-[0.98]"
+      className={`w-full ${compact ? "h-[42px]" : "h-[60px]"} rounded-[8px] flex items-center justify-center select-none active:scale-[0.98]`}
       style={{
         backgroundColor: isRanked ? "var(--dynamic-bg, #000)" : "transparent",
         border: "2px solid var(--dynamic-bg, #000)",
@@ -44,10 +49,10 @@ function AnimatedOption({
       }}
     >
       <span
-        className="font-['Roboto'] font-medium text-[16px]"
+        className={`font-['Roboto'] font-medium ${compact ? "text-[15px]" : "text-[16px]"}`}
         style={{ color: isRanked ? "var(--dynamic-fg, #fff)" : "var(--dynamic-bg, #000)" }}
       >
-        {option}
+        {rank ? `${rank}. ` : ""}{option}
       </span>
     </button>
   );
@@ -67,6 +72,8 @@ export function RankingQuestion({
 
   const unranked = options.filter((opt) => !ranked.includes(opt));
   const allRanked = ranked.length === options.length;
+  const compact = options.length > 5;
+  const gap = compact ? "gap-1.5" : "gap-2.5";
 
   const handleSelect = (option: string) => {
     if (ranked.includes(option)) return;
@@ -88,7 +95,7 @@ export function RankingQuestion({
         <CardTitle>{text}</CardTitle>
 
         {/* Ranked options */}
-        <div className="w-full flex flex-col gap-2.5">
+        <div className={`w-full flex flex-col ${gap}`}>
           {ranked.map((option, i) => (
             <AnimatedOption
               key={`ranked-${option}`}
@@ -96,6 +103,8 @@ export function RankingQuestion({
               variant="ranked"
               onClick={() => handleUnselect(option)}
               index={i}
+              compact={compact}
+              rank={compact ? i + 1 : undefined}
             />
           ))}
         </div>
@@ -103,7 +112,7 @@ export function RankingQuestion({
         {/* Dashed separator line */}
         {unranked.length > 0 && (
           <div
-            className="w-full my-5"
+            className={`w-full ${compact ? "my-3" : "my-5"}`}
             style={{
               opacity: allRanked ? 0 : 1,
               transition: "opacity 0.3s ease",
@@ -129,7 +138,7 @@ export function RankingQuestion({
         )}
 
         {/* Unranked options */}
-        <div className="w-full flex flex-col gap-2.5">
+        <div className={`w-full flex flex-col ${gap}`}>
           {unranked.map((option, i) => (
             <AnimatedOption
               key={`unranked-${option}`}
@@ -137,6 +146,7 @@ export function RankingQuestion({
               variant="unranked"
               onClick={() => handleSelect(option)}
               index={i}
+              compact={compact}
             />
           ))}
         </div>

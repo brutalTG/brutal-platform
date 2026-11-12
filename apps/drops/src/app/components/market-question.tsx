@@ -58,7 +58,7 @@ export function MarketQuestion({ actionHint, text, refText, options, payout, tra
         style={{ backgroundColor: fg, color: bg, opacity: pick == null ? 0.35 : 1 }}>
         {pick == null ? "ELEGÍ UNA" : "ESA GANA"}
       </button>
-      <p className="text-center font-['Fira_Code'] text-[11px] opacity-60" style={{ color: fg }}>El resultado lo ves al final.</p>
+      <p className="text-center font-['Fira_Code'] text-[11px] opacity-60" style={{ color: fg }}>El resultado lo ves enseguida.</p>
     </div>
   );
 }

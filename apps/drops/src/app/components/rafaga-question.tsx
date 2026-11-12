@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { RafagaDots } from "./rafaga-dots";
 import { hapticLight, hapticRigid } from "./haptics";
 
 export interface RafagaItem {
@@ -194,16 +195,14 @@ export function RafagaQuestion({
   const isBSelected = selectedOption === item.optionB;
 
   return (
-    <div className="flex flex-col flex-1">
+    <div className="flex flex-col flex-1 gap-4">
+      {/* Progreso de la ráfaga: bullets debajo del header */}
+      <RafagaDots total={total} current={currentIdx} />
       {/* Card */}
       <div
         className="w-full rounded-[30px] flex flex-col items-center px-5 pt-6 pb-6 shadow-lg mx-auto overflow-hidden"
         style={{ backgroundColor: "var(--dynamic-fg, #fff)" }}
       >
-        {/* Counter pill */}
-        <span className="font-['Roboto'] font-semibold text-[14px] tracking-[-0.14px] mb-3" style={{ color: "var(--dynamic-bg, #000)" }}>
-          {currentIdx + 1} / {total}
-        </span>
 
         {/* Prompt text */}
         <p className="font-['Roboto'] text-[18px] text-center mb-4" style={{ color: "var(--dynamic-bg, #000)" }}>
@@ -250,19 +249,6 @@ export function RafagaQuestion({
               </span>
             </button>
           </div>
-        </div>
-
-        {/* Dot indicators */}
-        <div className="flex items-center gap-[6px] mt-5">
-          {items.map((_, i) => (
-            <div key={i}>
-              {i <= currentIdx ? (
-                <div className="w-[11px] h-[11px] rounded-full" style={{ backgroundColor: "var(--dynamic-bg, #000)" }} />
-              ) : (
-                <div className="w-[11px] h-[11px] rounded-full border-2 bg-transparent" style={{ borderColor: "var(--dynamic-bg, #000)" }} />
-              )}
-            </div>
-          ))}
         </div>
 
         {/* Sub-timer bar */}

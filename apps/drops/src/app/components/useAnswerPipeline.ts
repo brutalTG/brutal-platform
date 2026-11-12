@@ -6,7 +6,7 @@
 // ============================================================
 
 import { useCallback, useRef } from "react";
-import type { Question } from "./drop-types";
+import type { Question, ResultConfig } from "./drop-types";
 import type { UserAnswer } from "./archetype-engine";
 import { markFirstInteraction } from "./latency-tracker";
 import { hapticMedium, hapticHeavy } from "./haptics";
@@ -26,6 +26,8 @@ export interface AnswerContext {
 export interface PipelineActions {
   /** Standard flow: store answer → reward → reaction → advance (with result interstitial if q.result) */
   submitStandard: (answer: UserAnswer) => void;
+  /** Predicción: con resultado, muestra la pantalla de % antes de seguir. */
+  submitMarket: (answer: UserAnswer, reveal: ResultConfig | null) => void;
   /** Like standard but with a delay before transition (used by ranking) */
   submitWithDelay: (answer: UserAnswer, delayMs: number) => void;
   /** Confesionario flow: store → reward → reaction → confession_secret screen */
@@ -52,7 +54,7 @@ interface PipelineConfig {
   setTickets: React.Dispatch<React.SetStateAction<number>>;
   setRewardEvent: React.Dispatch<React.SetStateAction<RewardEvent | null>>;
   setReactionText: React.Dispatch<React.SetStateAction<string | null>>;
-  setResultConfig: React.Dispatch<React.SetStateAction<{ percentage: number; text: string }>>;
+  setResultConfig: React.Dispatch<React.SetStateAction<ResultConfig>>;
   setScreen: (screen: string) => void;
   setInterstitialMessage: React.Dispatch<React.SetStateAction<string>>;
   setTrapPenaltyValue: React.Dispatch<React.SetStateAction<number>>;
@@ -177,6 +179,17 @@ export function useAnswerPipeline(config: PipelineConfig): PipelineActions {
     [storeAnswer, collectReward, showReaction, goToResultOrAdvance, questions, questionIndex]
   );
 
+  /** Predicción: la pantalla siguiente muestra si acertó (si el servidor no contestó, sigue de largo). */
+  const submitMarket = useCallback(
+    (answer: UserAnswer, reveal: ResultConfig | null) => {
+      storeAnswer(answer);
+      showReaction((answer as { latencyMs?: number }).latencyMs);
+      if (reveal) transitionAfterReward(false, () => { setResultConfig(reveal); setScreen("result"); });
+      else transitionAfterReward(false, advanceWithMultiplierCheck);
+    },
+    [storeAnswer, showReaction, transitionAfterReward, setResultConfig, setScreen, advanceWithMultiplierCheck]
+  );
+
   const submitWithDelay = useCallback(
     (answer: UserAnswer, delayMs: number) => {
       storeAnswer(answer);
@@ -243,6 +256,7 @@ export function useAnswerPipeline(config: PipelineConfig): PipelineActions {
 
   return {
     submitStandard,
+    submitMarket,
     submitWithDelay,
     submitConfesionario,
     submitTrap,
