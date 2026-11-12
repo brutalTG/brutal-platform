@@ -1,5 +1,5 @@
 import { LogOut } from 'lucide-react';
-import { Sidebar, MobileNav } from '@/components/shell/sidebar';
+import { Sidebar, MobileNav, SectionTitle } from '@/components/shell/sidebar';
 import { from } from '@/lib/db';
 import { panelEnv, envLabel } from '@/lib/env';
 import { logout } from '@/app/login/actions';
@@ -44,11 +44,23 @@ export default async function PanelLayout({ children }: { children: React.ReactN
           </form>
         </aside>
         <main className="min-w-0 flex-1">
-          <div className="sticky top-7 z-20 border-b border-border bg-bg/95 backdrop-blur md:hidden">
-            <div className="flex h-11 items-center justify-between px-4"><span className="font-bold tracking-tight">BRUTAL</span><span className="text-xs text-fg-3">{envLabel[env]}</span></div>
-            <MobileNav />
+          <div className={`sticky ${env === 'test' ? 'top-7' : 'top-0'} z-20 border-b border-border bg-bg/95 backdrop-blur md:hidden`}>
+            <div className="flex h-11 items-center gap-2 px-4">
+              <span className="font-bold tracking-tight">BRUTAL</span>
+              <span className="text-fg-3">·</span>
+              <SectionTitle />
+              <span className="ml-auto text-xs text-fg-3">{envLabel[env]}</span>
+            </div>
           </div>
-          <div className="mx-auto max-w-6xl px-4 py-6 md:px-8 md:py-8">{children}</div>
+          <MobileNav
+            counts={counts}
+            logout={
+              <form action={logout}>
+                <button className="flex h-12 w-full items-center gap-3 rounded px-3 text-[17px] text-fg-2 [&_svg]:size-5"><LogOut aria-hidden /> Salir</button>
+              </form>
+            }
+          />
+          <div className="mx-auto max-w-6xl px-4 pb-24 pt-4 md:px-8 md:py-8">{children}</div>
         </main>
       </div>
     </div>

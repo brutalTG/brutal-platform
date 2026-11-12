@@ -115,12 +115,12 @@ export function DropManager({ onEditDrop }: DropManagerProps) {
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold" style={{ color: "var(--p-text)" }}>Experimentos</h2>
           <p className="text-xs" style={{ color: "var(--p-text-faint)" }}>{drops.length} en total · uno en juego a la vez</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <input ref={fileInputRef} type="file" accept=".json" className="hidden" onChange={handleFileUpload} />
           <button
             onClick={handleImport}
@@ -263,7 +263,7 @@ function DropCard({
       onMouseLeave={(e) => { e.currentTarget.style.borderColor = "var(--p-border-subtle)"; }}
     >
       <div className="flex-1 min-w-0 cursor-pointer" onClick={() => onEdit(drop.id)}>
-        <div className="flex items-center gap-2 mb-0.5">
+        <div className="flex flex-wrap items-center gap-2 mb-0.5">
           <span className="text-sm font-bold" style={{ color: "var(--p-text)" }}>{drop.name}</span>
           <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider ${
             drop.status === "active" ? "bg-green-500/20 text-green-400" :
@@ -274,6 +274,11 @@ function DropCard({
           >
             {({ active: "En juego", draft: "Borrador", archived: "Archivado" } as const)[drop.status]}
           </span>
+          {drop.status === "active" && drop.pendingChanges && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider" style={{ backgroundColor: "color-mix(in srgb, var(--p-warning) 18%, transparent)", color: "var(--p-warning)" }}>
+              Cambios sin publicar
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-3 text-xs" style={{ color: "var(--p-text-ghost)" }}>
           <span className="font-mono">{drop.dropId}</span>
@@ -282,7 +287,7 @@ function DropCard({
         </div>
       </div>
 
-      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+      <div className="flex gap-1 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition-opacity shrink-0">
         <button onClick={() => onEdit(drop.id)} className="p-1.5 transition-colors" style={{ color: "var(--p-text-ghost)" }} onMouseEnter={(e) => { e.currentTarget.style.color = "var(--p-text)"; }} onMouseLeave={(e) => { e.currentTarget.style.color = "var(--p-text-ghost)"; }} title="Editar">
           <Edit3 size={13} />
         </button>
