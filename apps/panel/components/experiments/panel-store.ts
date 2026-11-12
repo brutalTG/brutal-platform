@@ -12,6 +12,8 @@ import {
   saveDrop as saveDropAction,
   removeDrop as removeDropAction,
   publishDrop as publishDropAction,
+  publishDropChanges as publishDropChangesAction,
+  discardDropChanges as discardDropChangesAction,
   previewLink,
   listSegments,
   listDimensions,
@@ -44,6 +46,10 @@ export interface PanelDrop {
   studyId?: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Versión de la base que conoce esta pestaña. */
+  serverVersion?: string;
+  /** En juego con cambios guardados sin publicar: los jugadores siguen viendo la versión anterior. */
+  pendingChanges?: boolean;
 }
 
 export interface ProfileDimension {
@@ -113,7 +119,9 @@ const queueDrop = (id: string) => enqueue(`d:${id}`, async () => {
   if (!d) return { ok: true as const };
   const res = await saveDropAction({ ...d, disabledQuestionIds: d.disabledQuestionIds ?? [] } as any);
   // La versión nueva de la base: los próximos guardados de esta pestaña ya no la ven como vieja.
-  if (res.ok && (res as any).serverVersion) (d as any).serverVersion = (res as any).serverVersion;
+  if (res.ok && (res as any).serverVersion) d.serverVersion = (res as any).serverVersion;
+  // En juego: quedó como borrador, sin publicar.
+  if (res.ok && (res as any).draft) { d.pendingChanges = true; draftListeners.forEach((l) => l(d.id)); }
   return res;
 });
 
@@ -148,9 +156,35 @@ export function createQuestion(data: Question, label?: string, tags?: string[]):
   return q;
 }
 
+/** Avisos de "este Drop quedó con cambios sin publicar" (para el cartel del editor). */
+const draftListeners = new Set<(dropId: string) => void>();
+export const onDraftChange = (l: (dropId: string) => void) => { draftListeners.add(l); return () => { draftListeners.delete(l); }; };
+
+/** Cartas que están en un Drop en juego: editarlas crea una versión nueva que entra al borrador de ese Drop. */
+export const liveDropsWith = (id: string) => drops.filter((d) => d.status === "active" && d.questionIds.includes(id));
+
 export function updateQuestion(id: string, data: Partial<Question>, label?: string, tags?: string[]): PanelQuestion | null {
   const idx = questions.findIndex((q) => q.id === id);
   if (idx === -1) return null;
+  // Está en juego: no se toca la carta publicada. Se crea una versión nueva y los Drops que la usan la toman
+  // en su borrador (los en juego, hasta "Publicar cambios"; los demás, al momento).
+  if (liveDropsWith(id).length) {
+    const old = questions[idx];
+    const merged = { ...old.data, ...data } as any;
+    const base = (label ?? old.label).replace(/ · v\d+$/, "");
+    const n = questions.filter((q) => q.label === base || q.label.startsWith(base + " · v")).length + 1;
+    const fresh: PanelQuestion = { id: generateId(), data: merged as Question, label: `${base} · v${n}`, tags: tags ?? old.tags, createdAt: now(), updatedAt: now() };
+    questions = [...questions, fresh];
+    queueQuestion(fresh.id);
+    const touched: string[] = [];
+    drops = drops.map((d) => {
+      if (!d.questionIds.includes(id) || d.status === "archived") return d;
+      touched.push(d.id);
+      return { ...d, questionIds: d.questionIds.map((x) => (x === id ? fresh.id : x)), disabledQuestionIds: (d.disabledQuestionIds ?? []).map((x) => (x === id ? fresh.id : x)) };
+    });
+    touched.forEach(queueDrop);
+    return fresh;
+  }
   const merged = { ...questions[idx].data, ...data } as any;
   const seg = sanitizeSegmentIds(merged.segmentIds);
   if (seg) merged.segmentIds = seg; else delete merged.segmentIds;
@@ -250,6 +284,28 @@ export async function publishDropNow(id: string): Promise<boolean> {
   const sv = (r as any).serverVersion;
   drops = drops.map((d) => (d.id === id ? { ...d, status: "active", lastPublishedAt: at, ...(sv ? { serverVersion: sv } : {}) } : d.status === "active" ? { ...d, status: "archived" } : d));
   return true;
+}
+
+/** Drop en juego: publica el borrador. */
+export async function publishDropChangesNow(id: string): Promise<{ ok: boolean; error?: string }> {
+  clearSaveError();
+  await chain;
+  const r = await enqueue(null, () => publishDropChangesAction(id));
+  if (!r?.ok) return { ok: false, error: (r as any)?.error ?? state.error ?? "No se pudo publicar." };
+  const sv = (r as any).serverVersion;
+  drops = drops.map((d) => (d.id === id ? { ...d, pendingChanges: false, ...(sv ? { serverVersion: sv } : {}) } : d));
+  return { ok: true };
+}
+
+/** Drop en juego: tira el borrador y vuelve a lo publicado. */
+export async function discardDropChangesNow(id: string): Promise<{ ok: boolean; error?: string }> {
+  clearSaveError();
+  await chain;
+  const r = await enqueue(null, () => discardDropChangesAction(id));
+  if (!r?.ok || !(r as any).drop) return { ok: false, error: (r as any)?.error ?? "No se pudo descartar." };
+  const fresh = (r as any).drop as PanelDrop;
+  drops = drops.map((d) => (d.id === id ? { ...fresh, pendingChanges: false } : d));
+  return { ok: true };
 }
 
 /** Guarda lo pendiente del Drop y devuelve si quedó guardado. */

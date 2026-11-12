@@ -85,7 +85,7 @@ export function Builder({ initial, tab, openId, detectors = [] }: { initial: { q
   }
 
   return (
-    <div className="experiments-builder rounded-lg p-4 md:p-6" style={{ ...LIGHT, backgroundColor: "var(--p-bg)", color: "var(--p-text)" } as React.CSSProperties}>
+    <div className="experiments-builder rounded-lg p-2 sm:p-4 md:p-6" style={{ ...LIGHT, backgroundColor: "var(--p-bg)", color: "var(--p-text)" } as React.CSSProperties}>
       <div className="mb-4 flex min-h-6 items-center justify-end gap-2 text-xs" aria-live="polite">
         {save.error ? (
           <span className="flex items-center gap-2 rounded px-2 py-1" style={{ background: "#fde8ec", color: "var(--p-danger)" }}>

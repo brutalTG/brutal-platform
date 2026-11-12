@@ -16,6 +16,8 @@ export type PanelDropRow = {
   lastPublishedAt?: string; studyId?: string | null; createdAt: string; updatedAt: string;
   /** Versión de la base cuando el panel lo cargó (o lo guardó). Si la base es más nueva, no se pisa. */
   serverVersion?: string;
+  /** En juego con cambios guardados que todavía no se publicaron (los jugadores ven la versión anterior). */
+  pendingChanges?: boolean;
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -59,6 +61,12 @@ function rowToQuestion(r: any): PanelQuestionRow {
 
 const STATUS_IN: Record<string, PanelDropRow['status']> = { draft: 'draft', scheduled: 'draft', live: 'active', closed: 'archived', archived: 'archived' };
 
+/** Un Drop en juego con borrador: el panel muestra el borrador; los jugadores, lo publicado. */
+function withDraft(d: PanelDropRow, draft: any): PanelDropRow {
+  if (!draft || d.status !== 'active') return d;
+  return { ...d, ...draft, id: d.id, status: 'active', serverVersion: d.serverVersion, lastPublishedAt: d.lastPublishedAt, pendingChanges: true };
+}
+
 function rowToDrop(r: any, cards: any[]): PanelDropRow {
   const cfg = r.config ?? {};
   const mine = cards.filter((c) => c.drop_id === r.id).sort((a, b) => a.position - b.position);
@@ -86,9 +94,11 @@ export async function loadBuilder(): Promise<{ ok: true; questions: PanelQuestio
     from('signal', 'studies').select('id, name').neq('status', 'archived').order('created_at', { ascending: false }),
     from('pressure', 'experiments').select('slug, name, status').order('created_at', { ascending: false }),
   ]);
+  const { data: drafts } = await from('drops', 'drop_drafts').select('drop_id, payload');
+  const draftOf = new Map((drafts ?? []).map((x: any) => [x.drop_id, x.payload]));
   const error = q.error ?? d.error ?? c.error;
   if (error) return { ok: false, error: explain(error)! };
-  return { ok: true, questions: (q.data ?? []).map(rowToQuestion), drops: (d.data ?? []).map((r) => rowToDrop(r, c.data ?? [])), studies: (st.data ?? []) as { id: string; name: string }[], detectors: (px.data ?? []) as { slug: string; name: string; status: string }[] };
+  return { ok: true, questions: (q.data ?? []).map(rowToQuestion), drops: (d.data ?? []).map((r) => withDraft(rowToDrop(r, c.data ?? []), draftOf.get((r as any).id))), studies: (st.data ?? []) as { id: string; name: string }[], detectors: (px.data ?? []) as { slug: string; name: string; status: string }[] };
 }
 
 export async function listSegments() {
@@ -116,6 +126,8 @@ export async function saveQuestion(q: PanelQuestionRow): Promise<Saved> {
 /** Borra la carta. Si alguien ya la respondió, se retira (deja de verse) para no perder la señal. */
 export async function removeQuestion(id: string): Promise<Saved> {
   if (!UUID.test(id)) return fail('Carta inválida.');
+  const { data: live } = await from('drops', 'drop_questions').select('drop_id, drops!inner(status)').eq('question_id', id).eq('drops.status', 'live').limit(1);
+  if (live?.length) return fail('Esa carta está en el Drop en juego. Sacala del Drop y publicá los cambios antes de borrarla.');
   const { count } = await from('drops', 'answers').select('id', { count: 'exact', head: true }).eq('question_id', id);
   await from('drops', 'drop_questions').delete().eq('question_id', id);
   const { error } = count
@@ -126,16 +138,28 @@ export async function removeQuestion(id: string): Promise<Saved> {
 }
 
 // ---------- Drops ----------
-export async function saveDrop(d: PanelDropRow): Promise<Saved & { serverVersion?: string }> {
+export async function saveDrop(d: PanelDropRow): Promise<Saved & { serverVersion?: string; draft?: boolean }> {
   if (!UUID.test(d?.id ?? '')) return fail('Drop sin identificador.');
   if (!/^[a-z0-9-]{3,80}$/.test(d.dropId ?? '')) return fail('El identificador del Drop solo puede tener minúsculas, números y guiones.');
-  // Lo que el editor no conoce (la máquina, la voz) se conserva tal como estaba en la base.
-  const { data: current } = await from('drops', 'drops').select('config, updated_at').eq('id', d.id).maybeSingle();
+  const { data: current } = await from('drops', 'drops').select('config, updated_at, status').eq('id', d.id).maybeSingle();
   // Pestaña vieja: si el Drop cambió en la base después de que este panel lo cargó, no se pisa.
   const dbVersion = (current as any)?.updated_at as string | undefined;
   if (d.serverVersion && dbVersion && new Date(dbVersion).getTime() > new Date(d.serverVersion).getTime() + 1000) {
     return fail('Este Drop cambió desde que abriste el panel. Recargá la página antes de seguir editando (no se guardó nada).');
   }
+  // En juego: lo que se edita queda como borrador hasta "Publicar cambios". Archivarlo sí se aplica al momento.
+  if ((current as any)?.status === 'live' && d.status !== 'archived') {
+    const { pendingChanges: _p, serverVersion: _v, ...payload } = d;
+    const { error } = await from('drops', 'drop_drafts').upsert({ drop_id: d.id, payload, saved_at: new Date().toISOString() });
+    if (error) return fail(error);
+    return { ok: true, draft: true, serverVersion: dbVersion };
+  }
+  return applyDrop(d, current);
+}
+
+/** Escribe el Drop en las tablas que lee el juego. */
+async function applyDrop(d: PanelDropRow, current: any): Promise<Saved & { serverVersion?: string }> {
+  // Lo que el editor no conoce (la máquina, la voz) se conserva tal como estaba en la base.
   const { timeoutMessage: _t, multiplierCheckpoints: _m, reveal: _r, splash: _s, editedAt: _e, ...keep } = ((current as any)?.config ?? {}) as Record<string, unknown>;
   const { error } = await db().schema('drops').rpc('panel_save_drop', {
     p: {
@@ -155,8 +179,41 @@ export async function saveDrop(d: PanelDropRow): Promise<Saved & { serverVersion
   await from('drops', 'drops').update({ study_id: d.studyId && UUID.test(d.studyId) ? d.studyId : null }).eq('id', d.id);
   if (d.status === 'archived') await from('drops', 'drops').update({ status: 'archived' }).eq('id', d.id).neq('status', 'archived');
   if (d.status === 'draft') await from('drops', 'drops').update({ status: 'draft' }).eq('id', d.id).in('status', ['archived', 'closed']);
+  if (d.status === 'archived') await from('drops', 'drop_drafts').delete().eq('drop_id', d.id);
   const { data: after } = await from('drops', 'drops').select('updated_at').eq('id', d.id).maybeSingle();
   return { ok: true, serverVersion: (after as any)?.updated_at };
+}
+
+/** Drop en juego: aplica el borrador. Desde acá lo ven los jugadores que entren. */
+export async function publishDropChanges(id: string): Promise<Saved & { serverVersion?: string }> {
+  if (!UUID.test(id)) return fail('Drop inválido.');
+  const { data: draft } = await from('drops', 'drop_drafts').select('payload').eq('drop_id', id).maybeSingle();
+  if (!draft) return fail('No hay cambios pendientes.');
+  const { data: current } = await from('drops', 'drops').select('config, updated_at, status, version, name').eq('id', id).maybeSingle();
+  if (!current) return fail('No encuentro ese Drop.');
+  const payload = (draft as any).payload as PanelDropRow;
+  const { count } = await from('drops', 'questions').select('id', { count: 'exact', head: true }).in('id', (payload.questionIds ?? []).filter((x) => UUID.test(x)));
+  if (!count) return fail('El borrador no tiene cartas.');
+  const r = await applyDrop({ ...payload, id, status: 'active' }, current);
+  if (!r.ok) return r;
+  await from('drops', 'drops').update({ status: 'live', version: Number((current as any).version ?? 1) + 1 }).eq('id', id);
+  await from('drops', 'drop_drafts').delete().eq('drop_id', id);
+  await audit('publicó cambios de un Drop en juego', 'drop', id, { name: (current as any).name });
+  revalidatePath('/experimentos');
+  const { data: after } = await from('drops', 'drops').select('updated_at').eq('id', id).maybeSingle();
+  return { ok: true, serverVersion: (after as any)?.updated_at };
+}
+
+/** Drop en juego: tira el borrador y devuelve el Drop como está publicado. */
+export async function discardDropChanges(id: string): Promise<(Saved & { drop?: PanelDropRow })> {
+  if (!UUID.test(id)) return fail('Drop inválido.');
+  await from('drops', 'drop_drafts').delete().eq('drop_id', id);
+  const [{ data: r }, { data: c }] = await Promise.all([
+    from('drops', 'drops').select('*').eq('id', id).maybeSingle(),
+    from('drops', 'drop_questions').select('drop_id, question_id, position, enabled').eq('drop_id', id),
+  ]);
+  if (!r) return fail('No encuentro ese Drop.');
+  return { ok: true, drop: rowToDrop(r, c ?? []) };
 }
 
 /** Publicar: queda como el Drop que juegan todos. El que estaba publicado se cierra. */

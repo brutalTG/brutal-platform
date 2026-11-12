@@ -41,6 +41,9 @@ import {
   duplicateQuestion as dupeQ,
   syncDropNow,
   publishDropNow,
+  publishDropChangesNow,
+  discardDropChangesNow,
+  onDraftChange,
   previewDrop,
   getStudies,
   QUESTION_TYPE_LABELS,
@@ -139,7 +142,7 @@ function DraggableQuestionCard({
         </div>
       )}
       <div
-        className="flex items-center gap-2 p-2.5 rounded-lg transition-all group"
+        className="flex items-center gap-1.5 sm:gap-2 p-2 sm:p-2.5 rounded-lg transition-all group"
         style={{
           backgroundColor: isDragging
             ? "var(--p-bg-hover)"
@@ -159,12 +162,12 @@ function DraggableQuestionCard({
         }}
       >
         {/* Index */}
-        <span className="text-[10px] font-mono w-6 text-right shrink-0" style={{ color: "var(--p-text-ghost)" }}>{idx + 1}</span>
+        <span className="text-[10px] font-mono w-4 sm:w-6 text-right shrink-0" style={{ color: "var(--p-text-ghost)" }}>{idx + 1}</span>
 
         {/* Drag handle */}
         <div
           ref={(el) => { drag(el); }}
-          className="cursor-grab active:cursor-grabbing transition-colors shrink-0 p-0.5"
+          className="cursor-grab active:cursor-grabbing transition-colors shrink-0 p-0.5 hidden sm:block"
           style={{ color: "var(--p-text-ghost)" }}
           title="Arrastrar para reordenar"
         >
@@ -177,10 +180,10 @@ function DraggableQuestionCard({
         {/* Content */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-mono" style={{ color: "var(--p-text-ghost)" }}>{QUESTION_TYPE_LABELS[q.data.type]}</span>
-            <span className="text-[10px]" style={{ color: "var(--p-text-ghost)" }}>⏱ {q.data.timer}s</span>
+            <span className="text-xs font-mono truncate" style={{ color: "var(--p-text-ghost)" }}>{QUESTION_TYPE_LABELS[q.data.type]}</span>
+            <span className="text-[10px] hidden sm:inline" style={{ color: "var(--p-text-ghost)" }}>⏱ {q.data.timer}s</span>
             {q.data.reward && (
-              <span className="text-[10px]" style={{ color: "var(--p-text-ghost)" }}>
+              <span className="text-[10px] hidden sm:inline" style={{ color: "var(--p-text-ghost)" }}>
                 {q.data.reward.type === "coins" ? "USD " : "🎟️"}{q.data.reward.value}
               </span>
             )}
@@ -217,7 +220,7 @@ function DraggableQuestionCard({
           >
             <Pencil size={13} />
           </button>
-          <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="flex gap-0.5 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition-opacity">
             {idx > 0 && (
               <button onClick={() => onMove(idx, idx - 1)} className="p-1 transition-colors" style={{ color: "var(--p-text-ghost)" }} title="Mover arriba">
                 <ArrowUp size={13} />
@@ -228,7 +231,7 @@ function DraggableQuestionCard({
                 <ArrowDown size={13} />
               </button>
             )}
-            <button onClick={() => onDuplicate(idx)} className="p-1 transition-colors" style={{ color: "var(--p-text-ghost)" }} title="Duplicar">
+            <button onClick={() => onDuplicate(idx)} className="p-1 transition-colors hidden md:inline-flex" style={{ color: "var(--p-text-ghost)" }} title="Duplicar">
               <Copy size={13} />
             </button>
             <button onClick={() => onRemove(idx)} className="p-1 transition-colors" style={{ color: "var(--p-text-ghost)" }} onMouseEnter={(e) => { e.currentTarget.style.color = "var(--p-danger)"; }} onMouseLeave={(e) => { e.currentTarget.style.color = "var(--p-text-ghost)"; }} title="Quitar">
@@ -364,6 +367,31 @@ export function DropEditor({ dropId, onBack, onRefresh }: DropEditorProps) {
     onRefresh();
   }, [dropId, drop, refresh, onRefresh]);
 
+  // Drop en juego: los cambios quedan en borrador hasta acá.
+  useEffect(() => onDraftChange((id) => { if (id === dropId) refresh(); }), [dropId, refresh]);
+  const handlePublishChanges = useCallback(async () => {
+    if (!drop) return;
+    if (!window.confirm(`¿Publicar los cambios de "${drop.name}"? Desde ahora los ve todo el que entre a jugar.`)) return;
+    setPublishing(true);
+    setPublishError(null);
+    const res = await publishDropChangesNow(dropId);
+    setPublishing(false);
+    if (!res.ok) setPublishError(res.error ?? "No se pudieron publicar los cambios.");
+    refresh();
+    onRefresh();
+  }, [dropId, drop, refresh, onRefresh]);
+  const handleDiscardChanges = useCallback(async () => {
+    if (!drop) return;
+    if (!window.confirm("¿Descartar los cambios sin publicar? El Drop vuelve a como lo están jugando.")) return;
+    setPublishing(true);
+    setPublishError(null);
+    const res = await discardDropChangesNow(dropId);
+    setPublishing(false);
+    if (!res.ok) setPublishError(res.error ?? "No se pudieron descartar.");
+    refresh();
+    onRefresh();
+  }, [dropId, drop, refresh, onRefresh]);
+
   const handlePreview = useCallback(async () => {
     if (!drop) return;
     setPublishing(true);
@@ -495,12 +523,12 @@ export function DropEditor({ dropId, onBack, onRefresh }: DropEditorProps) {
     <DndProvider backend={HTML5Backend}>
       <div className="flex flex-col gap-4">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-3 min-w-0">
             <button onClick={onBack} className="p-2 transition-colors" style={{ color: "var(--p-text-faint)" }}>
               <ArrowLeft size={18} />
             </button>
-            <div>
+            <div className="min-w-0 flex-1">
               <input
                 className="text-xl font-bold bg-transparent border-none focus:outline-none w-full"
                 style={{ color: "var(--p-text)" }}
@@ -508,7 +536,7 @@ export function DropEditor({ dropId, onBack, onRefresh }: DropEditorProps) {
                 onChange={(e) => save({ name: e.target.value })}
                 placeholder="Nombre del experimento"
               />
-              <div className="flex items-center gap-2 mt-0.5">
+              <div className="flex flex-wrap items-center gap-2 mt-0.5">
                 <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
                   drop.status === "active" ? "bg-green-500/20 text-green-400" :
                   drop.status === "archived" ? "" :
@@ -546,7 +574,7 @@ export function DropEditor({ dropId, onBack, onRefresh }: DropEditorProps) {
             </div>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
               onClick={() => setExpandedConfig(!expandedConfig)}
               className="p-2 border rounded-lg transition-colors"
@@ -610,8 +638,8 @@ export function DropEditor({ dropId, onBack, onRefresh }: DropEditorProps) {
                 {publishing ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />} Publicar
               </button>
             ) : (
-              <span className="flex items-center gap-1.5 px-3 py-2 text-xs" style={{ color: "var(--p-success)" }} title="Lo están jugando. Cada cambio se ve al instante en el próximo que entre.">
-                <Circle size={8} className="fill-current" /> En juego · los cambios se ven al instante
+              <span className="flex items-center gap-1.5 px-3 py-2 text-xs" style={{ color: "var(--p-success)" }} title="Lo están jugando. Lo que cambies queda sin publicar hasta que toques Publicar cambios.">
+                <Circle size={8} className="fill-current" /> En juego
               </span>
             )}
             {publishError && (
@@ -623,6 +651,22 @@ export function DropEditor({ dropId, onBack, onRefresh }: DropEditorProps) {
         </div>
 
         {/* Configuration panel (collapsible) */}
+        {drop.status === "active" && drop.pendingChanges && (
+          <div className="flex flex-col gap-3 rounded-xl p-4 sm:flex-row sm:items-center sm:justify-between" style={{ backgroundColor: "color-mix(in srgb, var(--p-warning) 14%, transparent)", border: "1px solid color-mix(in srgb, var(--p-warning) 40%, transparent)" }} data-testid="cambios-sin-publicar">
+            <div className="text-sm" style={{ color: "var(--p-text)" }}>
+              <b>Cambios sin publicar.</b> Los jugadores siguen viendo la versión anterior hasta que los publiques.
+            </div>
+            <div className="flex gap-2 shrink-0">
+              <button onClick={handleDiscardChanges} disabled={publishing} className="px-3 py-2 text-xs rounded-lg" style={{ border: "1px solid var(--p-border)", color: "var(--p-text-muted)", backgroundColor: "var(--p-bg-card)" }}>
+                Descartar
+              </button>
+              <button onClick={handlePublishChanges} disabled={publishing} className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg" style={{ backgroundColor: "var(--p-accent)", color: "var(--p-accent-fg)" }}>
+                {publishing ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />} Publicar cambios
+              </button>
+            </div>
+          </div>
+        )}
+
         {expandedConfig && (
           <div className="rounded-xl p-5 flex flex-col gap-4" style={{ backgroundColor: "var(--p-bg-input)", border: "1px solid var(--p-border-subtle)" }}>
             <h3 className="text-sm font-bold flex items-center gap-2" style={{ color: "var(--p-text)" }}>
