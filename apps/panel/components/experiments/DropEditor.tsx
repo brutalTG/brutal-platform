@@ -257,6 +257,9 @@ export function DropEditor({ dropId, onBack, onRefresh }: DropEditorProps) {
   const [exportJSON, setExportJSON] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
+  // Confirmación visible después de publicar o descartar.
+  const [done, setDone] = useState<string | null>(null);
+  useEffect(() => { if (!done) return; const t = setTimeout(() => setDone(null), 4000); return () => clearTimeout(t); }, [done]);
 
   // Save status indicator
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
@@ -363,6 +366,7 @@ export function DropEditor({ dropId, onBack, onRefresh }: DropEditorProps) {
     const ok = await publishDropNow(dropId);
     setPublishing(false);
     if (!ok) setPublishError("No se pudo publicar. Mirá el aviso de arriba.");
+    else setDone("Publicado. Es el Drop que juegan todos.");
     refresh();
     onRefresh();
   }, [dropId, drop, refresh, onRefresh]);
@@ -377,6 +381,7 @@ export function DropEditor({ dropId, onBack, onRefresh }: DropEditorProps) {
     const res = await publishDropChangesNow(dropId);
     setPublishing(false);
     if (!res.ok) setPublishError(res.error ?? "No se pudieron publicar los cambios.");
+    else setDone("Cambios publicados. Ya los ve el que entre a jugar.");
     refresh();
     onRefresh();
   }, [dropId, drop, refresh, onRefresh]);
@@ -388,6 +393,7 @@ export function DropEditor({ dropId, onBack, onRefresh }: DropEditorProps) {
     const res = await discardDropChangesNow(dropId);
     setPublishing(false);
     if (!res.ok) setPublishError(res.error ?? "No se pudieron descartar.");
+    else setDone("Cambios descartados. El Drop quedó como lo están jugando.");
     refresh();
     onRefresh();
   }, [dropId, drop, refresh, onRefresh]);
@@ -642,6 +648,11 @@ export function DropEditor({ dropId, onBack, onRefresh }: DropEditorProps) {
                 <Circle size={8} className="fill-current" /> En juego
               </span>
             )}
+            {done && (
+              <div className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg" style={{ backgroundColor: "color-mix(in srgb, var(--p-success) 15%, transparent)", color: "var(--p-success)" }} role="status">
+                <Check size={12} /> {done}
+              </div>
+            )}
             {publishError && (
               <div className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg" style={{ backgroundColor: "color-mix(in srgb, var(--p-danger) 15%, transparent)", color: "var(--p-danger)" }}>
                 <AlertCircle size={12} /> {publishError}
@@ -661,7 +672,7 @@ export function DropEditor({ dropId, onBack, onRefresh }: DropEditorProps) {
                 Descartar
               </button>
               <button onClick={handlePublishChanges} disabled={publishing} className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-lg" style={{ backgroundColor: "var(--p-accent)", color: "var(--p-accent-fg)" }}>
-                {publishing ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />} Publicar cambios
+                {publishing ? <><Loader2 size={12} className="animate-spin" /> Publicando…</> : <><Play size={12} /> Publicar cambios</>}
               </button>
             </div>
           </div>
