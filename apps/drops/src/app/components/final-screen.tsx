@@ -7,6 +7,7 @@
 // ============================================================
 
 import { useEffect, useRef, useState } from "react";
+import { BasesLink } from "./bases-sheet";
 import type { PrizeConfig } from "./drop-types";
 import type { WebClaim } from "./session-uploader";
 import { TicketIcon } from "./ticket-icon";
@@ -100,7 +101,7 @@ export function FinalScreen({ prize, tickets, onClaim, webClaim, botUrl }: Props
         <p className="font-['Roboto'] text-[14px] text-white/60 text-center leading-snug">
           No vendemos nada, nunca Brutal te va a pedir datos personales o de tarjeta de crédito.
         </p>
-        <a href="/bases" className="mt-3 font-['Roboto'] text-[13px] text-white/40 underline text-center">Bases y condiciones</a>
+        <BasesLink className="mt-2 py-2 font-['Roboto'] text-[14px] text-white/60 underline text-center" />
       </div>
     </div>
   );

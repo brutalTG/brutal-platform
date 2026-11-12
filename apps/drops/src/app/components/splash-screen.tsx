@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { BasesLink } from "./bases-sheet";
 import { TicketIcon } from "./ticket-icon";
 import { hapticMedium } from "./haptics";
 import type { PrizeConfig, SplashConfig } from "./drop-types";
@@ -154,9 +155,7 @@ function ImageSplash({
         </button>
 
         {/* Bases y condiciones (el ranking y el perfil ya no van acá) */}
-        <a href="/bases" className="block text-center mt-4 text-[12px] text-white/60 underline hover:text-white transition-colors" style={{ fontFamily }}>
-          Bases y condiciones
-        </a>
+        <BasesLink className="block w-full text-center mt-3 py-2 text-[14px] text-white/75 underline" style={{ fontFamily }} />
       </div>
     </div>
   );
@@ -312,9 +311,7 @@ function TerminalSplash({
       </button>
 
       {/* Bases y condiciones (el ranking y el perfil ya no van acá) */}
-      <a href="/bases" className="block text-center mt-4 text-[12px] text-white/60 underline hover:text-white transition-colors" style={{ fontFamily }}>
-        Bases y condiciones
-      </a>
+      <BasesLink className="block w-full text-center mt-3 py-2 text-[14px] text-white/75 underline" style={{ fontFamily }} />
     </div>
   );
 }
