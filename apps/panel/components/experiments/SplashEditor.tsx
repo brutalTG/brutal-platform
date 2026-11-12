@@ -156,6 +156,22 @@ export function SplashEditor({ splash, onSave }: SplashEditorProps) {
               placeholder="https://ejemplo.com/splash.gif"
             />
           </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-medium uppercase tracking-wider" style={{ color: "var(--p-text-muted)" }}>
+              Textos sobre la imagen <span style={{ color: "var(--p-text-ghost)" }}>(uno por renglón; el primero va grande)</span>
+            </label>
+            <textarea
+              className="rounded-lg px-3 py-2 text-sm focus:outline-none min-h-[70px]"
+              style={formInput}
+              value={(cfg.overlayLines || []).join("\n")}
+              onChange={(e) => update({ overlayLines: e.target.value.trim() ? e.target.value.split("\n") : undefined })}
+              placeholder={"3 MINUTOS\nJugá y juntá chances para el sorteo de entradas"}
+            />
+          </div>
+          <label className="flex items-center gap-2 text-xs" style={{ color: "var(--p-text-muted)" }}>
+            <input type="checkbox" checked={Boolean(cfg.showPrizeInfo)} onChange={(e) => update({ showPrizeInfo: e.target.checked || undefined })} />
+            Mostrar &quot;100 tickets = 1 chance&quot; y la fecha del sorteo (salen del premio del Drop)
+          </label>
           {cfg.imageUrl && (
             <div className="relative w-full aspect-[9/16] max-h-[200px] rounded-lg overflow-hidden bg-black" style={{ border: "1px solid var(--p-border-subtle)" }}>
               <img

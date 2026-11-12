@@ -4,7 +4,7 @@
 // (sorteos sin obligación de compra; Ley 25.326 de datos personales).
 // ============================================================
 
-const SECTIONS: { title: string; body: string[] }[] = [
+export const SECTIONS: { title: string; body: string[] }[] = [
   {
     title: "Organizador",
     body: ["El sorteo lo organiza BRUTAL. Los datos del organizador (razón social, CUIT y domicilio) se completan en la versión definitiva de estas bases."],
@@ -55,6 +55,22 @@ const SECTIONS: { title: string; body: string[] }[] = [
   },
 ];
 
+/** El texto de las bases (lo usan la página /bases y el popup). */
+export function BasesContent() {
+  return (
+    <>
+      {SECTIONS.map((s) => (
+        <section key={s.title} className="mb-7">
+          <h2 className="mb-2 font-['Roboto'] text-[18px] font-extrabold">{s.title}</h2>
+          {s.body.map((p) => (
+            <p key={p} className="mb-2 font-['Roboto'] text-[16px] leading-relaxed text-white/85">{p}</p>
+          ))}
+        </section>
+      ))}
+    </>
+  );
+}
+
 export default function BasesPage() {
   return (
     <div className="min-h-dvh bg-black px-5 py-10 text-white">
@@ -62,14 +78,7 @@ export default function BasesPage() {
         <p className="mb-8 font-['Silkscreen'] text-[11px] tracking-widest text-white/40">BRUTAL////////////////</p>
         <h1 className="mb-2 font-['Silkscreen'] text-[26px] leading-tight">BASES Y CONDICIONES</h1>
         <p className="mb-10 font-['Fira_Code'] text-[12px] text-white/50">Versión provisoria · noviembre de 2026</p>
-        {SECTIONS.map((s) => (
-          <section key={s.title} className="mb-8">
-            <h2 className="mb-3 font-['Roboto'] text-[17px] font-extrabold">{s.title}</h2>
-            {s.body.map((p) => (
-              <p key={p} className="mb-2 font-['Roboto'] text-[15px] leading-relaxed text-white/80">{p}</p>
-            ))}
-          </section>
-        ))}
+        <BasesContent />
       </div>
     </div>
   );

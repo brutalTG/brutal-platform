@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from "react";
+import { BasesLink } from "./bases-sheet";
+import { TicketIcon } from "./ticket-icon";
 import { hapticMedium } from "./haptics";
-import type { SplashConfig } from "./drop-types";
+import type { PrizeConfig, SplashConfig } from "./drop-types";
 import { BrutalLogo, BrandHeader } from "./brutal-ui";
 
 // Static lines (no animation) — defaults
@@ -32,14 +34,17 @@ interface SplashScreenProps {
   onProfile?: () => void;
   onLeaderboard?: () => void;
   splash?: SplashConfig;
+  /** El premio del Drop: el modo imagen muestra "100 tickets = 1 chance" y la fecha del sorteo. */
+  prize?: PrizeConfig;
 }
 
-export function SplashScreen({ onEnter, totalCards = 20, onProfile, onLeaderboard, splash }: SplashScreenProps) {
+export function SplashScreen({ onEnter, totalCards = 20, onProfile, onLeaderboard, splash, prize }: SplashScreenProps) {
   // If mode is "image", render the image splash
   if (splash?.mode === "image" && splash.imageUrl) {
     return (
       <ImageSplash
         splash={splash}
+        prize={prize}
         onEnter={onEnter}
         onProfile={onProfile}
         onLeaderboard={onLeaderboard}
@@ -63,11 +68,13 @@ export function SplashScreen({ onEnter, totalCards = 20, onProfile, onLeaderboar
 
 function ImageSplash({
   splash,
+  prize,
   onEnter,
   onProfile,
   onLeaderboard,
 }: {
   splash: SplashConfig;
+  prize?: PrizeConfig;
   onEnter: () => void;
   onProfile?: () => void;
   onLeaderboard?: () => void;
@@ -77,6 +84,11 @@ function ImageSplash({
   const buttonText = splash.buttonText || "ENTRO";
   const buttonBg = splash.buttonBg || "#FFFFFF";
   const buttonTextColor = splash.buttonTextColor || "#000000";
+  const lines = (splash.overlayLines ?? []).map((l) => l.trim()).filter(Boolean);
+  const perChance = prize?.ticketsPerChance && prize.ticketsPerChance > 0 ? prize.ticketsPerChance : 100;
+  const prizeInfo = splash.showPrizeInfo && prize ? `${perChance} tickets = 1 chance` : null;
+  const drawLine = splash.showPrizeInfo && prize?.drawDate ? `Sorteo el ${prize.drawDate}` : null;
+  const hasText = lines.length > 0 || Boolean(prizeInfo);
 
   return (
     <div className="relative h-dvh w-full max-w-[420px] mx-auto overflow-hidden bg-black">
@@ -88,6 +100,9 @@ function ImageSplash({
         style={{ objectFit: "cover", objectPosition: "center center" }}
         onLoad={() => setLoaded(true)}
       />
+
+      {/* Degradé abajo para que los textos se lean sobre cualquier imagen */}
+      {hasText && <div className="absolute inset-x-0 bottom-0 h-[60%] pointer-events-none" style={{ background: "linear-gradient(to top, rgba(0,0,0,0.85), rgba(0,0,0,0.45) 55%, transparent)" }} />}
 
       {/* Overlay content */}
       <div
@@ -101,6 +116,23 @@ function ImageSplash({
       >
         {/* Spacer */}
         <div className="flex-1" />
+
+        {/* Textos sobre la imagen: qué es y qué se gana */}
+        {(lines.length > 0 || prizeInfo) && (
+          <div className="relative mb-5 flex flex-col items-center gap-2 text-center text-white">
+            {lines[0] && <p className="font-['Bebas_Neue'] text-[46px] leading-[0.95] tracking-wide" style={{ textShadow: "0 2px 18px rgba(0,0,0,0.6)" }}>{lines[0]}</p>}
+            {lines.slice(1).map((l) => (
+              <p key={l} className="font-['Roboto'] font-bold text-[18px] leading-snug" style={{ textShadow: "0 1px 10px rgba(0,0,0,0.7)" }}>{l}</p>
+            ))}
+            {prizeInfo && (
+              <div className="mt-1 flex items-center gap-2 rounded-full px-4 py-2" style={{ backgroundColor: "rgba(0,0,0,0.55)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}>
+                <TicketIcon className="w-[22px] h-[18px]" style={{ color: "#E8FF00" }} />
+                <span className="font-['Roboto'] font-bold text-[15px] whitespace-nowrap">{prizeInfo}</span>
+              </div>
+            )}
+            {drawLine && <p className="font-['Roboto'] text-[14px] text-white/75">{drawLine}</p>}
+          </div>
+        )}
 
         {/* Button */}
         <button
@@ -123,9 +155,7 @@ function ImageSplash({
         </button>
 
         {/* Bases y condiciones (el ranking y el perfil ya no van acá) */}
-        <a href="/bases" className="block text-center mt-4 text-[12px] text-white/60 underline hover:text-white transition-colors" style={{ fontFamily }}>
-          Bases y condiciones
-        </a>
+        <BasesLink className="block w-full text-center mt-3 py-2 text-[14px] text-white/75 underline" style={{ fontFamily }} />
       </div>
     </div>
   );
@@ -281,9 +311,7 @@ function TerminalSplash({
       </button>
 
       {/* Bases y condiciones (el ranking y el perfil ya no van acá) */}
-      <a href="/bases" className="block text-center mt-4 text-[12px] text-white/60 underline hover:text-white transition-colors" style={{ fontFamily }}>
-        Bases y condiciones
-      </a>
+      <BasesLink className="block w-full text-center mt-3 py-2 text-[14px] text-white/75 underline" style={{ fontFamily }} />
     </div>
   );
 }

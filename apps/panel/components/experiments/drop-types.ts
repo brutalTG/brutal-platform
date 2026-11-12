@@ -423,6 +423,10 @@ export interface SplashConfig {
   staticLines?: string[];
   /** For mode "image": URL of the background image or GIF */
   imageUrl?: string;
+  /** Modo imagen: textos sobreimpresos arriba del botón. El primero va grande; los demás, debajo. */
+  overlayLines?: string[];
+  /** Modo imagen: mostrar "100 tickets = 1 chance" y la fecha del sorteo (salen del premio del Drop). */
+  showPrizeInfo?: boolean;
 }
 
 export interface Drop {
