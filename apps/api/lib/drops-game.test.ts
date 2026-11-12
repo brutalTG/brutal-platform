@@ -313,7 +313,7 @@ test('reclamo web: link de WhatsApp con el mensaje armado; invitaciones y canal 
 
 test('reclamo web: el bot dice cuántos tickets tiene, cuándo sorteamos, que al ganador le avisamos y el link para invitar', () => {
   const t = webClaimText({ status: 'credited', nickname: 'Juli', tickets: 520, prize: { title: 'LOLLAPALOOZA', drawDate: '10-12-26', ticketsPerChance: 100 }, inviteUrl: 'https://drops.brutal.lat/jugar?r=ab12cd', referralTickets: 100 });
-  assert.match(t, /Listo, Juli/);
+  assert.match(t, /Listo, Juli\. Tus tickets están a tu nombre\./);
   assert.match(t, /Tenés 520 Golden Tickets 🎟 \(5 chances\)/);
   assert.match(t, /Sorteamos LOLLAPALOOZA el 10-12-26\. Al ganador le avisamos por acá, por WhatsApp\./);
   assert.match(t, /\+100 tickets:\nhttps:\/\/drops\.brutal\.lat\/jugar\?r=ab12cd/);

@@ -501,7 +501,7 @@ export type WebClaimReply =
 export function webClaimText(r: WebClaimReply) {
   if (r.status === 'used_by_other') return 'Ese código ya lo reclamó otro número. Si es un error, escribinos acá.';
   if (r.status === 'already_played') return 'Ese número ya había jugado este Drop, así que los tickets de esta partida no se suman.';
-  const hi = r.status === 'already_yours' ? 'Esos tickets ya estaban a tu nombre.' : r.nickname ? `Listo, ${r.nickname}. Tus tickets quedaron a tu nombre.` : 'Listo. Tus tickets quedaron a tu nombre.';
+  const hi = r.nickname ? `Listo, ${r.nickname}. Tus tickets están a tu nombre.` : 'Listo. Tus tickets están a tu nombre.';
   const per = r.prize?.ticketsPerChance || 100;
   const chances = Math.floor(r.tickets / per);
   const have = `Tenés ${r.tickets.toLocaleString('es-AR')} Golden Tickets 🎟${chances > 0 ? ` (${chances} ${chances === 1 ? 'chance' : 'chances'})` : ''}.`;
