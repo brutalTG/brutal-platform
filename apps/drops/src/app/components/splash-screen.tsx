@@ -85,9 +85,8 @@ function ImageSplash({
   const buttonTextColor = splash.buttonTextColor || "#000000";
   const lines = (splash.overlayLines ?? []).map((l) => l.trim()).filter(Boolean);
   const perChance = prize?.ticketsPerChance && prize.ticketsPerChance > 0 ? prize.ticketsPerChance : 100;
-  const prizeInfo = splash.showPrizeInfo && prize
-    ? `${perChance} tickets = 1 chance${prize.drawDate ? ` · sorteo el ${prize.drawDate}` : ""}`
-    : null;
+  const prizeInfo = splash.showPrizeInfo && prize ? `${perChance} tickets = 1 chance` : null;
+  const drawLine = splash.showPrizeInfo && prize?.drawDate ? `Sorteo el ${prize.drawDate}` : null;
   const hasText = lines.length > 0 || Boolean(prizeInfo);
 
   return (
@@ -127,9 +126,10 @@ function ImageSplash({
             {prizeInfo && (
               <div className="mt-1 flex items-center gap-2 rounded-full px-4 py-2" style={{ backgroundColor: "rgba(0,0,0,0.55)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}>
                 <TicketIcon className="w-[22px] h-[18px]" style={{ color: "#E8FF00" }} />
-                <span className="font-['Roboto'] font-bold text-[15px]">{prizeInfo}</span>
+                <span className="font-['Roboto'] font-bold text-[15px] whitespace-nowrap">{prizeInfo}</span>
               </div>
             )}
+            {drawLine && <p className="font-['Roboto'] text-[14px] text-white/75">{drawLine}</p>}
           </div>
         )}
 
