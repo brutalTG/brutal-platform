@@ -10,7 +10,7 @@ import {
 import { countFillers, parseAnswer } from './game';
 import { db } from './db';
 import { stt, tts, wordFeatures } from './elevenlabs';
-import { queueDropResult, notifyReferrer } from './messaging';
+import { notifyReferrer } from './messaging';
 
 // API del reproductor de Drops (traído del sandbox). Mismo contrato que el servidor viejo,
 // sobre la base nueva: nodos en core, señal en signal.observations, tickets y plata en economy.ledger.
@@ -522,6 +522,11 @@ export async function claimDrop(a: Access, body: { dropId?: string; drop_id?: st
     if (s.status !== 'completed') throw new HttpError(409, 'not_completed', 'Session is not completed');
     return webClaimOffer(node, d, s);
   }
+  if (s.claimed_at && s.status === 'completed' && !a.test) {
+    // Volvió a la pantalla final: el mismo botón de WhatsApp.
+    const offer = await claimCode(node, d, s, true);
+    return { ok: true, alreadyClaimed: true, botUrl: botUrl(), whatsapp: offer };
+  }
   if (s.claimed_at) return { ok: true, alreadyClaimed: true, botUrl: botUrl() };
   if (s.status !== 'completed') throw new HttpError(409, 'not_completed', 'Session is not completed');
   const total = await sessionTotal(d, s);
@@ -534,12 +539,10 @@ export async function claimDrop(a: Access, body: { dropId?: string; drop_id?: st
   const usd = node.adult_verified ? total.usd : 0;
   // Ganó plata pero no tiene la edad verificada: queda pendiente hasta que la confirme.
   const cashPending = !node.adult_verified && !node.is_minor ? total.usd : 0;
-  // Aviso por WhatsApp con lo ganado y el link al perfil. Si falla, la partida igual quedó cobrada.
-  try {
-    const link = await createDropsLink(node.id, { purpose: 'drop', destination: 'profile', hours: 168 });
-    await queueDropResult(node.id, { drop: d.name ?? slug, usd, tickets: total.tickets, verdict: s.detector?.verdict ?? null, link: link.url });
-  } catch (e) { console.error('aviso de resultado', e); }
-  return { ok: true, alreadyClaimed: false, credited: { usd, coins: usd, tickets: total.tickets }, cashPending, botUrl: botUrl() };
+  // Sin aviso automático: el botón de la pantalla final abre WhatsApp con el código, y el bot contesta
+  // con los tickets, el sorteo y el link para invitar (igual que para los que vienen de un anuncio).
+  const offer = await claimCode(node, d, s, true, total.tickets);
+  return { ok: true, alreadyClaimed: false, credited: { usd, coins: usd, tickets: total.tickets }, cashPending, botUrl: botUrl(), whatsapp: offer };
 }
 
 // ---------- Entrada web desde anuncios ----------
@@ -567,20 +570,28 @@ export async function webStart(b: { ref?: unknown; source?: unknown; client?: un
 /** Final de un invitado web: el código para reclamar por WhatsApp (uno por partida) y cuánto va a sumar. */
 async function webClaimOffer(node: Node, d: { id: string; name: string }, s: ClaimSession) {
   const total = await sessionTotal(d, s);
-  let row = await must(from('drops', 'web_claims').select('code, claimed_at').eq('session_id', s.id).maybeSingle(), 'reclamo') as { code: string; claimed_at: string | null } | null;
+  const whatsapp = await claimCode(node, d, s, false, total.tickets);
+  return { ok: true, alreadyClaimed: whatsapp.claimed, pendingWhatsapp: true, credited: { usd: 0, coins: 0, tickets: total.tickets }, cashPending: 0, whatsapp };
+}
+
+/**
+ * El código que lleva el mensaje armado del botón de la pantalla final (uno por partida).
+ * credited: la partida ya está a nombre de este nodo (vino por WhatsApp); el mensaje solo pide la respuesta del bot.
+ */
+async function claimCode(node: Node, d: { id: string }, s: ClaimSession, credited: boolean, tickets?: number) {
+  let row = await must(from('drops', 'web_claims').select('code, claimed_at, tickets').eq('session_id', s.id).maybeSingle(), 'reclamo') as { code: string; claimed_at: string | null; tickets: number } | null;
   for (let i = 0; i < 5 && !row; i++) {
     const code = newClaimCode();
-    const { error } = await from('drops', 'web_claims').insert({ code, node_id: node.id, drop_id: d.id, session_id: s.id, tickets: total.tickets });
-    if (!error) row = { code, claimed_at: null };
+    const now = new Date().toISOString();
+    const { error } = await from('drops', 'web_claims').insert({ code, node_id: node.id, drop_id: d.id, session_id: s.id, tickets: tickets ?? 0, ...(credited ? { claimed_at: now, claimed_node_id: node.id } : {}) });
+    if (!error) row = { code, claimed_at: credited ? now : null, tickets: tickets ?? 0 };
     else if (!/duplicate/i.test(error.message)) throw new Error(`reclamo: ${error.message}`);
-    else row = await must(from('drops', 'web_claims').select('code, claimed_at').eq('session_id', s.id).maybeSingle(), 'reclamo') as any;
+    else row = await must(from('drops', 'web_claims').select('code, claimed_at, tickets').eq('session_id', s.id).maybeSingle(), 'reclamo') as any;
   }
   if (!row) throw new Error('reclamo: no se pudo crear el código');
-  if (!row.claimed_at) await from('drops', 'web_claims').update({ tickets: total.tickets }).eq('code', row.code);
-  return {
-    ok: true, alreadyClaimed: Boolean(row.claimed_at), pendingWhatsapp: true, credited: { usd: 0, coins: 0, tickets: total.tickets }, cashPending: 0,
-    whatsapp: { code: row.code, url: env.watiChannel ? whatsappUrl(env.watiChannel, claimPrefill(row.code)) : null, tickets: total.tickets, referralTickets: REFERRAL_TICKETS, claimed: Boolean(row.claimed_at) },
-  };
+  if (!row.claimed_at && tickets != null) await from('drops', 'web_claims').update({ tickets }).eq('code', row.code);
+  const t = tickets ?? Number(row.tickets) ?? 0;
+  return { code: row.code, url: env.watiChannel ? whatsappUrl(env.watiChannel, claimPrefill(row.code)) : null, tickets: t, referralTickets: REFERRAL_TICKETS, claimed: Boolean(row.claimed_at) };
 }
 
 async function ensureReferralCode(nodeId: string) {
