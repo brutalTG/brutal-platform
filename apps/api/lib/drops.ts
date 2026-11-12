@@ -528,7 +528,7 @@ export async function claimDrop(a: Access, body: { dropId?: string; drop_id?: st
   if (a.test) {
     // Prueba: muestra lo que hubiera cobrado, sin acreditar nada.
     await from('drops', 'sessions').update({ claimed_at: new Date().toISOString() }).eq('id', s.id).is('claimed_at', null);
-    return { ok: true, alreadyClaimed: false, test: true, credited: { usd: node.is_minor ? 0 : total.usd, coins: node.is_minor ? 0 : total.usd, tickets: total.tickets } };
+    return { ok: true, alreadyClaimed: false, test: true, botUrl: botUrl(), credited: { usd: node.is_minor ? 0 : total.usd, coins: node.is_minor ? 0 : total.usd, tickets: total.tickets } };
   }
   await creditSession(node, d, s, total);
   const usd = node.adult_verified ? total.usd : 0;
