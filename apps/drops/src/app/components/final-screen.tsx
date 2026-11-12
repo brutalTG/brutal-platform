@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { PrizeConfig } from "./drop-types";
 import type { WebClaim } from "./session-uploader";
-import { TicketIcon } from "./reveal-screen";
+import { TicketIcon } from "./ticket-icon";
 import { useCountUp } from "./use-count-up";
 import { hapticHeavy } from "./haptics";
 

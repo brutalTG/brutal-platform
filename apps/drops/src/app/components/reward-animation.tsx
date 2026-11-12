@@ -227,7 +227,7 @@ export function AnimatedStatPill({
 
   return (
     <div
-      className={`flex items-center gap-1 px-2 py-1.5 h-[44px] justify-center shadow-sm select-none min-w-0 ${className}`}
+      className={`flex items-center gap-2.5 px-3 py-1.5 h-[52px] justify-center select-none min-w-0 ${className}`}
       style={{
         backgroundColor: "var(--dynamic-fg, #fff)",
         color: "var(--dynamic-bg, #000)",
@@ -235,9 +235,9 @@ export function AnimatedStatPill({
       }}
     >
       {Icon && (
-        <Icon className="w-[14px] h-[14px] shrink-0 fill-current" strokeWidth={2.5} />
+        <Icon className="w-[22px] h-[18px] shrink-0 fill-current" strokeWidth={2.5} />
       )}
-      <span className="font-['Roboto'] font-extrabold tracking-tight truncate text-[16px]">
+      <span className="font-['Roboto'] font-black tracking-tight truncate text-[20px]">
         {value}
       </span>
     </div>

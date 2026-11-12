@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { emojiBoxStyle, emojiInCircle } from "./emoji-utils";
+import { RafagaDots } from "./rafaga-dots";
 import { hapticLight, hapticRigid, hapticHeavy } from "./haptics";
 
 export interface RafagaEmojiItem {
@@ -222,23 +224,8 @@ export function RafagaEmojiQuestion({
 
   return (
     <div className="flex flex-col flex-1 items-center">
-      {/* Position: dots, the current one stretches into a pill. No number. */}
-      <div className="flex items-center justify-center gap-[8px] mt-1">
-        {items.map((_, i) => (
-          <div
-            key={i}
-            className="rounded-full"
-            style={{
-              width: i === currentIdx ? 34 : 10,
-              height: 10,
-              backgroundColor: i === currentIdx
-                ? "var(--dynamic-fg, #fff)"
-                : "color-mix(in srgb, var(--dynamic-fg, #fff) 35%, transparent)",
-              transition: "width 0.25s ease, background-color 0.25s ease",
-            }}
-          />
-        ))}
-      </div>
+      {/* Progreso de la ráfaga: bullets debajo del header */}
+      <div className="mt-1"><RafagaDots total={items.length} current={currentIdx} /></div>
 
       {/* La consigna queda arriba durante toda la ráfaga */}
       {promptBold && (
@@ -264,28 +251,22 @@ export function RafagaEmojiQuestion({
       <div className="flex-1" />
 
       {/* Emoji buttons — subtle glass boxes in the thumb zone, no shadows */}
-      <div className="flex items-center justify-center gap-10 mb-8" style={{ opacity: blinkOpacity }}>
+      <div className="flex items-start justify-between w-full px-1 mb-8" style={{ opacity: blinkOpacity }}>
         {[{ emoji: item.optionA, on: isA, label: labelA }, { emoji: item.optionB, on: isB, label: labelB }].map(({ emoji, on, label }, i) => (
-          <div key={i} className="flex flex-col items-center gap-2">
+          <div key={i} className="flex flex-col items-center gap-3">
           <button
             onClick={() => handleSelect(emoji)}
             className="flex items-center justify-center select-none active:scale-95"
             style={{
-              width: 112,
-              height: 112,
-              borderRadius: 16,
-              backgroundColor: `color-mix(in srgb, var(--dynamic-fg, #fff) ${on ? 16 : 7}%, transparent)`,
-              border: `1px solid color-mix(in srgb, var(--dynamic-fg, #fff) ${on ? 55 : 14}%, transparent)`,
-              backdropFilter: "blur(14px)",
-              WebkitBackdropFilter: "blur(14px)",
+              ...emojiBoxStyle(on, 140),
               transform: on ? "scale(1.06)" : "scale(1)",
-              transition: "transform 0.15s ease, background-color 0.15s ease, border-color 0.15s ease",
+              transition: "transform 0.15s ease, box-shadow 0.15s ease",
             }}
           >
-            <span style={{ fontSize: 64, lineHeight: 1 }}>{emoji}</span>
+            <span style={{ fontSize: emojiInCircle(140), lineHeight: 1 }}>{emoji}</span>
           </button>
           {label && (
-            <span className="font-['Roboto'] font-extrabold text-[20px] tracking-wide" style={{ color: "var(--dynamic-fg, #fff)" }}>
+            <span className="font-['Roboto'] font-black text-[20px]" style={{ color: "var(--dynamic-fg, #fff)" }}>
               {label}
             </span>
           )}

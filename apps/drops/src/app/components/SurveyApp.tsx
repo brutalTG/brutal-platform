@@ -25,7 +25,7 @@ import { LeaderboardScreen } from "./leaderboard-screen";
 // --- Extracted modules ---
 import { preloadVoices } from "./voice-cache";
 import { PassAlongButton, passAlongLink } from "./pass-along";
-import { StoryProgressBar, TimerBar, PlayingBadge, StatPills } from "./SurveyHeader";
+import { StoryProgressBar, TimerBar, PlayingBadge, StatPills, BrandMark } from "./SurveyHeader";
 import { QuestionRenderer } from "./QuestionRenderer";
 import { useAnswerPipeline } from "./useAnswerPipeline";
 import { showsCash } from "./economy";
@@ -379,6 +379,8 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
   const [cashPending, setCashPending] = useState(0);
   const [webClaim, setWebClaim] = useState<WebClaim | null>(null);
   const [botUrl, setBotUrl] = useState<string | null>(null);
+  // Lo que el servidor dice que ganó (manda sobre la cuenta local).
+  const [serverTickets, setServerTickets] = useState<number | null>(null);
   const [pendingMultiplier, setPendingMultiplier] = useState<{ multiplier: number; label: string } | null>(null);
   const [trapPenaltyValue, setTrapPenaltyValue] = useState(0);
 
@@ -649,7 +651,7 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
     return (
       <FinalScreen
         prize={drop.reveal.prize}
-        tickets={finalTickets}
+        tickets={serverTickets ?? finalTickets}
         webClaim={webClaim}
         botUrl={botUrl}
         onClaim={async () => {
@@ -663,6 +665,8 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
                   setCashPending(Number(result.cashPending) || 0);
                   if (result.whatsapp) setWebClaim(result.whatsapp);
                   if (result.botUrl) setBotUrl(result.botUrl);
+                  const t = Number(result.whatsapp?.tickets ?? result.credited?.tickets);
+                  if (Number.isFinite(t) && t >= 0 && !result.alreadyClaimed) setServerTickets(t);
                   return result.ok;
                 } catch (e) {
                   if (i === 4) throw e;
@@ -716,7 +720,7 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
 
   return (
     <div
-      className="h-dvh flex justify-center font-['Roboto'] overflow-hidden"
+      className="relative h-dvh flex justify-center font-['Roboto'] overflow-hidden"
       style={{ backgroundColor: duotoneColors.bg, color: duotoneColors.fg }}
     >
       <div
@@ -726,16 +730,12 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
           paddingBottom: "calc(var(--tg-safe-bottom, 0px) + 24px)",
         }}
       >
-        <div className="w-full mb-3">
-          <StoryProgressBar total={totalQuestions} current={questionIndex} />
-        </div>
+        <StoryProgressBar total={totalQuestions} current={questionIndex} />
 
-        <div className="w-full flex flex-col gap-4 mb-6">
+        <div className="w-full flex flex-col gap-3 mb-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="font-['Silkscreen'] text-sm tracking-wide" style={{ color: duotoneColors.fg }}>
-                BRUTAL////////////////
-              </span>
+              <BrandMark />
               {currentMultiplier > 1 && (
                 <span
                   className="font-['Fira_Code'] text-[11px] px-2 py-0.5 rounded-full font-bold"
@@ -748,8 +748,8 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
             <PlayingBadge />
           </div>
 
-          <div className="flex items-center w-full gap-1.5">
-            <div className="w-[45%] shrink-0">
+          <div className="flex items-center w-full gap-3">
+            <div className="w-[60%] shrink-0">
               <TimerBar
                 key={questionIndex}
                 duration={currentQuestion.timer}

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { emojiBoxStyle } from "./emoji-utils";
+import { emojiBoxStyle, emojiInCircle } from "./emoji-utils";
 import { hapticLight, hapticSelection, hapticMedium } from "./haptics";
 
 interface MediaReactionQuestionProps {
@@ -136,7 +136,7 @@ function EmojiOverlay({
               filter: "drop-shadow(0 2px 8px rgba(0,0,0,0.5))",
             }}
           >
-            <span className="select-none" style={{ fontSize: 60, lineHeight: 1 }}>
+            <span className="select-none" style={{ fontSize: emojiInCircle(104), lineHeight: 1 }}>
               {emoji}
             </span>
           </button>

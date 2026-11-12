@@ -3,27 +3,30 @@
 // ============================================================
 
 import { useState, useRef, useEffect } from "react";
-import { Flame, DollarSign, Ticket } from "lucide-react";
+import { Flame, DollarSign } from "lucide-react";
 import { RewardAnimation, AnimatedStatPill, type RewardEvent } from "./reward-animation";
 import { hapticWarning } from "./haptics";
+import { TicketIcon } from "./ticket-icon";
 
-// --- Story Progress Bar ---
+/** El ticket de Figma, con la misma interfaz que los íconos de lucide. */
+const TicketShape = ({ className }: { className?: string }) => <TicketIcon className={className} style={{ color: "currentColor" }} />;
+
+// --- Avance del Drop: una barra continua pegada al borde de arriba de la pantalla ---
 export function StoryProgressBar({ total, current }: { total: number; current: number }) {
+  const pct = total > 0 ? Math.min(100, ((current + 1) / total) * 100) : 0;
   return (
-    <div className="flex gap-[3px] w-full">
-      {Array.from({ length: total }, (_, i) => (
-        <div
-          key={i}
-          className="h-[2.5px] flex-1 rounded-full"
-          style={{
-            backgroundColor: i <= current
-              ? "var(--dynamic-fg, #fff)"
-              : "color-mix(in srgb, var(--dynamic-fg, #fff) 20%, transparent)",
-          }}
-        />
-      ))}
+    <div
+      className="absolute left-0 right-0 h-[6px] z-20"
+      style={{ top: "var(--tg-safe-top, 0px)", backgroundColor: "color-mix(in srgb, var(--dynamic-fg, #fff) 28%, transparent)" }}
+    >
+      <div className="h-full" style={{ width: `${pct}%`, backgroundColor: "var(--dynamic-fg, #fff)", transition: "width 0.4s ease" }} />
     </div>
   );
+}
+
+/** La marca arriba a la izquierda. */
+export function BrandMark() {
+  return <span className="font-['Roboto'] font-bold text-[22px] tracking-tight leading-none" style={{ color: "var(--dynamic-fg, #fff)" }}>Brutal™</span>;
 }
 
 // --- Timer Bar ---
@@ -66,7 +69,7 @@ export function TimerBar({ duration, onTimeUp }: { duration: number; onTimeUp?: 
 
   return (
     <div
-      className="relative h-[44px] w-full rounded-full overflow-hidden shadow-sm select-none"
+      className="relative h-[52px] w-full rounded-full overflow-hidden select-none"
       style={{
         backgroundColor: "var(--dynamic-bg, #000)",
         opacity: isBlinking ? (blinkOn ? 1 : 0.1) : 1,
@@ -89,7 +92,7 @@ export function TimerBar({ duration, onTimeUp }: { duration: number; onTimeUp?: 
           }}
         >
           <span
-            className="font-['Roboto'] font-extrabold tracking-tight whitespace-nowrap pl-2 text-[16px]"
+            className="font-['Roboto'] font-black tracking-tight whitespace-nowrap pl-2 text-[18px]"
             style={{ color: "var(--dynamic-bg, #000)" }}
           >
             {timeString}
@@ -103,7 +106,7 @@ export function TimerBar({ duration, onTimeUp }: { duration: number; onTimeUp?: 
 // --- Playing Badge ---
 export function PlayingBadge() {
   return (
-    <div className="flex items-center gap-1.5 font-['Fira_Code'] text-xs mb-1" style={{ color: "var(--dynamic-fg, #fff)" }}>
+    <div className="flex items-center gap-1.5 font-['Fira_Code'] text-[13px]" style={{ color: "var(--dynamic-fg, #fff)" }}>
       <Flame className="w-4 h-4" style={{ fill: "var(--dynamic-fg, #fff)" }} />
       <span className="font-bold">42</span>
       <span className="font-medium opacity-90">jugando</span>
@@ -122,7 +125,7 @@ interface StatPillsProps {
 
 export function StatPills({ formattedCoins, formattedTickets, rewardEvent, isPenalty, isMinor = false }: StatPillsProps) {
   return (
-    <div className="flex w-[55%] gap-1.5 min-w-0 relative">
+    <div className="flex flex-1 gap-1.5 min-w-0 relative">
       {!isMinor && <AnimatedStatPill
         icon={DollarSign}
         value={formattedCoins}
@@ -133,7 +136,7 @@ export function StatPills({ formattedCoins, formattedTickets, rewardEvent, isPen
       {/* id="ticket-pill": a dónde vuelan los tickets de cada toque (ticket-shower.tsx) */}
       <div id="ticket-pill" className="flex-1 flex min-w-0">
         <AnimatedStatPill
-          icon={Ticket}
+          icon={TicketShape}
           value={formattedTickets}
           className={`${isMinor ? "rounded-full" : "rounded-r-full rounded-l-[5px]"} flex-1 px-2`}
           flash={!isPenalty && rewardEvent?.type === "tickets"}

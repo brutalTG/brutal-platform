@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { emojiBoxStyle } from "./emoji-utils";
+import { RafagaDots } from "./rafaga-dots";
+import { emojiBoxStyle, emojiInCircle } from "./emoji-utils";
 import { hapticLight, hapticRigid, hapticSelection } from "./haptics";
 import type { RafagaBurstQuestion as RafagaBurstQuestionType, RafagaBurstItem } from "./drop-types";
 
@@ -199,19 +200,7 @@ export function RafagaBurstQuestion({
     <div className="relative h-dvh overflow-hidden flex flex-col" style={{ backgroundColor: transitioning ? "var(--dynamic-fg)" : "var(--dynamic-bg)" }}>
       {/* Top Indicators */}
       <div className="flex flex-col items-center pt-4 z-30" style={{ opacity: blinkOpacity }}>
-        <div className="flex items-center gap-[6px]">
-          {items.map((_, i) => (
-            <div 
-              key={i} 
-              className="w-[11px] h-[11px] rounded-full" 
-              style={{ 
-                backgroundColor: "var(--dynamic-fg)", 
-                opacity: i <= currentIdx ? 1 : 0.2,
-                border: i <= currentIdx ? 'none' : '1px solid var(--dynamic-fg)' 
-              }} 
-            />
-          ))}
-        </div>
+        <RafagaDots total={items.length} current={currentIdx} color="var(--dynamic-fg)" />
         {prompt && (
           <p className="font-['Roboto'] font-extrabold text-[18px] text-center mt-3 px-4" style={{ color: "var(--dynamic-fg)", opacity: 0.85 }}>
             {prompt}
@@ -257,10 +246,10 @@ function InteractionRenderer({ interaction, selectedValue, onSelect }: { interac
   if (interaction.type === "emoji_binary") {
     const { emojiA = "👍", emojiB = "👎" } = interaction;
     return (
-      <div className="flex justify-center gap-8 w-full">
+      <div className="flex justify-between w-full px-1">
         {[emojiA, emojiB].map((e) => (
-          <button key={e} onClick={() => onSelect(e)} className="flex items-center justify-center active:scale-95 transition-transform" style={emojiBoxStyle(selectedValue === e, 124)}>
-            <span style={{ fontSize: 68, lineHeight: 1 }}>{e}</span>
+          <button key={e} onClick={() => onSelect(e)} className="flex items-center justify-center active:scale-95 transition-transform" style={emojiBoxStyle(selectedValue === e, 140)}>
+            <span style={{ fontSize: emojiInCircle(140), lineHeight: 1 }}>{e}</span>
           </button>
         ))}
       </div>
