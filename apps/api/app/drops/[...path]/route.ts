@@ -28,7 +28,7 @@ async function route(req: Request, ctx: Ctx) {
     return json(req, await accessContext(await accessFrom(req, purpose)));
   }
   if (m === 'POST' && path === 'join') return json(req, await joinGroup(await body(req)), 201);
-  if (m === 'POST' && path === 'web/start') return json(req, await webStart(await body(req)), 201);
+  if (m === 'POST' && path === 'web/start') return json(req, await webStart(await body(req), req.headers.get('user-agent')), 201);
   if (m === 'POST' && path === 'join/open') return json(req, await joinOpened(await body(req), req.headers.get('user-agent')));
   if (m === 'POST' && path === 'join/shared') return json(req, await joinShared(await body(req)));
   if (m === 'POST' && path === 'funnel') return json(req, await funnelStep(await accessFrom(req, 'onboarding'), await body(req)));

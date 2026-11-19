@@ -93,6 +93,9 @@ function ImageSplash({
     ? [what ? `Sorteo de ${what}` : prize.drawDate ? "Sorteo" : "", prize.drawDate ? `el ${prize.drawDate}` : ""].filter(Boolean).join(" ") || null
     : null;
   const hasText = lines.length > 0 || Boolean(prizeInfo);
+  // Con textos, ENTRO se puede tocar ya; si no, espera la imagen (o 2 s, por si la imagen tarda o no carga).
+  useEffect(() => { const t = setTimeout(() => setLoaded(true), 2000); return () => clearTimeout(t); }, []);
+  const ready = loaded || hasText;
 
   return (
     <div className="relative h-dvh w-full max-w-[420px] mx-auto overflow-hidden bg-black">
@@ -145,8 +148,8 @@ function ImageSplash({
           onClickCapture={() => hapticMedium()}
           style={{
             backgroundColor: buttonBg,
-            opacity: loaded ? 1 : 0.3,
-            pointerEvents: loaded ? "auto" : "none",
+            opacity: ready ? 1 : 0.3,
+            pointerEvents: ready ? "auto" : "none",
             transition: "opacity 0.4s ease",
           }}
         >

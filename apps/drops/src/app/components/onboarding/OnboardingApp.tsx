@@ -69,7 +69,10 @@ function BrutalLogoSmall() {
 
 // ── Main Component ──────────────────────────────────────────
 
-export default function OnboardingApp() {
+type Intro = { slug: string; splash: SplashConfig; prize: PrizeConfig | null };
+
+/** initialIntro: la placa ya conocida (viene de /jugar), para mostrarla mientras se carga el perfil. */
+export default function OnboardingApp({ initialIntro = null }: { initialIntro?: Intro | null } = {}) {
   const [stepIndex, setStepIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [accessState, setAccessState] = useState<"loading" | "ready" | "missing" | "invalid">("loading");
@@ -86,8 +89,9 @@ export default function OnboardingApp() {
   const [duotoneColors, setDuotoneColors] = useState({ bg: "#000000", fg: "#FFFFFF" });
   const firstStepDone = useRef(false);
   // Lo primero que ve quien recién llega: la placa del Drop (premio y qué es), no la primera pregunta.
-  const [intro, setIntro] = useState<{ slug: string; splash: SplashConfig; prize: PrizeConfig | null } | null>(null);
-  const dropSlug = useRef<string | null>(null);
+  const [intro, setIntro] = useState<Intro | null>(initialIntro);
+  const dropSlug = useRef<string | null>(initialIntro?.slug ?? null);
+  const entered = useRef(false); // ya tocó ENTRO: que la carga no vuelva a mostrar la placa
   // Embudo en vivo: lo que solo ve el teléfono (la placa y cada pregunta). Si falla, no frena nada.
   const track = useCallback((step: string, detail = "") => {
     fetch(`${API_BASE}/funnel`, { method: "POST", headers: userAuthHeaders(), body: JSON.stringify({ step, detail, drop: dropSlug.current }), keepalive: true }).catch(() => {});
@@ -117,7 +121,10 @@ export default function OnboardingApp() {
         const merged = mergeOnboarding(data.onboarding);
         setAllSteps(merged);
         if (data.intro?.slug) dropSlug.current = data.intro.slug;
-        if (data.nextAction === "onboarding" && data.intro?.splash && data.intro.splash.mode !== "none") { setIntro(data.intro); track("intro_view"); }
+        if (data.nextAction === "onboarding" && data.intro?.splash && data.intro.splash.mode !== "none") {
+          if (!entered.current) setIntro(data.intro);
+          track("intro_view");
+        } else if (!entered.current) setIntro(null);
         setAccessState("ready");
         if (data.nextAction === "drop" && data.dropUrl) {
           window.location.replace(data.dropUrl);
@@ -238,6 +245,22 @@ export default function OnboardingApp() {
     }
   }, [currentStep, submitResult, submitting, submitError, answers]);
 
+  // La placa va primero, aunque el perfil todavía se esté cargando (llega armada desde /jugar).
+  if (intro && stepIndex === 0 && !submitResult && accessState !== "missing" && accessState !== "invalid") {
+    return (
+      <SplashScreen
+        splash={intro.splash}
+        prize={intro.prize ?? undefined}
+        onEnter={() => {
+          markIntroSeen(intro.slug);
+          entered.current = true;
+          track("intro_enter");
+          setIntro(null);
+        }}
+      />
+    );
+  }
+
   if (isInitializing) {
     return (
       <div className="h-dvh flex flex-col justify-center items-center font-['Roboto'] bg-black text-white">
@@ -249,16 +272,6 @@ export default function OnboardingApp() {
 
   if (accessState === "missing") return <AccessNotice purpose="onboarding" />;
   if (accessState === "invalid") return <AccessNotice purpose="onboarding" invalid />;
-
-  if (intro && stepIndex === 0 && !submitResult) {
-    return (
-      <SplashScreen
-        splash={intro.splash}
-        prize={intro.prize ?? undefined}
-        onEnter={() => { markIntroSeen(intro.slug); track("intro_enter"); setIntro(null); }}
-      />
-    );
-  }
 
   if (ageRejected) {
     return (
