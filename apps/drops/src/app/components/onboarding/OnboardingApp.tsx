@@ -87,6 +87,11 @@ export default function OnboardingApp() {
   const firstStepDone = useRef(false);
   // Lo primero que ve quien recién llega: la placa del Drop (premio y qué es), no la primera pregunta.
   const [intro, setIntro] = useState<{ slug: string; splash: SplashConfig; prize: PrizeConfig | null } | null>(null);
+  const dropSlug = useRef<string | null>(null);
+  // Embudo en vivo: lo que solo ve el teléfono (la placa y cada pregunta). Si falla, no frena nada.
+  const track = useCallback((step: string, detail = "") => {
+    fetch(`${API_BASE}/funnel`, { method: "POST", headers: userAuthHeaders(), body: JSON.stringify({ step, detail, drop: dropSlug.current }), keepalive: true }).catch(() => {});
+  }, []);
 
   // --- LÓGICA DE REANUDACIÓN INTELIGENTE ---
   const [isInitializing, setIsInitializing] = useState(true);
@@ -111,7 +116,8 @@ export default function OnboardingApp() {
         if (!res.ok) throw new Error(data.error || "invalid_access");
         const merged = mergeOnboarding(data.onboarding);
         setAllSteps(merged);
-        if (data.nextAction === "onboarding" && data.intro?.splash && data.intro.splash.mode !== "none") setIntro(data.intro);
+        if (data.intro?.slug) dropSlug.current = data.intro.slug;
+        if (data.nextAction === "onboarding" && data.intro?.splash && data.intro.splash.mode !== "none") { setIntro(data.intro); track("intro_view"); }
         setAccessState("ready");
         if (data.nextAction === "drop" && data.dropUrl) {
           window.location.replace(data.dropUrl);
@@ -157,6 +163,10 @@ export default function OnboardingApp() {
   useEffect(() => {
     changeColors();
   }, [stepIndex, changeColors]);
+
+  // Embudo: qué pregunta del onboarding está viendo (la última que vio es donde se bajó).
+  const seenStepId = !isInitializing && accessState === "ready" && !intro && !submitResult ? allSteps.filter((x) => x.type !== "phone")[stepIndex]?.id : undefined;
+  useEffect(() => { if (seenStepId) track("onb_step", String(seenStepId)); }, [seenStepId, track]);
 
   const activeSteps = useMemo(() => allSteps.filter((step) => step.type !== "phone"), [allSteps]);
   const currentStep = activeSteps[stepIndex];
@@ -245,7 +255,7 @@ export default function OnboardingApp() {
       <SplashScreen
         splash={intro.splash}
         prize={intro.prize ?? undefined}
-        onEnter={() => { markIntroSeen(intro.slug); setIntro(null); }}
+        onEnter={() => { markIntroSeen(intro.slug); track("intro_enter"); setIntro(null); }}
       />
     );
   }

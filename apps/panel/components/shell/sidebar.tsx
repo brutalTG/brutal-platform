@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import {
-  LayoutDashboard, FlaskConical, Users, Layers, Coins, MessageSquare, Settings2, ScrollText, Blocks, DoorOpen, ChartColumn, FileText, Lightbulb, Flame, Menu, X,
+  LayoutDashboard, FlaskConical, Users, Layers, Coins, MessageSquare, Settings2, ScrollText, Blocks, DoorOpen, ChartColumn, FileText, Lightbulb, Flame, Menu, X, Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -29,6 +29,7 @@ export function Sidebar({ counts, large = false }: { counts: { attention?: numbe
       items: [
         { href: '/resultados', label: 'Resultados', icon: <ChartColumn /> },
         { href: '/informes', label: 'Informes', icon: <FileText /> },
+        { href: '/embudo', label: 'Embudo en vivo', icon: <Activity /> },
         { href: '/drops', label: 'Campo en vivo', icon: <Layers /> },
         { href: '/nodos', label: 'Nodos', icon: <Users /> },
       ],
@@ -85,7 +86,7 @@ const TABS: [string, string, React.ReactNode][] = [
   ['/', 'Hoy', <LayoutDashboard key="i" />],
   ['/experimentos', 'Experimentos', <FlaskConical key="i" />],
   ['/herramientas', 'Caja', <Blocks key="i" />],
-  ['/resultados', 'Resultados', <ChartColumn key="i" />],
+  ['/embudo', 'Embudo', <Activity key="i" />],
 ];
 
 export function MobileNav({ counts = {}, logout }: { counts?: { attention?: number; bitacora?: number }; logout?: React.ReactNode }) {
@@ -136,7 +137,7 @@ export function SectionTitle() {
   const path = usePathname();
   const names: [string, string][] = [
     ['/estudios', 'Estudios'], ['/experimentos', 'Experimentos'], ['/amigos', 'Amigos de mierda'], ['/herramientas', 'Caja de herramientas'],
-    ['/onboarding', 'Onboarding'], ['/resultados', 'Resultados'], ['/informes', 'Informes'], ['/drops', 'Campo en vivo'], ['/nodos', 'Nodos'],
+    ['/onboarding', 'Onboarding'], ['/resultados', 'Resultados'], ['/informes', 'Informes'], ['/drops', 'Campo en vivo'], ['/embudo', 'Embudo en vivo'], ['/nodos', 'Nodos'],
     ['/recompensas', 'Recompensas'], ['/mensajes', 'Mensajes'], ['/sistema', 'Sistema'], ['/bitacora', 'Bitácora'], ['/pressure', 'Pressure'],
   ];
   const hit = names.find(([h]) => path === h || path.startsWith(h + '/'));
