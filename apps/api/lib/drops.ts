@@ -782,7 +782,7 @@ async function introFor(a: Access) {
 }
 
 // ---------- Embudo ----------
-const FUNNEL_STEPS = new Set(['intro_view', 'intro_enter', 'onb_step', 'onb_done', 'link']);
+const FUNNEL_STEPS = new Set(['intro_view', 'intro_enter', 'onb_step', 'onb_done', 'link', 'js_error']);
 /** Un paso del embudo que solo ve el teléfono (la placa, cada pregunta del onboarding). Una vez por persona y paso. */
 export async function funnelStep(a: Access, b: { step?: unknown; detail?: unknown; drop?: unknown }) {
   const step = String(b.step ?? '');
