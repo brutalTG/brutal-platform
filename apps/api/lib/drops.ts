@@ -775,6 +775,18 @@ async function introFor(a: Access) {
   return { slug: d.slug, splash: cfg.splash, prize: cfg.reveal?.prize ?? null };
 }
 
+// ---------- Embudo ----------
+const FUNNEL_STEPS = new Set(['intro_view', 'intro_enter', 'onb_step', 'onb_done', 'link']);
+/** Un paso del embudo que solo ve el teléfono (la placa, cada pregunta del onboarding). Una vez por persona y paso. */
+export async function funnelStep(a: Access, b: { step?: unknown; detail?: unknown; drop?: unknown }) {
+  const step = String(b.step ?? '');
+  if (!FUNNEL_STEPS.has(step)) throw new HttpError(400, 'bad_step', 'Paso desconocido');
+  const detail = String(b.detail ?? '').replace(/[^a-z0-9_-]/gi, '').slice(0, 60);
+  const drop = b.drop ? String(b.drop).replace(/[^a-z0-9-]/g, '').slice(0, 80) : null;
+  await from('drops', 'funnel_events').upsert({ node_id: a.nodeId, step, detail, drop_slug: drop }, { onConflict: 'node_id,step,detail', ignoreDuplicates: true });
+  return { ok: true };
+}
+
 export async function applyInit(a: Access) {
   const node = await nodeOf(a.nodeId);
   const base = { ok: true, nodeId: node.id, status: node.status, onboardingStep: onboarded(node) ? 100 : 0, referralCode: null, onboarding: await onboardingTexts() };
@@ -804,6 +816,7 @@ export async function apply(a: Access, b: Record<string, any>) {
     observed_at: now, idempotency_key: `onboarding:platforms:${node.id}:${now.slice(0, 10)}`,
   });
   const fresh = await nodeOf(node.id);
+  await from('drops', 'funnel_events').upsert({ node_id: node.id, step: 'onb_done', detail: '' }, { onConflict: 'node_id,step,detail', ignoreDuplicates: true });
   const next = await nextAfterOnboarding(fresh);
   return { ok: true, applicationId: node.id, referralCode: null, queuePosition: 0, whatsappNoticeStatus: null, ...next, dropAccessExpiresAt: null };
 }
