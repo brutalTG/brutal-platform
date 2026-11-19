@@ -547,7 +547,7 @@ export async function claimDrop(a: Access, body: { dropId?: string; drop_id?: st
 
 // ---------- Entrada web desde anuncios ----------
 /** Alguien llega desde un anuncio (o el link de un amigo): nodo invitado sin teléfono y link al onboarding. */
-export async function webStart(b: { ref?: unknown; source?: unknown; client?: unknown }) {
+export async function webStart(b: { ref?: unknown; source?: unknown; client?: unknown }, userAgent?: string | null) {
   const d = await dropFor({ linkId: '', nodeId: '', purpose: 'drop', destination: 'drop', dropSlug: null, expiresAt: '', test: false });
   if (!d) throw new HttpError(410, 'no_drop', 'Ahora no hay ningún Drop en juego. Volvé en unos días.');
   const ref = cleanReferral(b.ref);
@@ -563,8 +563,12 @@ export async function webStart(b: { ref?: unknown; source?: unknown; client?: un
   }
   if (!nodeId) throw new Error('nodo web: no se pudo crear');
   const link = await createDropsLink(nodeId, { purpose: 'onboarding', hours: 72 });
-  await from('drops', 'join_events').insert({ drop_slug: d.slug, event: 'web_start', node_id: nodeId, client_id: clientId(b.client), source });
-  return { ok: true, url: link.url, code: link.code };
+  await from('drops', 'join_events').insert({ drop_slug: d.slug, event: 'web_start', node_id: nodeId, client_id: clientId(b.client), source, user_agent: userAgent?.slice(0, 300) ?? null });
+  // Todo en una sola vuelta: el token (sin pasar por /a/<código>) y la placa, para mostrarla apenas carga la página.
+  const access = await exchangeCode(link.code);
+  const cfg = (d.config ?? {}) as Record<string, any>;
+  const intro = cfg.splash && cfg.splash.mode !== 'none' ? { slug: d.slug, splash: cfg.splash, prize: cfg.reveal?.prize ?? null } : null;
+  return { ok: true, url: link.url, code: link.code, token: access.token, intro };
 }
 
 /** Final de un invitado web: el código para reclamar por WhatsApp (uno por partida) y cuánto va a sumar. */
