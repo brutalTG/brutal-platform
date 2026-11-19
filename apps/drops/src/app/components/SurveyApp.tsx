@@ -3,6 +3,7 @@
 // ============================================================
 
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { introSeen } from "./intro-seen";
 import type { RewardEvent } from "./reward-animation";
 import type { UserAnswer } from "./archetype-engine";
 import type { Question, MultiplierCheckpoint, Drop, ResultConfig } from "./drop-types";
@@ -352,8 +353,10 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
     const s = new URLSearchParams(window.location.search).get("screen");
     if (s === "profile" || s === "leaderboard") return s;
     // Sin placa de inicio: del apodo directo a la primera carta.
-    return drop.splash?.mode === "none" ? "countdown" : "splash";
-  }, [drop.splash?.mode]);
+    if (drop.splash?.mode === "none") return "countdown";
+    // Ya la vio antes del onboarding: no se repite.
+    return introSeen(drop.id) ? "countdown" : "splash";
+  }, [drop.splash?.mode, drop.id]);
   const skipIntro = drop.splash?.mode === "none";
 
   // --- Core state ---

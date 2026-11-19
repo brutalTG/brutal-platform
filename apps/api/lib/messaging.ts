@@ -3,9 +3,9 @@ import { env } from './env';
 import { from, must } from './db';
 import { newCode, sha256 } from './crypto';
 import { command, inboundGate, render, sendText, type Inbound } from './whatsapp';
-import { claimWebTickets, createDropsLink } from './drops';
+import { claimWebTickets, createDropsLink, livePrize } from './drops';
 import { selectAudience, type Audience, type Candidate } from './launch-rules';
-import { isGuestPhone, parseClaimCode, webClaimText } from './drops-game';
+import { isGuestPhone, parseClaimCode, pitchText, webClaimText, whatsappChannel } from './drops-game';
 
 const cfg = () => ({ mode: env.whatsappMode, endpoint: env.watiEndpoint, token: env.watiToken, channel: env.watiChannel });
 
@@ -121,7 +121,7 @@ export async function handleInbound(m: Inbound) {
   let node = await must(from('core', 'nodes').select('id, status').eq('phone_e164', m.phone).maybeSingle(), 'nodo') as { id: string; status: string } | null;
   // Llega desde el botón de la landing: si no lo conocemos, lo anotamos y sigue al perfil.
   if (inboundGate(node) === 'create') {
-    const { data, error } = await from('core', 'nodes').insert({ phone_e164: m.phone, status: 'pending', acquisition_channel: 'whatsapp', last_active_at: new Date().toISOString() }).select('id, status').single();
+    const { data, error } = await from('core', 'nodes').insert({ phone_e164: m.phone, status: 'pending', acquisition_channel: whatsappChannel(m.text), last_active_at: new Date().toISOString() }).select('id, status').single();
     if (error && !/duplicate/i.test(error.message)) throw new Error(`nodo nuevo: ${error.message}`);
     node = (data as { id: string; status: string } | null)
       ?? (await must(from('core', 'nodes').select('id, status').eq('phone_e164', m.phone).maybeSingle(), 'nodo') as { id: string; status: string } | null);
@@ -165,8 +165,9 @@ export async function handleInbound(m: Inbound) {
     const n = await must(from('core', 'nodes').select('nickname, birth_date, province').eq('id', nodeId).single(), 'perfil') as any;
     const ready = Boolean(n.nickname && n.birth_date && n.province);
     const l = await createDropsLink(nodeId, ready ? { purpose: 'drop', destination: cmd === 'profile' ? 'profile' : 'drop' } : { purpose: 'onboarding', hours: 72 });
-    const text = !ready ? `Bienvenido a BRUTAL. Cuatro datos (un minuto) y entrás directo al Drop. Cada respuesta suma Golden Tickets para el ranking:\n\n${l.url}\n\nEl link es tuyo, no lo pases. Para no recibir más mensajes, escribí BAJA.`
-      : cmd === 'profile' ? `Tu perfil, tus tickets y el ranking:\n\n${l.url}` : `Tu Drop te está esperando:\n\n${l.url}\n\nEl link es tuyo, no lo pases.`;
+    // Qué es, qué se gana y el link: lo primero que lee quien escribe JUGAR desde un anuncio.
+    const text = cmd === 'profile' && ready ? `Tu perfil, tus tickets y el ranking:\n\n${l.url}`
+      : pitchText({ prize: await livePrize().catch(() => null), link: l.url, ready });
     await sendToContact(to, text, ready ? `drops_${cmd === 'help' ? 'drop' : cmd}` : 'drops_onboarding');
     return { handled: true, reply: ready ? `drops_${cmd === 'help' ? 'drop' : cmd}` : 'drops_onboarding' };
   }
