@@ -486,7 +486,15 @@ export const cleanReferral = (raw: unknown) => { const s = String(raw ?? '').tri
 /** Canal de adquisición de un invitado web: "ads:<campaña>" o "web". */
 export const webChannel = (source: string | null) => (source ? `ads:${source}`.slice(0, 60) : 'web');
 
-export type PrizeInfo = { title: string | null; drawDate: string | null; ticketsPerChance: number };
+export type PrizeInfo = { title: string | null; lines?: string[]; drawDate: string | null; ticketsPerChance: number };
+
+/** "3 DAY PASS para LOLLAPALOOZA" (lo que se sortea, en una frase). */
+export function prizePhrase(p: PrizeInfo | null) {
+  if (!p) return null;
+  const what = (p.lines ?? []).map((l) => l.trim()).filter(Boolean).join(' + ');
+  if (what && p.title) return `${what} para ${p.title}`;
+  return what || p.title || null;
+}
 type Holder = { nickname: string | null; tickets: number; prize: PrizeInfo | null; inviteUrl: string; referralTickets: number };
 export type WebClaimReply =
   | ({ status: 'credited' } & Holder)
@@ -505,11 +513,11 @@ export function webClaimText(r: WebClaimReply) {
   const per = r.prize?.ticketsPerChance || 100;
   const chances = Math.floor(r.tickets / per);
   const have = `Tenés ${r.tickets.toLocaleString('es-AR')} Golden Tickets 🎟${chances > 0 ? ` (${chances} ${chances === 1 ? 'chance' : 'chances'})` : ''}.`;
-  const draw = r.prize?.drawDate
-    ? `Sorteamos ${r.prize.title ? `${r.prize.title} ` : ''}el ${r.prize.drawDate}. Al ganador le avisamos por acá, por WhatsApp.`
-    : 'Al ganador del sorteo le avisamos por acá, por WhatsApp.';
+  const what = prizePhrase(r.prize);
+  const prize = what ? `Premio: ${what}.${r.prize?.drawDate ? ` Sorteo el ${r.prize.drawDate}.` : ''}` : r.prize?.drawDate ? `Sorteo el ${r.prize.drawDate}.` : null;
+  const rules = `${per} tickets = 1 chance. Al ganador le avisamos por acá, por WhatsApp.`;
   const cta = `¿Querés más chances? Por cada amigo que juegue el Drop desde tu link sumás +${r.referralTickets} tickets:\n${r.inviteUrl}`;
-  return `${hi}\n\n${have}\n${draw}\n\n${cta}\n\nPara no recibir más mensajes, escribí BAJA.`;
+  return [hi, '', have, ...(prize ? [prize] : []), rules, '', cta, '', 'Para no recibir más mensajes, escribí BAJA.'].join('\n');
 }
 
 /** El premio del Drop (reveal.prize) como lo usa el bot. */
@@ -517,5 +525,24 @@ export function prizeInfo(config: Record<string, any> | null | undefined): Prize
   const p = config?.reveal?.prize;
   if (!p || typeof p !== 'object') return null;
   const n = Number(p.ticketsPerChance);
-  return { title: p.title ? String(p.title) : null, drawDate: p.drawDate ? String(p.drawDate) : null, ticketsPerChance: Number.isFinite(n) && n > 0 ? n : 100 };
+  const lines = Array.isArray(p.lines) ? p.lines.map((l: unknown) => String(l)).filter((l: string) => l.trim()) : [];
+  return { title: p.title ? String(p.title) : null, lines, drawDate: p.drawDate ? String(p.drawDate) : null, ticketsPerChance: Number.isFinite(n) && n > 0 ? n : 100 };
+}
+
+/** Lo que contesta el bot cuando alguien escribe para jugar (JUGAR, el botón de un anuncio, etc.). */
+export function pitchText(p: { prize: PrizeInfo | null; link: string; ready: boolean }) {
+  const what = prizePhrase(p.prize);
+  const per = p.prize?.ticketsPerChance || 100;
+  const head = 'BRUTAL: preguntas random, caos y dilemas. Son unos minutos.';
+  const how = what
+    ? `Cada respuesta suma Golden Tickets 🎟 y ${per} tickets = 1 chance en el sorteo de ${what}${p.prize?.drawDate ? ` (sorteo el ${p.prize.drawDate})` : ''}.`
+    : 'Cada respuesta suma Golden Tickets 🎟 para el ranking.';
+  const go = p.ready ? 'Tu Drop te está esperando:' : 'Arrancá acá (primero cuatro datos, un minuto):';
+  return `${head}\n${how}\n\n${go}\n${p.link}\n\nEl link es tuyo, no lo pases. Para no recibir más mensajes, escribí BAJA.`;
+}
+
+/** Primer mensaje exacto de un anuncio "clic a WhatsApp" (JUGAR): así se distingue de quien escribe por su cuenta. */
+export function whatsappChannel(text: string | null | undefined) {
+  const t = String(text ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase().replace(/[^A-Z0-9 ]/g, '').replace(/\s+/g, ' ');
+  return t === 'JUGAR' ? 'ads:whatsapp-jugar' : 'whatsapp';
 }

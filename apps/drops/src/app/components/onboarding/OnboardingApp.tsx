@@ -11,6 +11,9 @@ import { hapticMedium } from "../haptics";
 import { ONBOARDING_STEPS, mergeOnboarding } from "./onboarding-data";
 import { submitApplication } from "./onboarding-api";
 import { AccessNotice } from "../AccessNotice";
+import { SplashScreen } from "../splash-screen";
+import { markIntroSeen } from "../intro-seen";
+import type { PrizeConfig, SplashConfig } from "../drop-types";
 import {
   captureStandaloneAccessToken,
   fetchStandaloneAccessContext,
@@ -82,6 +85,8 @@ export default function OnboardingApp() {
   } | null>(null);
   const [duotoneColors, setDuotoneColors] = useState({ bg: "#000000", fg: "#FFFFFF" });
   const firstStepDone = useRef(false);
+  // Lo primero que ve quien recién llega: la placa del Drop (premio y qué es), no la primera pregunta.
+  const [intro, setIntro] = useState<{ slug: string; splash: SplashConfig; prize: PrizeConfig | null } | null>(null);
 
   // --- LÓGICA DE REANUDACIÓN INTELIGENTE ---
   const [isInitializing, setIsInitializing] = useState(true);
@@ -106,6 +111,7 @@ export default function OnboardingApp() {
         if (!res.ok) throw new Error(data.error || "invalid_access");
         const merged = mergeOnboarding(data.onboarding);
         setAllSteps(merged);
+        if (data.nextAction === "onboarding" && data.intro?.splash && data.intro.splash.mode !== "none") setIntro(data.intro);
         setAccessState("ready");
         if (data.nextAction === "drop" && data.dropUrl) {
           window.location.replace(data.dropUrl);
@@ -233,6 +239,16 @@ export default function OnboardingApp() {
 
   if (accessState === "missing") return <AccessNotice purpose="onboarding" />;
   if (accessState === "invalid") return <AccessNotice purpose="onboarding" invalid />;
+
+  if (intro && stepIndex === 0 && !submitResult) {
+    return (
+      <SplashScreen
+        splash={intro.splash}
+        prize={intro.prize ?? undefined}
+        onEnter={() => { markIntroSeen(intro.slug); setIntro(null); }}
+      />
+    );
+  }
 
   if (ageRejected) {
     return (

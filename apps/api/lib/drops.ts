@@ -761,11 +761,25 @@ async function onboardingTexts() {
   return (data as any)?.config?.onboarding ?? null;
 }
 
+/** Lo que se sortea en el Drop en juego (para el bot). */
+export async function livePrize() {
+  const d = await dropFor({ linkId: '', nodeId: '', purpose: 'drop', destination: 'drop', dropSlug: null, expiresAt: '', test: false });
+  return d ? prizeInfo(d.config as any) : null;
+}
+
+/** La placa de entrada del Drop que va a jugar: se muestra antes del onboarding. */
+async function introFor(a: Access) {
+  const d = await dropFor({ ...a, purpose: 'drop', destination: 'drop' });
+  const cfg = (d?.config ?? {}) as Record<string, any>;
+  if (!d || !cfg.splash) return null;
+  return { slug: d.slug, splash: cfg.splash, prize: cfg.reveal?.prize ?? null };
+}
+
 export async function applyInit(a: Access) {
   const node = await nodeOf(a.nodeId);
   const base = { ok: true, nodeId: node.id, status: node.status, onboardingStep: onboarded(node) ? 100 : 0, referralCode: null, onboarding: await onboardingTexts() };
   if (onboarded(node) && playable(node, a.test)) return { ...base, ...(await nextAfterOnboarding(node)) };
-  return { ...base, nextAction: 'onboarding', dropUrl: null, dropId: null, dropName: null };
+  return { ...base, nextAction: 'onboarding', dropUrl: null, dropId: null, dropName: null, intro: await introFor(a).catch(() => null) };
 }
 
 export async function apply(a: Access, b: Record<string, any>) {

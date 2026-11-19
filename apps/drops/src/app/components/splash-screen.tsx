@@ -87,7 +87,11 @@ function ImageSplash({
   const lines = (splash.overlayLines ?? []).map((l) => l.trim()).filter(Boolean);
   const perChance = prize?.ticketsPerChance && prize.ticketsPerChance > 0 ? prize.ticketsPerChance : 100;
   const prizeInfo = splash.showPrizeInfo && prize ? `${perChance} tickets = 1 chance` : null;
-  const drawLine = splash.showPrizeInfo && prize?.drawDate ? `Sorteo el ${prize.drawDate}` : null;
+  // "Sorteo de 3 DAY PASS el 10-12-26": lo que se sortea y cuándo, igual que en la pantalla final.
+  const what = (prize?.lines ?? []).map((l) => l.trim()).filter(Boolean).join(" + ");
+  const drawLine = splash.showPrizeInfo && prize
+    ? [what ? `Sorteo de ${what}` : prize.drawDate ? "Sorteo" : "", prize.drawDate ? `el ${prize.drawDate}` : ""].filter(Boolean).join(" ") || null
+    : null;
   const hasText = lines.length > 0 || Boolean(prizeInfo);
 
   return (
@@ -130,7 +134,7 @@ function ImageSplash({
                 <span className="font-['Roboto'] font-bold text-[15px] whitespace-nowrap">{prizeInfo}</span>
               </div>
             )}
-            {drawLine && <p className="font-['Roboto'] text-[14px] text-white/75">{drawLine}</p>}
+            {drawLine && <p className="font-['Roboto'] font-bold text-[15px] text-white/85">{drawLine}</p>}
           </div>
         )}
 

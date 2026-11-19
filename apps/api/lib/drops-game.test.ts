@@ -291,7 +291,7 @@ test('predicción: acertar suma el premio; errar no suma ni resta', () => {
   assert.deepEqual(settleMarket({ outcome_index: 1 }, [55, 45], 50), { winner: 0, won: false, payout: 0, net: 0 });
 });
 
-import { claimPrefill, newClaimCode, parseClaimCode, webChannel, webClaimText, whatsappUrl, cleanReferral } from './drops-game.ts';
+import { claimPrefill, newClaimCode, parseClaimCode, webChannel, webClaimText, whatsappUrl, cleanReferral, pitchText, whatsappChannel } from './drops-game.ts';
 
 test('reclamo web: el código del mensaje armado se lee aunque lo editen un poco', () => {
   const code = newClaimCode(() => 0.5);
@@ -311,13 +311,28 @@ test('reclamo web: link de WhatsApp con el mensaje armado; invitaciones y canal 
   assert.equal(webChannel(null), 'web');
 });
 
-test('reclamo web: el bot dice cuántos tickets tiene, cuándo sorteamos, que al ganador le avisamos y el link para invitar', () => {
-  const t = webClaimText({ status: 'credited', nickname: 'Juli', tickets: 520, prize: { title: 'LOLLAPALOOZA', drawDate: '10-12-26', ticketsPerChance: 100 }, inviteUrl: 'https://drops.brutal.lat/jugar?r=ab12cd', referralTickets: 100 });
+test('reclamo web: el bot dice tickets, premio, fecha, 100 tickets = 1 chance, aviso al ganador y link para invitar', () => {
+  const prize = { title: 'LOLLAPALOOZA', lines: ['3 DAY PASS'], drawDate: '10-12-26', ticketsPerChance: 100 };
+  const t = webClaimText({ status: 'credited', nickname: 'Juli', tickets: 520, prize, inviteUrl: 'https://drops.brutal.lat/jugar?r=ab12cd', referralTickets: 100 });
   assert.match(t, /Listo, Juli\. Tus tickets están a tu nombre\./);
   assert.match(t, /Tenés 520 Golden Tickets 🎟 \(5 chances\)/);
-  assert.match(t, /Sorteamos LOLLAPALOOZA el 10-12-26\. Al ganador le avisamos por acá, por WhatsApp\./);
+  assert.match(t, /Premio: 3 DAY PASS para LOLLAPALOOZA\. Sorteo el 10-12-26\./);
+  assert.match(t, /100 tickets = 1 chance\. Al ganador le avisamos por acá, por WhatsApp\./);
   assert.match(t, /\+100 tickets:\nhttps:\/\/drops\.brutal\.lat\/jugar\?r=ab12cd/);
   assert.match(t, /BAJA/);
   assert.match(webClaimText({ status: 'used_by_other' }), /otro número/);
   assert.match(webClaimText({ status: 'credited', nickname: null, tickets: 40, prize: null, inviteUrl: 'x', referralTickets: 100 }), /Tenés 40 Golden Tickets 🎟\./);
+});
+
+test('bot: JUGAR explica rápido el juego, el premio y manda el link; JUGAR identifica el anuncio', () => {
+  const prize = { title: 'LOLLAPALOOZA', lines: ['3 DAY PASS'], drawDate: '10-12-26', ticketsPerChance: 100 };
+  const t = pitchText({ prize, link: 'https://drops.brutal.lat/a/x', ready: false });
+  assert.match(t, /preguntas random, caos y dilemas/);
+  assert.match(t, /100 tickets = 1 chance en el sorteo de 3 DAY PASS para LOLLAPALOOZA \(sorteo el 10-12-26\)/);
+  assert.match(t, /cuatro datos/);
+  assert.match(t, /https:\/\/drops\.brutal\.lat\/a\/x/);
+  assert.match(pitchText({ prize, link: 'L', ready: true }), /Tu Drop te está esperando/);
+  assert.equal(whatsappChannel('JUGAR'), 'ads:whatsapp-jugar');
+  assert.equal(whatsappChannel(' jugar! '), 'ads:whatsapp-jugar');
+  assert.equal(whatsappChannel('Hola, quiero jugar'), 'whatsapp');
 });
