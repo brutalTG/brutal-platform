@@ -336,3 +336,13 @@ test('bot: JUGAR explica rápido el juego, el premio y manda el link; JUGAR iden
   assert.equal(whatsappChannel(' jugar! '), 'ads:whatsapp-jugar');
   assert.equal(whatsappChannel('Hola, quiero jugar'), 'whatsapp');
 });
+
+import { claimVars, fillTemplate, prizeVars } from './drops-game.ts';
+test('textos del bot: las variables se completan con el premio y los datos del jugador', () => {
+  const prize = { title: 'LOLLAPALOOZA', lines: ['3 DAY PASS'], drawDate: '10-12-26', ticketsPerChance: 100 };
+  assert.equal(fillTemplate('{tickets_por_chance} tickets = 1 chance en el sorteo de {premio} (sorteo el {fecha}). {link}', { ...prizeVars(prize), link: 'L' }),
+    '100 tickets = 1 chance en el sorteo de 3 DAY PASS para LOLLAPALOOZA (sorteo el 10-12-26). L');
+  const v = claimVars({ status: 'credited', nickname: null, tickets: 1250, prize, inviteUrl: 'I', referralTickets: 100 });
+  assert.equal(fillTemplate('Listo, {nombre}. Tenés {tickets} ({chances} chances). +{tickets_por_amigo}: {link_invitar}', v), 'Listo. Tenés 1.250 (12 chances). +100: I');
+  assert.equal(fillTemplate('Hola {otra}', {}), 'Hola {otra}');
+});

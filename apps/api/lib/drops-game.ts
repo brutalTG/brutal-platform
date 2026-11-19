@@ -546,3 +546,24 @@ export function whatsappChannel(text: string | null | undefined) {
   const t = String(text ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase().replace(/[^A-Z0-9 ]/g, '').replace(/\s+/g, ' ');
   return t === 'JUGAR' ? 'ads:whatsapp-jugar' : 'whatsapp';
 }
+
+// ---------- Textos del bot editables (messaging.templates) ----------
+/** Variables de los textos del bot sobre el premio del Drop en juego. */
+export function prizeVars(p: PrizeInfo | null) {
+  return { premio: prizePhrase(p) ?? 'entradas', fecha: p?.drawDate ?? 'a confirmar', tickets_por_chance: p?.ticketsPerChance || 100 };
+}
+
+/** Variables del texto de reclamo (web_claim_ok). */
+export function claimVars(r: WebClaimReply) {
+  if (r.status !== 'credited' && r.status !== 'already_yours') return {};
+  const per = r.prize?.ticketsPerChance || 100;
+  return { ...prizeVars(r.prize), nombre: r.nickname ?? '', tickets: r.tickets.toLocaleString('es-AR'), chances: Math.floor(r.tickets / per), link_invitar: r.inviteUrl, tickets_por_amigo: r.referralTickets };
+}
+
+/** Completa {variables}; si falta el nombre, "Listo, ." queda "Listo.". */
+export function fillTemplate(body: string, vars: Record<string, string | number>) {
+  return body.replace(/\{(\w+)\}/g, (_, k) => (k in vars ? String(vars[k]) : `{${k}}`)).replace(/,\s*\./g, '.').replace(/ {2,}/g, ' ');
+}
+
+/** Qué plantilla usa cada respuesta de reclamo. */
+export const claimTemplateKey = (r: WebClaimReply) => (r.status === 'used_by_other' ? 'web_claim_used' : r.status === 'already_played' ? 'web_claim_played' : 'web_claim_ok');

@@ -5,9 +5,16 @@ import { newCode, sha256 } from './crypto';
 import { command, inboundGate, render, sendText, type Inbound } from './whatsapp';
 import { claimWebTickets, createDropsLink, livePrize } from './drops';
 import { selectAudience, type Audience, type Candidate } from './launch-rules';
-import { isGuestPhone, parseClaimCode, pitchText, webClaimText, whatsappChannel } from './drops-game';
+import { claimTemplateKey, claimVars, fillTemplate, isGuestPhone, parseClaimCode, pitchText, prizeVars, webClaimText, whatsappChannel } from './drops-game';
 
 const cfg = () => ({ mode: env.whatsappMode, endpoint: env.watiEndpoint, token: env.watiToken, channel: env.watiChannel });
+
+/** Texto del bot editable desde el panel; si la plantilla no está en la base, usa el texto de respaldo. */
+async function botText(key: string, vars: Record<string, string | number>, fallback: string) {
+  const { data } = await from('messaging', 'templates').select('body').eq('key', key).maybeSingle();
+  const body = (data as { body?: string } | null)?.body;
+  return body ? fillTemplate(body, vars) : fallback;
+}
 
 async function template(key: string) {
   const row = await must(from('messaging', 'templates').select('body').eq('key', key).maybeSingle(), `plantilla ${key}`);
@@ -153,7 +160,7 @@ export async function handleInbound(m: Inbound) {
   if (contact.opted_out_at) await from('messaging', 'contacts').update({ opted_out_at: null }).eq('id', contact.id);
 
   if (claim) {
-    await sendToContact(to, webClaimText(claim.reply), 'web_claim');
+    await sendToContact(to, await botText(claimTemplateKey(claim.reply), claimVars(claim.reply), webClaimText(claim.reply)), 'web_claim');
     return { handled: true, reply: `web_claim:${claim.reply.status}` };
   }
   if (cmd === 'ranking') {
@@ -166,8 +173,9 @@ export async function handleInbound(m: Inbound) {
     const ready = Boolean(n.nickname && n.birth_date && n.province);
     const l = await createDropsLink(nodeId, ready ? { purpose: 'drop', destination: cmd === 'profile' ? 'profile' : 'drop' } : { purpose: 'onboarding', hours: 72 });
     // Qué es, qué se gana y el link: lo primero que lee quien escribe JUGAR desde un anuncio.
+    const prize = cmd === 'profile' && ready ? null : await livePrize().catch(() => null);
     const text = cmd === 'profile' && ready ? `Tu perfil, tus tickets y el ranking:\n\n${l.url}`
-      : pitchText({ prize: await livePrize().catch(() => null), link: l.url, ready });
+      : await botText(ready ? 'drops_pitch_ready' : 'drops_pitch', { ...prizeVars(prize), link: l.url }, pitchText({ prize, link: l.url, ready }));
     await sendToContact(to, text, ready ? `drops_${cmd === 'help' ? 'drop' : cmd}` : 'drops_onboarding');
     return { handled: true, reply: ready ? `drops_${cmd === 'help' ? 'drop' : cmd}` : 'drops_onboarding' };
   }

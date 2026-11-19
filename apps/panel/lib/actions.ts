@@ -30,14 +30,16 @@ export async function resolveWithdrawal(id: string, decision: 'approved' | 'reje
 }
 
 /** Texto de un mensaje del bot. Las variables entre llaves se completan al mandarlo. */
+const BOT_TEXT_REQUIRED: Record<string, string[]> = { drops_pitch: ['{link}'], drops_pitch_ready: ['{link}'], web_claim_ok: ['{link_invitar}'], web_claim_played: [], web_claim_used: [] };
+
 export async function saveTemplate(form: FormData): Promise<Result & { fields?: Record<string, string> }> {
   const key = String(form.get('key') ?? '');
   const body = String(form.get('body') ?? '').trim();
   const { data: prev } = await from('messaging', 'templates').select('body').eq('key', key).maybeSingle();
   if (!prev) return { ok: false, error: 'No encontré ese mensaje.' };
   if (body.length < 3 || body.length > 1000) return { ok: false, error: 'Revisá el texto.', fields: { body: 'Entre 3 y 1000 caracteres.' } };
-  // Las variables que usa el sistema no se pueden perder.
-  const needed = [...String((prev as { body: string }).body).matchAll(/\{(\w+)\}/g)].map((m) => m[0]);
+  // Las variables que usa el sistema no se pueden perder. En los textos del Drop solo el link es obligatorio.
+  const needed = BOT_TEXT_REQUIRED[key] ?? [...String((prev as { body: string }).body).matchAll(/\{(\w+)\}/g)].map((m) => m[0]);
   const missing = needed.filter((v) => !body.includes(v));
   if (missing.length) return { ok: false, error: 'Faltan variables.', fields: { body: `Tiene que incluir ${missing.join(', ')}.` } };
   const { error } = await from('messaging', 'templates').update({ body }).eq('key', key);
