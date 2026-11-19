@@ -563,9 +563,11 @@ export async function webStart(b: { ref?: unknown; source?: unknown; client?: un
   }
   if (!nodeId) throw new Error('nodo web: no se pudo crear');
   const link = await createDropsLink(nodeId, { purpose: 'onboarding', hours: 72 });
-  await from('drops', 'join_events').insert({ drop_slug: d.slug, event: 'web_start', node_id: nodeId, client_id: clientId(b.client), source, user_agent: userAgent?.slice(0, 300) ?? null });
   // Todo en una sola vuelta: el token (sin pasar por /a/<código>) y la placa, para mostrarla apenas carga la página.
-  const access = await exchangeCode(link.code);
+  const [access] = await Promise.all([
+    exchangeCode(link.code),
+    from('drops', 'join_events').insert({ drop_slug: d.slug, event: 'web_start', node_id: nodeId, client_id: clientId(b.client), source, user_agent: userAgent?.slice(0, 300) ?? null }),
+  ]);
   const cfg = (d.config ?? {}) as Record<string, any>;
   const intro = cfg.splash && cfg.splash.mode !== 'none' ? { slug: d.slug, splash: cfg.splash, prize: cfg.reveal?.prize ?? null } : null;
   return { ok: true, url: link.url, code: link.code, token: access.token, intro };
