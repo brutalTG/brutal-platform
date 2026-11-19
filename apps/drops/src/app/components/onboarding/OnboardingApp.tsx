@@ -69,6 +69,16 @@ function BrutalLogoSmall() {
 
 // ── Main Component ──────────────────────────────────────────
 
+/** Errores de pantalla de los que entran desde anuncios: van al embudo para saber si algo se rompe en su teléfono. */
+let errorsHooked = false;
+function reportErrors(track: (step: string, detail?: string) => void) {
+  if (errorsHooked) return;
+  errorsHooked = true;
+  const send = (m: unknown) => track("js_error", String(m ?? "").replace(/[^a-z0-9]+/gi, "_").slice(0, 60));
+  window.addEventListener("error", (e) => send(e.message));
+  window.addEventListener("unhandledrejection", (e) => send((e.reason as any)?.message ?? e.reason));
+}
+
 type Intro = { slug: string; splash: SplashConfig; prize: PrizeConfig | null };
 
 /** initialIntro: la placa ya conocida (viene de /jugar), para mostrarla mientras se carga el perfil. */
@@ -108,6 +118,9 @@ export default function OnboardingApp({ initialIntro = null }: { initialIntro?: 
           setAccessState("missing");
           return;
         }
+        // Vino de /jugar con la placa ya en pantalla: se anota ya, sin esperar a que cargue el perfil.
+        if (initialIntro) track("intro_view");
+        reportErrors(track);
 
         await fetchStandaloneAccessContext("onboarding");
         setAnswers((current) => ({ ...current, phone: "whatsapp_verified" }));
