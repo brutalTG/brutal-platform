@@ -331,14 +331,14 @@ export default function SurveyApp() {
   if (nodeStatus === "not_found") return <NodeGateScreen status="not_found" nickname={nickname} />;
 
   // Si pasó todos los controles, arranca el juego
-  return <SurveyCore drop={drop} source={source} isMinor={isMinor} />;
+  return <SurveyCore drop={drop} source={source} isMinor={isMinor} isTest={isTest || isPreview} />;
 }
 
 // ============================================================
 // Survey Core — all logic lives here, receives loaded drop
 // ============================================================
 
-function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isMinor: boolean }) {
+function SurveyCore({ drop, source, isMinor, isTest = false }: { drop: Drop; source: string; isMinor: boolean; isTest?: boolean }) {
   // --- Derived from drop (memoized) ---
   const questions: Question[] = drop.questions;
   const totalQuestions = questions.length;
@@ -658,6 +658,7 @@ function SurveyCore({ drop, source, isMinor }: { drop: Drop; source: string; isM
         tickets={serverTickets ?? finalTickets}
         webClaim={webClaim}
         botUrl={botUrl}
+        dropKey={isTest ? undefined : drop.id}
         onClaim={async () => {
           try {
             await waitForUpload();

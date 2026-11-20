@@ -13,6 +13,7 @@ import type { WebClaim } from "./session-uploader";
 import { TicketIcon } from "./ticket-icon";
 import { useCountUp } from "./use-count-up";
 import { hapticHeavy } from "./haptics";
+import { metaEvent } from "./meta-pixel";
 
 interface Props {
   prize?: PrizeConfig;
@@ -22,11 +23,13 @@ interface Props {
   webClaim: WebClaim | null;
   /** Chat con el bot para quien ya tiene WhatsApp. */
   botUrl: string | null;
+  /** Para el Pixel de Meta: qué Drop terminó (sin valor en partidas de prueba, que no se cuentan). */
+  dropKey?: string;
 }
 
 const YELLOW = "#E8FF00";
 
-export function FinalScreen({ prize, tickets, onClaim, webClaim, botUrl }: Props) {
+export function FinalScreen({ prize, tickets, onClaim, webClaim, botUrl, dropKey }: Props) {
   const [state, setState] = useState<"claiming" | "ready" | "error">("claiming");
   const started = useRef(false);
   const shown = useCountUp(state === "claiming" ? 0 : tickets);
@@ -39,6 +42,7 @@ export function FinalScreen({ prize, tickets, onClaim, webClaim, botUrl }: Props
   useEffect(() => {
     if (started.current) return;
     started.current = true;
+    if (dropKey) metaEvent("Lead", dropKey, { content_name: dropKey });
     claim();
   }, []);
 
@@ -81,7 +85,7 @@ export function FinalScreen({ prize, tickets, onClaim, webClaim, botUrl }: Props
           ) : (
             <a
               href={state === "ready" && url ? url : undefined}
-              onClick={() => hapticHeavy()}
+              onClick={() => { hapticHeavy(); if (dropKey && state === "ready" && url) metaEvent("Contact", dropKey); }}
               aria-disabled={state !== "ready" || !url}
               className="w-full h-[78px] rounded-full flex items-center justify-center font-['Roboto'] font-black text-[22px] text-black select-none active:scale-[0.98] transition-opacity"
               style={{ backgroundColor: YELLOW, opacity: state === "ready" && url ? 1 : 0.5 }}

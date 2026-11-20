@@ -13,6 +13,7 @@ import { submitApplication } from "./onboarding-api";
 import { AccessNotice } from "../AccessNotice";
 import { SplashScreen } from "../splash-screen";
 import { markIntroSeen } from "../intro-seen";
+import { metaEvent } from "../meta-pixel";
 import type { PrizeConfig, SplashConfig } from "../drop-types";
 import {
   captureStandaloneAccessToken,
@@ -119,7 +120,7 @@ export default function OnboardingApp({ initialIntro = null }: { initialIntro?: 
           return;
         }
         // Vino de /jugar con la placa ya en pantalla: se anota ya, sin esperar a que cargue el perfil.
-        if (initialIntro) track("intro_view");
+        if (initialIntro) { track("intro_view"); metaEvent("ViewContent", initialIntro.slug, { content_name: initialIntro.slug }); }
         reportErrors(track);
 
         await fetchStandaloneAccessContext("onboarding");
@@ -137,6 +138,7 @@ export default function OnboardingApp({ initialIntro = null }: { initialIntro?: 
         if (data.nextAction === "onboarding" && data.intro?.splash && data.intro.splash.mode !== "none") {
           if (!entered.current) setIntro(data.intro);
           track("intro_view");
+          metaEvent("ViewContent", data.intro.slug, { content_name: data.intro.slug });
         } else if (!entered.current) setIntro(null);
         setAccessState("ready");
         if (data.nextAction === "drop" && data.dropUrl) {
@@ -233,6 +235,7 @@ export default function OnboardingApp({ initialIntro = null }: { initialIntro?: 
           });
 
           if (result.ok) {
+            metaEvent("CompleteRegistration", "onboarding");
             if (result.referralCode) {
               try { localStorage.setItem("brutal_own_referral_code", result.referralCode); } catch {}
             }
