@@ -130,3 +130,10 @@ test('predicción: lo que creen vs lo que eligieron en la carta a la que apunta'
   assert.equal(b.view.hitPct, 50);
   assert.deepEqual(b.view.rows.map((r) => [r.label, r.predictedPct, r.realPct]), [['Sigo', 50, 0], ['Chau', 50, 100]]);
 });
+
+test('ráfaga de emoji: A/B se muestran como el emoji del ítem y su etiqueta', () => {
+  const em = new Map<string, StimulusMeta>([['e', { label: 'Stalkeo', labelA: 'SIGO', labelB: 'VISTO', itemLabels: ['Cripto'], itemOptions: [['❤️', '👀']] }]]);
+  assert.equal(answersOf(o('p1', 'e', { choices: ['B'] }), em.get('e'))[0].a.label, '👀 VISTO');
+  const [b] = summarize([o('p1', 'e', { choices: ['A'] })], facts, em, { cut: 'none', groupRafaga: true });
+  if (b.view?.type === 'split') assert.deepEqual([b.view.items[0].a, b.view.items[0].b], ['❤️ SIGO', '👀 VISTO']);
+});

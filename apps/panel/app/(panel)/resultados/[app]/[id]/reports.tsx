@@ -16,14 +16,16 @@ export function ReportsPanel({ app, instrumentId, hasStudy, hasData, reports }: 
   reports: { id: string; kind: ReportKind; title: string; status: string; author: string; created_at: string }[];
 }) {
   const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
   const toast = useToast();
   const router = useRouter();
 
   async function read() {
     setBusy(true);
+    setError(null);
     const r = await readResults(app, instrumentId).catch(() => ({ ok: false as const, error: 'Se cortó la conexión.' }));
     setBusy(false);
-    if (!r.ok) return toast.show(r.error, 'error');
+    if (!r.ok) { setError(r.error); return toast.show(r.error, 'error'); }
     toast.show('Listo: borrador de hallazgos guardado.');
     router.push(`/informes/${r.id}`);
   }
@@ -41,6 +43,7 @@ export function ReportsPanel({ app, instrumentId, hasStudy, hasData, reports }: 
           {busy ? 'Leyendo… (hasta 2 min)' : 'Leer resultados'}
         </Button>
       </div>
+      {error && <div className="mx-4 mb-3 rounded bg-warning-bg px-3 py-2 text-sm text-warning">{error}</div>}
       {reports.length > 0 && (
         <ul className="border-t border-border">
           {reports.map((r) => (

@@ -77,13 +77,22 @@ const PRESSURE_WORDS: Record<string, string> = { yes: 'Sí', no: 'No', agree: 'D
 /** Clave de la pregunta: las repreguntas y toques del detector cuelgan de la misma pregunta. */
 export const baseStimulus = (id: string | null) => (id ?? 'sin-id').replace(/:(tap|follow)$/, '');
 
+/** Las ráfagas de emoji guardan "A" / "B": se muestra el emoji del ítem y la etiqueta general (🙋 VOY). */
+function letterLabel(c: string, i: number, meta?: StimulusMeta) {
+  if (c !== 'A' && c !== 'B') return c.trim() || '—';
+  const side = c === 'A' ? 0 : 1;
+  const emoji = meta?.itemOptions?.[i]?.[side]?.trim();
+  const word = side === 0 ? meta?.labelA : meta?.labelB;
+  return [emoji, word?.trim()].filter(Boolean).join(' ') || c;
+}
+
 export type Answer = { label: string; stated?: string; lied?: boolean };
 
 /** Qué respondió, en palabras. Puede devolver varias (una ráfaga es una respuesta por ítem). */
 export function answersOf(o: Obs, meta?: StimulusMeta): { item?: number; a: Answer }[] {
   const v = o.value ?? {};
   // Ráfaga de Drops: una elección por ítem.
-  if (Array.isArray(v.choices)) return v.choices.map((c: unknown, i: number) => ({ item: i, a: { label: String(c ?? '—') } }));
+  if (Array.isArray(v.choices)) return v.choices.map((c: unknown, i: number) => ({ item: i, a: { label: letterLabel(String(c ?? '—'), i, meta) } }));
   // Detector: lo dicho y lo verdadero (si mintió en una binaria, la verdad es la otra).
   if ('committed' in v || 'stated' in v) {
     const word = (k: string | null) => {
@@ -190,10 +199,9 @@ function splitView(entries: { o: Obs; group: string }[], m?: StimulusMeta): View
     const byGroup: SplitItem['byGroup'] = {};
     for (const x of got) { const g = (byGroup[x.group] ??= { n: 0, aPct: 0 }); g.n++; if (x.side === 'A') g.aPct++; }
     for (const g of Object.values(byGroup)) g.aPct = pct(g.aPct, g.n);
-    const usesLetters = !m?.itemOptions?.[i];
     items.push({
       label: m?.itemLabels?.[i] ?? `Ítem ${i + 1}`,
-      a: usesLetters ? m?.labelA ?? 'A' : oa, b: usesLetters ? m?.labelB ?? 'B' : ob,
+      a: letterLabel('A', i, m), b: letterLabel('B', i, m),
       n: got.length, aPct: pct(got.filter((x) => x.side === 'A').length, got.length),
       medianMs: median(got.map((x) => x.ms).filter((x): x is number => typeof x === 'number')), byGroup,
     });

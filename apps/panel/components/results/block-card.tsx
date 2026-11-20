@@ -148,21 +148,18 @@ function Split({ v }: { v: Extract<View, { type: 'split' }> }) {
   const items = [...v.items].sort((a, b) => b.aPct - a.aPct);
   return (
     <div>
-      {v.labelA && v.labelB && (
-        <div className="mb-2 flex justify-between text-xs text-fg-3"><span><span className="mr-1 inline-block h-2 w-2 rounded-full bg-fg-2" />{v.labelA}</span><span>{v.labelB}<span className="ml-1 inline-block h-2 w-2 rounded-full bg-sunken ring-1 ring-border" /></span></div>
-      )}
       <ul className="flex flex-col gap-3">
         {items.map((it) => (
           <li key={it.label} className="text-sm">
             <div className="mb-1 flex justify-between gap-3"><span className="font-medium">{it.label}</span><span className="tabular shrink-0 text-xs text-fg-3">{fmt.n(it.n)}{it.medianMs != null ? ` · ${sec(it.medianMs)}` : ''}</span></div>
             <div className="flex h-6 overflow-hidden rounded bg-sunken text-xs">
-              <div className="flex items-center whitespace-nowrap bg-fg-2 px-2 text-bg" style={{ width: `${it.aPct}%` }}>{it.aPct >= 18 ? `${v.labelA ? '' : `${it.a} `}${fmt.pct(it.aPct)}` : ''}</div>
-              <div className="flex flex-1 items-center justify-end whitespace-nowrap px-2 text-fg-2">{100 - it.aPct >= 18 ? `${fmt.pct(Math.round((100 - it.aPct) * 10) / 10)}${v.labelB ? '' : ` ${it.b}`}` : ''}</div>
+              <div className="flex items-center whitespace-nowrap bg-fg-2 px-2 text-bg" style={{ width: `${it.aPct}%` }}>{it.aPct >= 18 ? `${it.a} ${fmt.pct(it.aPct)}` : ''}</div>
+              <div className="flex flex-1 items-center justify-end whitespace-nowrap px-2 text-fg-2">{100 - it.aPct >= 18 ? `${fmt.pct(Math.round((100 - it.aPct) * 10) / 10)} ${it.b}` : ''}</div>
             </div>
           </li>
         ))}
       </ul>
-      <p className="mt-2 text-xs text-fg-3">Ordenado de más a menos {v.labelA ? `“${v.labelA}”` : 'primera opción'}. El tiempo es la mediana de lo que tardaron en ese ítem.</p>
+      <p className="mt-2 text-xs text-fg-3">Ordenado de más a menos {v.items[0] ? `“${v.items[0].a}”` : 'primera opción'}. El tiempo es la mediana de lo que tardaron en ese ítem.</p>
     </div>
   );
 }
@@ -171,14 +168,14 @@ function SplitByGroup({ v, groups }: { v: Extract<View, { type: 'split' }>; grou
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
-        <thead><tr className="text-left text-fg-3"><th className="py-1 pr-3 font-medium">% {v.labelA ?? 'primera opción'}</th><th className="py-1 pr-3 text-right font-medium">Todos</th>{groups.map((g) => <th key={g.name} className="py-1 pr-3 text-right font-medium">{g.name}<div className="text-xs font-normal">n={g.n}</div></th>)}</tr></thead>
+        <thead><tr className="text-left text-fg-3"><th className="py-1 pr-3 font-medium">% {v.items[0]?.a ?? 'primera opción'}</th><th className="py-1 pr-3 text-right font-medium">Todos</th>{groups.map((g) => <th key={g.name} className="py-1 pr-3 text-right font-medium">{g.name}<div className="text-xs font-normal">n={g.n}</div></th>)}</tr></thead>
         <tbody>
           {v.items.map((it) => {
             const vals = groups.map((g) => it.byGroup[g.name]?.aPct).filter((x): x is number => x != null);
             const hi = Math.max(...vals), lo = Math.min(...vals);
             return (
               <tr key={it.label} className="border-t border-border">
-                <td className="py-1.5 pr-3">{it.label}{!v.labelA && <span className="text-fg-3"> · {it.a}</span>}</td>
+                <td className="py-1.5 pr-3">{it.label} <span className="text-fg-3">· {it.a}</span></td>
                 <td className="tabular py-1.5 pr-3 text-right">{fmt.pct(it.aPct)}</td>
                 {groups.map((g) => {
                   const x = it.byGroup[g.name]?.aPct;
