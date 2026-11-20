@@ -80,7 +80,7 @@ select 'tribu', 'TU TRIBU', 'draft', (select id from economy.seasons where statu
     'reveal', $reveal$
 {
   "label": "Tu tribu",
-  "prize": {"title": "LOLLAPALOOZA", "lines": ["1 FULL PASS", "2 DAY PASS"], "drawDate": "10-12-26", "ticketsPerChance": 100},
+  "prize": {"title": "LOLLAPALOOZA", "lines": ["3 ENTRADAS DE 1 DÍA"], "drawDate": "10-12-26", "ticketsPerChance": 100},
   "title": "Sin tribu",
   "description": "No encajás en ninguna. Eso también es una tribu.",
   "archetypes": [
