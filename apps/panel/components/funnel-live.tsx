@@ -56,7 +56,7 @@ export function FunnelLive({ initial }: { initial: FunnelData }) {
                   return (
                     <li key={s.key}>
                       <div className="mb-1 flex items-baseline justify-between gap-2 text-sm">
-                        <span className="text-fg-2">{s.label}</span>
+                        <span className="text-fg-2">{s.label}{s.meta && <span className="ml-2 rounded bg-sunken px-1.5 py-0.5 font-mono text-[11px] text-fg-3" title="Evento del Pixel de Meta">Meta · {s.meta}</span>}</span>
                         <span className="tabular-nums"><b>{s.n}</b>{i > 0 && <span className="text-fg-3"> · {pct(s.n, prev)}%</span>}{lost > 0 && <span className="text-warning"> · −{lost}</span>}</span>
                       </div>
                       <div className="h-2.5 w-full overflow-hidden rounded-full bg-sunken"><div className="h-full rounded-full bg-fg transition-all" style={{ width: `${pct(s.n, top)}%` }} /></div>

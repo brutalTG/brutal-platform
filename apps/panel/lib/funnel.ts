@@ -10,7 +10,8 @@
 import { from } from './db';
 
 export type FunnelWindow = '1h' | 'hoy' | '7d';
-export type FunnelStep = { key: string; label: string; n: number };
+/** meta: el evento del Pixel de Meta que corresponde a este paso, para comparar con el Administrador de eventos. */
+export type FunnelStep = { key: string; label: string; n: number; meta?: string };
 export type FunnelChannel = { channel: string; label: string; steps: FunnelStep[]; liveNow: number };
 export type FunnelData = {
   at: string;
@@ -101,11 +102,11 @@ export async function funnelData(win: FunnelWindow = 'hoy'): Promise<FunnelData>
         channel, label: channelLabel(channel), liveNow: count(isLive),
         steps: [
           { key: 'in', label: first, n: list.length },
-          { key: 'intro', label: 'Vieron la placa', n: count((n) => has(n, 'intro_view') || has(n, 'intro_enter') || onboarded(n)) },
+          { key: 'intro', label: 'Vieron la placa', meta: 'ViewContent', n: count((n) => has(n, 'intro_view') || has(n, 'intro_enter') || onboarded(n)) },
           { key: 'enter', label: 'Tocaron ENTRO', n: count((n) => has(n, 'intro_enter') || onboarded(n)) },
-          { key: 'onb', label: 'Terminaron el onboarding', n: count(onboarded) },
+          { key: 'onb', label: 'Terminaron el onboarding', meta: 'CompleteRegistration', n: count(onboarded) },
           { key: 'start', label: 'Empezaron el Drop', n: count(started) },
-          { key: 'done', label: 'Terminaron el Drop', n: count(done) },
+          { key: 'done', label: 'Terminaron el Drop', meta: 'Lead', n: count(done) },
           { key: 'claim', label: 'Reclamaron por WhatsApp', n: count((n) => claimers.has(n.id)) },
         ],
       };
