@@ -24,7 +24,7 @@ export default async function InstrumentResults({ params, searchParams }: { para
   let data: Awaited<ReturnType<typeof loadInstrument>>;
   try { data = await loadInstrument(app, id); } catch (e) { return <ErrorNotice message={e instanceof Error ? e.message : 'Error'} />; }
   const { obs, facts, meta, name, study } = data;
-  const blocks = summarize(obs, facts, meta, opt);
+  const blocks = summarize(obs, facts, meta, { ...opt, groupRafaga: true });
   const reports = await listReportsFor(app, id);
   const pairs = signalPairs(obs, facts, meta, opt);
   const counted = obs.filter((o) => !o.context?.test && (opt.includeArchived || facts.get(o.pseudonym_id)?.status !== 'archived'));

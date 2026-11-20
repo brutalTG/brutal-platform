@@ -95,6 +95,14 @@ export async function loadInstrument(app: string, id: string) {
           optionA: ct.optionA ?? null, optionB: ct.optionB ?? null,
           itemLabels: Array.isArray(ct.items) ? ct.items.map((it: any, i: number) => it?.text ?? it?.trigger?.text ?? (it?.trigger?.type ? `${it.trigger.type === 'video' ? 'Video' : 'Imagen'} ${i + 1}` : `Ítem ${i + 1}`)) : undefined,
           signalPairId: q.signal_pair_id, signalPairRole: q.signal_pair_role,
+          key: q.label ?? null, refLabel: ct.ref ?? null,
+          labelA: ct.labelA ?? null, labelB: ct.labelB ?? null,
+          itemOptions: Array.isArray(ct.items) && ct.items.some((it: any) => it?.interaction) ? ct.items.map((it: any) => {
+            const x = it?.interaction ?? {};
+            return [String(x.emojiA ?? x.buttonA ?? it?.optionA ?? 'A'), String(x.emojiB ?? x.buttonB ?? it?.optionB ?? 'B')] as [string, string];
+          }) : undefined,
+          ...(typeof ct.min === 'number' ? { min: ct.min } : {}), ...(typeof ct.max === 'number' ? { max: ct.max } : {}),
+          labelLeft: ct.labelLeft ?? null, labelRight: ct.labelRight ?? null,
         });
       }
     }
