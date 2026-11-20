@@ -516,8 +516,40 @@ export function webClaimText(r: WebClaimReply) {
   const what = prizePhrase(r.prize);
   const prize = what ? `Premio: ${what}.${r.prize?.drawDate ? ` Sorteo el ${r.prize.drawDate}.` : ''}` : r.prize?.drawDate ? `Sorteo el ${r.prize.drawDate}.` : null;
   const rules = `${per} tickets = 1 chance. Al ganador le avisamos por acá, por WhatsApp.`;
-  const cta = `¿Querés más chances? Por cada amigo que juegue el Drop desde tu link sumás +${r.referralTickets} tickets:\n${r.inviteUrl}`;
+  const cta = `¿Querés más chances? Por cada amigo que juegue el Drop con tu link sumás +${r.referralTickets} tickets.\n👇 Reenviá el mensaje de abajo a tus grupos, o mandáselo directo a tus amigos desde acá:\n${shareUrl(r.inviteUrl)}`;
   return [hi, '', have, ...(prize ? [prize] : []), rules, '', cta, '', 'Para no recibir más mensajes, escribí BAJA.'].join('\n');
+}
+
+/** Segundo mensaje después del reclamo: escrito en primera persona para reenviarlo tal cual.
+ *  La imagen la pone WhatsApp sola (vista previa del link de /jugar). */
+export function shareText(p: { prize: PrizeInfo | null; inviteUrl: string }) {
+  const title = p.prize?.title ? p.prize.title.charAt(0) + p.prize.title.slice(1).toLowerCase() : null;
+  const hook = title ? `3 minutos de preguntas incómodas y entrás al sorteo de entradas para ${title} 🎟` : '3 minutos de preguntas incómodas y sumás chances en el sorteo de BRUTAL 🎟';
+  return `${hook}\nJugá acá 👉 ${p.inviteUrl}`;
+}
+
+/** drops.brutal.lat/compartir?r=… abre WhatsApp para elegir a quién mandárselo, con el texto ya escrito. */
+export function shareUrl(inviteUrl: string) {
+  try {
+    const u = new URL(inviteUrl);
+    const r = u.searchParams.get('r');
+    return r ? `${u.origin}/compartir?r=${encodeURIComponent(r)}` : inviteUrl;
+  } catch {
+    return inviteUrl;
+  }
+}
+
+/** Aviso al que invitó: cuánto suma, cuántas chances lleva y cuánto le falta para la próxima. */
+export function referralText(v: { friend: string | null; tickets: number; total?: number | null; perChance?: number | null }) {
+  const who = v.friend ? `${v.friend} jugó` : 'Un amigo jugó';
+  const head = `🎟 ${who} el Drop con tu link: +${v.tickets} Golden Tickets para vos.`;
+  if (v.total == null || v.total <= 0) return `${head}\nEscribí RANKING para ver cómo vas.`;
+  const per = v.perChance && v.perChance > 0 ? v.perChance : 100;
+  const chances = Math.floor(v.total / per);
+  const missing = per - (v.total % per);
+  const now = `Ya tenés ${v.total.toLocaleString('es-AR')} tickets (${chances} ${chances === 1 ? 'chance' : 'chances'}).`;
+  const next = missing <= v.tickets ? 'Otro amigo y sumás una chance más.' : `Te faltan ${missing} para la próxima chance.`;
+  return `${head}\n${now} ${next}\nSeguí reenviando tu link 👆`;
 }
 
 /** El premio del Drop (reveal.prize) como lo usa el bot. */

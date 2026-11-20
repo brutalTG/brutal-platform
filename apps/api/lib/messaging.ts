@@ -5,7 +5,7 @@ import { newCode, sha256 } from './crypto';
 import { command, inboundGate, render, sendText, type Inbound } from './whatsapp';
 import { claimWebTickets, createDropsLink, livePrize } from './drops';
 import { selectAudience, type Audience, type Candidate } from './launch-rules';
-import { isGuestPhone, parseClaimCode, pitchText, webClaimText, whatsappChannel } from './drops-game';
+import { isGuestPhone, parseClaimCode, pitchText, referralText, shareText, webClaimText, whatsappChannel } from './drops-game';
 
 const cfg = () => ({ mode: env.whatsappMode, endpoint: env.watiEndpoint, token: env.watiToken, channel: env.watiChannel });
 
@@ -69,14 +69,13 @@ export async function queueDropResult(nodeId: string, vars: { drop: string; usd:
 }
 
 /** Al que invitó: un amigo jugó con su link. Fuera de la ventana de 24 h de WhatsApp puede no salir; queda registrado. */
-export async function notifyReferrer(nodeId: string, vars: { friend: string | null; tickets: number }) {
+export async function notifyReferrer(nodeId: string, vars: { friend: string | null; tickets: number; total?: number | null; perChance?: number | null }) {
   const node = await must(from('core', 'nodes').select('phone_e164').eq('id', nodeId).single(), 'nodo') as { phone_e164: string };
   if (isGuestPhone(node.phone_e164)) return null;
   const existing = await must(from('messaging', 'contacts').select('id, opted_out_at').eq('node_id', nodeId).maybeSingle(), 'contacto') as { id: string; opted_out_at: string | null } | null;
   if (existing?.opted_out_at) return null;
   const contactId = existing?.id ?? await contactFor(node.phone_e164, nodeId);
-  const who = vars.friend ? `${vars.friend} jugó` : 'Un amigo jugó';
-  return sendToContact({ id: contactId, phone: node.phone_e164, nodeId }, `${who} el Drop con tu link: +${vars.tickets} Golden Tickets para vos. Escribí RANKING para ver cómo vas.`, 'referral');
+  return sendToContact({ id: contactId, phone: node.phone_e164, nodeId }, referralText(vars), 'referral');
 }
 
 /** Link personal al juego: 48 horas, hasta 5 aperturas. */
@@ -154,6 +153,11 @@ export async function handleInbound(m: Inbound) {
 
   if (claim) {
     await sendToContact(to, webClaimText(claim.reply), 'web_claim');
+    // El mensaje para reenviar va aparte, así se reenvía solo eso (con la vista previa de /jugar).
+    const r = claim.reply;
+    if (r.status === 'credited' || r.status === 'already_yours') {
+      try { await sendToContact(to, shareText({ prize: r.prize, inviteUrl: r.inviteUrl }), 'web_claim_share'); } catch (e) { console.error('mensaje para reenviar', e); }
+    }
     return { handled: true, reply: `web_claim:${claim.reply.status}` };
   }
   if (cmd === 'ranking') {

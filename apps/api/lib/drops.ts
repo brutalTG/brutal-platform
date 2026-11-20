@@ -687,7 +687,11 @@ export async function claimWebTickets(phone: string, code: string): Promise<{ no
       source_type: 'node', source_id: targetId, idempotency_key: `referral:${targetId}`,
     });
     if (!error) {
-      try { await notifyReferrer(referrer, { friend: node.nickname, tickets: REFERRAL_TICKETS }); } catch (e) { console.error('aviso al que invitó', e); }
+      try {
+        const season = await activeSeasonId(d);
+        const r = season ? await must(from('economy', 'season_ranking').select('tickets').eq('season_id', season).eq('node_id', referrer).maybeSingle(), 'tickets') as any : null;
+        await notifyReferrer(referrer, { friend: node.nickname, tickets: REFERRAL_TICKETS, total: r ? Math.round(Number(r.tickets) || 0) : null, perChance: prizeInfo(d.config)?.ticketsPerChance });
+      } catch (e) { console.error('aviso al que invitó', e); }
     } else if (!error.message.includes('idempotency_key')) console.error('premio por invitar', error.message);
   }
 
