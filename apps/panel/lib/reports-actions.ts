@@ -10,19 +10,31 @@ import { compactForAi, GUIDE, KIND_LABEL, type ReportKind } from '@/lib/reports'
 type R<T = {}> = ({ ok: true } & T) | { ok: false; error: string };
 const UUID = /^[0-9a-f-]{36}$/i;
 
+/** La IA que lee resultados: OpenRouter si está OPENROUTER_API_KEY (modelo anthropic/claude-opus-5.5), si no la API de Anthropic.
+ *  AI_MODEL cambia el modelo (ej. anthropic/claude-sonnet-5.5, más barato). */
 async function claude(system: string, user: string, maxTokens = 4000): Promise<R<{ text: string }>> {
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) return { ok: false, error: 'Falta la clave de IA. Cargá ANTHROPIC_API_KEY en el proyecto del panel en Vercel y volvé a publicarlo.' };
+  const openrouter = process.env.OPENROUTER_API_KEY;
+  const anthropic = process.env.ANTHROPIC_API_KEY;
+  if (!openrouter && !anthropic) return { ok: false, error: 'Falta la clave de IA. Cargá OPENROUTER_API_KEY en el proyecto brutal-panel de Vercel y volvé a publicarlo.' };
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-      body: JSON.stringify({ model: process.env.ANTHROPIC_MODEL || 'claude-opus-5-5', max_tokens: maxTokens, system, messages: [{ role: 'user', content: user }] }),
-      signal: AbortSignal.timeout(170_000),
-    });
+    const res = openrouter
+      ? await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: { authorization: `Bearer ${openrouter}`, 'content-type': 'application/json', 'x-title': 'BRUTAL panel' },
+          body: JSON.stringify({ model: process.env.AI_MODEL || 'anthropic/claude-opus-5.5', max_tokens: maxTokens, messages: [{ role: 'system', content: system }, { role: 'user', content: user }] }),
+          signal: AbortSignal.timeout(170_000),
+        })
+      : await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: { 'x-api-key': anthropic!, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+          body: JSON.stringify({ model: process.env.AI_MODEL || process.env.ANTHROPIC_MODEL || 'claude-opus-5-5', max_tokens: maxTokens, system, messages: [{ role: 'user', content: user }] }),
+          signal: AbortSignal.timeout(170_000),
+        });
     const data: any = await res.json().catch(() => ({}));
-    if (!res.ok) return { ok: false, error: `La IA respondió ${res.status}: ${String(data?.error?.message ?? '').slice(0, 200)}` };
-    const text = (data.content ?? []).filter((c: any) => c.type === 'text').map((c: any) => c.text).join('\n').trim();
+    if (!res.ok || data?.error) return { ok: false, error: `La IA respondió ${res.status}: ${String(data?.error?.message ?? '').slice(0, 200)}` };
+    const text = openrouter
+      ? String(data?.choices?.[0]?.message?.content ?? '').trim()
+      : (data.content ?? []).filter((c: any) => c.type === 'text').map((c: any) => c.text).join('\n').trim();
     return text ? { ok: true, text } : { ok: false, error: 'La IA no devolvió texto.' };
   } catch (e) {
     return { ok: false, error: e instanceof Error && e.name === 'TimeoutError' ? 'La IA tardó demasiado. Probá de nuevo.' : 'No pude hablar con la IA.' };

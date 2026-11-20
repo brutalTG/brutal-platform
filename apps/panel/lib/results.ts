@@ -31,6 +31,18 @@ export type StimulusMeta = {
   signalPairId?: string | null;
   signalPairRole?: string | null;
   cardType?: string | null;
+  /** Ráfagas: las dos opciones de cada ítem (emoji o botón), y las etiquetas generales (VOY / NO VOY). */
+  itemOptions?: [string, string][];
+  labelA?: string | null;
+  labelB?: string | null;
+  /** Predicción: la etiqueta de la carta a la que apunta (content.ref) y la etiqueta interna de cada carta. */
+  refLabel?: string | null;
+  key?: string | null;
+  /** Escala: extremos y sus etiquetas. */
+  min?: number;
+  max?: number;
+  labelLeft?: string | null;
+  labelRight?: string | null;
 };
 
 export type Cut = 'none' | 'edad' | 'genero' | 'zona' | 'menor';
@@ -65,13 +77,22 @@ const PRESSURE_WORDS: Record<string, string> = { yes: 'Sí', no: 'No', agree: 'D
 /** Clave de la pregunta: las repreguntas y toques del detector cuelgan de la misma pregunta. */
 export const baseStimulus = (id: string | null) => (id ?? 'sin-id').replace(/:(tap|follow)$/, '');
 
+/** Las ráfagas de emoji guardan "A" / "B": se muestra el emoji del ítem y la etiqueta general (🙋 VOY). */
+function letterLabel(c: string, i: number, meta?: StimulusMeta) {
+  if (c !== 'A' && c !== 'B') return c.trim() || '—';
+  const side = c === 'A' ? 0 : 1;
+  const emoji = meta?.itemOptions?.[i]?.[side]?.trim();
+  const word = side === 0 ? meta?.labelA : meta?.labelB;
+  return [emoji, word?.trim()].filter(Boolean).join(' ') || c;
+}
+
 export type Answer = { label: string; stated?: string; lied?: boolean };
 
 /** Qué respondió, en palabras. Puede devolver varias (una ráfaga es una respuesta por ítem). */
 export function answersOf(o: Obs, meta?: StimulusMeta): { item?: number; a: Answer }[] {
   const v = o.value ?? {};
   // Ráfaga de Drops: una elección por ítem.
-  if (Array.isArray(v.choices)) return v.choices.map((c: unknown, i: number) => ({ item: i, a: { label: String(c ?? '—') } }));
+  if (Array.isArray(v.choices)) return v.choices.map((c: unknown, i: number) => ({ item: i, a: { label: letterLabel(String(c ?? '—'), i, meta) } }));
   // Detector: lo dicho y lo verdadero (si mintió en una binaria, la verdad es la otra).
   if ('committed' in v || 'stated' in v) {
     const word = (k: string | null) => {
@@ -89,6 +110,7 @@ export function answersOf(o: Obs, meta?: StimulusMeta): { item?: number; a: Answ
   if (o.kind === 'ranking' && Array.isArray(v.order)) return [{ a: { label: v.order.join(' > ') } }];
   if (o.kind === 'behavior') return [{ a: { label: v.viewed ? 'Vio la carta' : 'No respondió a tiempo' } }];
   if (o.kind === 'text') return [{ a: { label: v.submitted ? 'Escribió' : 'No escribió' } }];
+  if (v.outcome != null) return [{ a: { label: String(v.outcome) } }];
   if (o.value_text) return [{ a: { label: o.value_text } }];
   if (v.option != null) return [{ a: { label: String(v.option) } }];
   if (v.side) return [{ a: { label: v.side === 'A' ? meta?.optionA || 'A' : meta?.optionB || 'B' } }];
@@ -110,7 +132,18 @@ export type Block = {
   statedVsTruth?: { label: string; stated: number; truth: number }[];
   mean?: number | null;
   transcripts?: string[];
+  /** Cómo mostrarla según el tipo de pregunta (si no hay, la lista de respuestas de siempre). */
+  view?: View;
 };
+
+export type RankItem = { label: string; avgPos: number; firstPct: number; lastPct: number; byGroup: Record<string, number> };
+export type SplitItem = { label: string; a: string; b: string; n: number; aPct: number; medianMs: number | null; byGroup: Record<string, { n: number; aPct: number }> };
+export type View =
+  | { type: 'ranking'; size: number; items: RankItem[] }
+  | { type: 'split'; labelA: string | null; labelB: string | null; items: SplitItem[] }
+  | { type: 'scale'; min: number; max: number; labelLeft: string | null; labelRight: string | null; buckets: { from: number; to: number; n: number; pct: number }[];
+      mean: number; median: number; p25: number; p75: number; byGroup: Record<string, { n: number; mean: number; median: number }> }
+  | { type: 'market'; ref: string | null; rows: { label: string; predictedPct: number; realPct: number | null }[]; realMajority: string | null; hitPct: number | null; realN: number };
 
 const median = (xs: number[]) => {
   if (!xs.length) return null;
@@ -119,7 +152,80 @@ const median = (xs: number[]) => {
 };
 const pct = (n: number, d: number) => (d > 0 ? Math.round((1000 * n) / d) / 10 : 0);
 
-export type Options = { cut: Cut; includeLies?: boolean; includeTrapFailed?: boolean; includeArchived?: boolean };
+export type Options = { cut: Cut; includeLies?: boolean; includeTrapFailed?: boolean; includeArchived?: boolean;
+  /** Para el panel: una ráfaga es un solo bloque con todos sus ítems (los informes y la planilla siguen ítem por ítem). */
+  groupRafaga?: boolean };
+
+const quantile = (sorted: number[], q: number) => {
+  if (!sorted.length) return 0;
+  const i = (sorted.length - 1) * q, lo = Math.floor(i), hi = Math.ceil(i);
+  return Math.round((sorted[lo] + (sorted[hi] - sorted[lo]) * (i - lo)) * 10) / 10;
+};
+const avg = (xs: number[]) => (xs.length ? Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10) / 10 : 0);
+const clean = (x: unknown) => String(x ?? '').trim();
+
+/** Ordenar: posición promedio de cada opción (1 = arriba), cuántos la pusieron primera y cuántos última. */
+function rankingView(entries: { o: Obs; group: string }[], options?: string[]): View | undefined {
+  const orders = entries.map((e) => ({ order: Array.isArray(e.o.value?.order) ? (e.o.value.order as unknown[]).map(clean) : [], group: e.group })).filter((x) => x.order.length);
+  if (!orders.length) return undefined;
+  const labels = options?.length ? options.map(clean) : [...new Set(orders.flatMap((x) => x.order))];
+  const size = Math.max(labels.length, ...orders.map((x) => x.order.length));
+  const items: RankItem[] = labels.map((label) => {
+    const pos = orders.map((x) => ({ p: x.order.indexOf(label), g: x.group, len: x.order.length })).filter((x) => x.p >= 0);
+    const byGroup: Record<string, number[]> = {};
+    for (const x of pos) (byGroup[x.g] ??= []).push(x.p + 1);
+    return {
+      label,
+      avgPos: avg(pos.map((x) => x.p + 1)),
+      firstPct: pct(pos.filter((x) => x.p === 0).length, orders.length),
+      lastPct: pct(pos.filter((x) => x.p === x.len - 1).length, orders.length),
+      byGroup: Object.fromEntries(Object.entries(byGroup).map(([g, xs]) => [g, avg(xs)])),
+    };
+  });
+  return { type: 'ranking', size, items: items.sort((a, b) => a.avgPos - b.avgPos) };
+}
+
+/** Ráfaga: por ítem, qué parte eligió la primera opción. */
+function splitView(entries: { o: Obs; group: string }[], m?: StimulusMeta): View | undefined {
+  const lists = entries.map((e) => ({ choices: Array.isArray(e.o.value?.choices) ? (e.o.value.choices as unknown[]).map(clean) : [], lat: e.o.value?.meta?.item_latency_ms as number[] | undefined, group: e.group }));
+  const count = Math.max(m?.itemLabels?.length ?? 0, ...lists.map((x) => x.choices.length));
+  if (!count) return undefined;
+  const items: SplitItem[] = [];
+  for (let i = 0; i < count; i++) {
+    const [oa, ob] = (m?.itemOptions?.[i] ?? ['A', 'B']).map(clean);
+    const sideOf = (c: string) => (c === 'A' || c === oa ? 'A' : c === 'B' || c === ob ? 'B' : null);
+    const got = lists.map((x) => ({ side: x.choices[i] != null ? sideOf(x.choices[i]) : null, ms: x.lat?.[i], group: x.group })).filter((x) => x.side);
+    if (!got.length) continue;
+    const byGroup: SplitItem['byGroup'] = {};
+    for (const x of got) { const g = (byGroup[x.group] ??= { n: 0, aPct: 0 }); g.n++; if (x.side === 'A') g.aPct++; }
+    for (const g of Object.values(byGroup)) g.aPct = pct(g.aPct, g.n);
+    items.push({
+      label: m?.itemLabels?.[i] ?? `Ítem ${i + 1}`,
+      a: letterLabel('A', i, m), b: letterLabel('B', i, m),
+      n: got.length, aPct: pct(got.filter((x) => x.side === 'A').length, got.length),
+      medianMs: median(got.map((x) => x.ms).filter((x): x is number => typeof x === 'number')), byGroup,
+    });
+  }
+  return { type: 'split', labelA: m?.labelA ?? null, labelB: m?.labelB ?? null, items };
+}
+
+/** Escala: en tramos de a 10, con promedio, mediana y dónde está la mitad del medio. */
+function scaleView(entries: { o: Obs; group: string }[], m?: StimulusMeta): View | undefined {
+  const vals = entries.map((e) => ({ v: Number(e.o.value_number ?? e.o.value?.value), g: e.group })).filter((x) => Number.isFinite(x.v));
+  if (!vals.length) return undefined;
+  const min = m?.min ?? 0, max = m?.max ?? 100, step = Math.max(1, (max - min) / 10);
+  const buckets = Array.from({ length: 10 }, (_, i) => ({ from: Math.round(min + i * step), to: Math.round(min + (i + 1) * step), n: 0, pct: 0 }));
+  for (const x of vals) buckets[Math.min(9, Math.max(0, Math.floor((x.v - min) / step)))].n++;
+  for (const b of buckets) b.pct = pct(b.n, vals.length);
+  const sorted = vals.map((x) => x.v).sort((a, b) => a - b);
+  const byGroup: Record<string, number[]> = {};
+  for (const x of vals) (byGroup[x.g] ??= []).push(x.v);
+  return {
+    type: 'scale', min, max, labelLeft: m?.labelLeft ?? null, labelRight: m?.labelRight ?? null, buckets,
+    mean: avg(sorted), median: quantile(sorted, 0.5), p25: quantile(sorted, 0.25), p75: quantile(sorted, 0.75),
+    byGroup: Object.fromEntries(Object.entries(byGroup).map(([g, xs]) => [g, { n: xs.length, mean: avg(xs), median: quantile([...xs].sort((a, b) => a - b), 0.5) }])),
+  };
+}
 
 /** Observaciones que cuentan: sin pruebas, sin automáticas; mentiras y trampas según el filtro. */
 export function usable(o: Obs, f: Facts | undefined, opt: Options) {
@@ -155,6 +261,19 @@ export function summarize(obs: Obs[], facts: Map<string, Facts>, meta: Map<strin
     const lied = list.filter((x) => x.ans.some((a) => a.a.lied)).length;
     const trapFailed = list.filter((x) => x.o.quality === 'trap_failed').length;
 
+    if (isRafaga && opt.groupRafaga) {
+      const entries = list.map((x) => ({ o: x.o, group: groupOf(x.f, opt.cut) }));
+      const view = splitView(entries, m);
+      if (view) {
+        const groupCount = new Map<string, number>();
+        for (const e of entries) groupCount.set(e.group, (groupCount.get(e.group) ?? 0) + 1);
+        blocks.push({
+          key, title: String(prompt), format: m?.format ?? first.stimulus?.format, kind: first.kind, n: entries.length, lied, trapFailed, rows: [],
+          groups: [...groupCount.entries()].map(([name, c]) => ({ name, n: c })).sort((a, b) => a.name.localeCompare(b.name)), view,
+        });
+        continue;
+      }
+    }
     for (let item = 0; item < (isRafaga ? items : 1); item++) {
       const entries = list.flatMap((x) => {
         const a = isRafaga ? x.ans.find((y) => y.item === item) : x.ans[0];
@@ -200,8 +319,33 @@ export function summarize(obs: Obs[], facts: Map<string, Facts>, meta: Map<strin
         ...(statedVsTruth ? { statedVsTruth } : {}),
         ...(nums.length ? { mean: Math.round((nums.reduce((a, b) => a + b, 0) / nums.length) * 10) / 10 } : {}),
         ...(transcripts.length ? { transcripts } : {}),
+        ...(() => {
+          if (isRafaga) return {};
+          const fmtName = m?.format ?? first.stimulus?.format;
+          const view = first.kind === 'ranking' || fmtName === 'ranking' ? rankingView(entries, m?.options)
+            : first.kind === 'scale' || fmtName === 'slider' ? scaleView(entries, m)
+            : undefined;
+          return view ? { view } : {};
+        })(),
       });
     }
+  }
+  // Predicción: lo que creen que eligió la mayoría al lado de lo que eligieron de verdad en la carta a la que apunta.
+  for (const b of blocks) {
+    const m = meta.get(b.key);
+    if ((m?.format ?? b.format) !== 'market') continue;
+    const refId = m?.refLabel ? [...meta.entries()].find(([, x]) => x.key === m.refLabel)?.[0] ?? null : null;
+    const ref = refId ? blocks.find((x) => x.key === refId) : undefined;
+    const realN = ref?.n ?? 0;
+    const labels = [...(refId ? meta.get(refId)?.options ?? [] : []), ...(ref ? ref.rows.map((r) => r.label) : [])];
+    labels.splice(0, labels.length, ...new Set(labels));
+    for (const r of b.rows) if (!labels.includes(r.label)) labels.push(r.label);
+    const realMajority = ref?.rows.length ? [...ref.rows].sort((x, y) => y.n - x.n)[0].label : null;
+    b.view = {
+      type: 'market', ref: ref?.title ?? null, realN, realMajority,
+      hitPct: realMajority ? b.rows.find((r) => r.label === realMajority)?.pct ?? 0 : null,
+      rows: labels.map((label) => ({ label, predictedPct: b.rows.find((r) => r.label === label)?.pct ?? 0, realPct: ref ? ref.rows.find((r) => r.label === label)?.pct ?? 0 : null })),
+    };
   }
   const orderOf = (b: Block) => {
     const k = b.key.split('#')[0];

@@ -1,45 +1,31 @@
-'use client';
-
-import * as React from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { FileText, Sparkles } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Download, FileText } from 'lucide-react';
 import { Card } from '@/components/ui/primitives';
-import { useToast } from '@/components/ui/toast';
-import { readResults } from '@/lib/reports-actions';
 import { KIND_LABEL, STATUS_LABEL, type ReportKind } from '@/lib/reports';
 import { fmt } from '@/lib/utils';
 
-export function ReportsPanel({ app, instrumentId, hasStudy, hasData, reports }: {
-  app: string; instrumentId: string; hasStudy: boolean; hasData: boolean;
+/** Bajar resultados: el archivo para pasarle a Claude y la planilla de Excel (mismos filtros que la pantalla). */
+export function ReportsPanel({ app, instrumentId, hasData, query, reports }: {
+  app: string; instrumentId: string; hasData: boolean; query: string;
   reports: { id: string; kind: ReportKind; title: string; status: string; author: string; created_at: string }[];
 }) {
-  const [busy, setBusy] = React.useState(false);
-  const toast = useToast();
-  const router = useRouter();
-
-  async function read() {
-    setBusy(true);
-    const r = await readResults(app, instrumentId).catch(() => ({ ok: false as const, error: 'Se cortó la conexión.' }));
-    setBusy(false);
-    if (!r.ok) return toast.show(r.error, 'error');
-    toast.show('Listo: borrador de hallazgos guardado.');
-    router.push(`/informes/${r.id}`);
-  }
-
+  const base = `/resultados/${app}/${encodeURIComponent(instrumentId)}/bajar?${query}`;
+  const btn = 'inline-flex h-9 items-center gap-1.5 rounded border border-border-strong bg-surface px-3 text-sm font-medium hover:bg-sunken';
   return (
     <Card className="mt-6">
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
         <div className="min-w-0">
-          <div className="font-medium">Lectura e informe</div>
+          <div className="font-medium">Bajar resultados</div>
           <div className="text-sm text-fg-3">
-            La IA cruza estos resultados {hasStudy ? 'contra la tesis del estudio' : '(sin estudio asociado: va a proponer una tesis)'} y deja un borrador que editás. De ahí sale el Black Brief o la pieza.
+            El archivo para Claude trae cada pregunta con su resultado y los cortes por edad, género y zona: subilo al chat y pedile la lectura. El Excel tiene el resumen, los cortes, quiénes respondieron y una fila por respuesta.
           </div>
         </div>
-        <Button variant="primary" icon={<Sparkles />} loading={busy} disabled={!hasData} onClick={read}>
-          {busy ? 'Leyendo… (hasta 2 min)' : 'Leer resultados'}
-        </Button>
+        {hasData ? (
+          <div className="flex flex-wrap gap-2">
+            <a href={`${base}&formato=claude`} className={btn} download><Download className="size-4" /> Archivo para Claude</a>
+            <a href={`${base}&formato=excel`} className={btn} download><Download className="size-4" /> Excel</a>
+          </div>
+        ) : <span className="text-sm text-fg-3">Todavía no hay respuestas.</span>}
       </div>
       {reports.length > 0 && (
         <ul className="border-t border-border">

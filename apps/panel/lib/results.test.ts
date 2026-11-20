@@ -74,3 +74,66 @@ test('planilla sin datos personales y con comillas cuando hace falta', () => {
   assert.ok(row.includes('"A, claro"'));
   assert.ok(!csv.includes('+549'));
 });
+
+test('ordenar: posición promedio, primero y último por opción', () => {
+  const rk = new Map<string, StimulusMeta>([['k', { label: 'Tier list', format: 'ranking', options: ['Rock', 'Pop', 'Cumbia'] }]]);
+  const obs = [
+    o('p1', 'k', { order: ['Rock', 'Pop', 'Cumbia'] }, { kind: 'ranking' }),
+    o('p2', 'k', { order: ['Pop', 'Rock', 'Cumbia'] }, { kind: 'ranking' }),
+  ];
+  const [b] = summarize(obs, facts, rk, { cut: 'none' });
+  assert.equal(b.view?.type, 'ranking');
+  if (b.view?.type !== 'ranking') return;
+  assert.deepEqual(b.view.items.map((i) => [i.label, i.avgPos, i.firstPct, i.lastPct]), [['Rock', 1.5, 50, 0], ['Pop', 1.5, 50, 0], ['Cumbia', 3, 0, 100]]);
+});
+
+test('ráfaga agrupada: un bloque, % de la primera opción por ítem (con espacios y letras)', () => {
+  const rm = new Map<string, StimulusMeta>([
+    ['e', { label: '¿Vas?', labelA: 'VOY', labelB: 'NO VOY', itemLabels: ['Peña', 'After'] }],
+    ['b', { label: 'Elegí', itemLabels: ['Twitch'], itemOptions: [['👍 ', '👎']] }],
+  ]);
+  const obs = [
+    o('p1', 'e', { choices: ['A', 'B'] }), o('p2', 'e', { choices: ['A', 'A'] }),
+    o('p1', 'b', { choices: ['👍'] }), o('p2', 'b', { choices: ['👎'] }),
+  ];
+  const blocks = summarize(obs, facts, rm, { cut: 'none', groupRafaga: true });
+  assert.equal(blocks.length, 2);
+  const e = blocks.find((x) => x.key === 'e')!.view;
+  assert.equal(e?.type, 'split');
+  if (e?.type === 'split') assert.deepEqual(e.items.map((i) => [i.label, i.a, i.aPct]), [['Peña', 'VOY', 100], ['After', 'VOY', 50]]);
+  const bb = blocks.find((x) => x.key === 'b')!.view;
+  if (bb?.type === 'split') assert.deepEqual(bb.items.map((i) => [i.a, i.aPct]), [['👍', 50]]);
+});
+
+test('escala: tramos, promedio y mediana', () => {
+  const sm = new Map<string, StimulusMeta>([['s', { label: '0 a 100', format: 'slider', min: 0, max: 100 }]]);
+  const obs = [10, 20, 30, 95].map((v, i) => o(['p1', 'p2', 'p1', 'p2'][i], 's', { value: v }, { kind: 'scale', value_number: v }));
+  const [b] = summarize(obs, facts, sm, { cut: 'none' });
+  if (b.view?.type !== 'scale') return assert.fail('sin vista de escala');
+  assert.equal(b.view.mean, 38.8);
+  assert.equal(b.view.median, 25);
+  assert.equal(b.view.buckets[9].n, 1);
+});
+
+test('predicción: lo que creen vs lo que eligieron en la carta a la que apunta', () => {
+  const mm = new Map<string, StimulusMeta>([
+    ['q', { label: '¿Cita?', key: 'cita', options: ['Sigo', 'Chau'], order: 0 }],
+    ['m', { label: '¿Qué eligió la mayoría?', format: 'market', refLabel: 'cita', order: 1 }],
+  ]);
+  const obs = [
+    o('p1', 'q', { option: 'Chau' }), o('p2', 'q', { option: 'Chau' }),
+    o('p1', 'm', { outcome: 'Sigo' }, { kind: 'bet', value_text: null }), o('p2', 'm', { outcome: 'Chau' }, { kind: 'bet', value_text: null }),
+  ];
+  const b = summarize(obs, facts, mm, { cut: 'none' }).find((x) => x.key === 'm')!;
+  if (b.view?.type !== 'market') return assert.fail('sin vista de predicción');
+  assert.equal(b.view.realMajority, 'Chau');
+  assert.equal(b.view.hitPct, 50);
+  assert.deepEqual(b.view.rows.map((r) => [r.label, r.predictedPct, r.realPct]), [['Sigo', 50, 0], ['Chau', 50, 100]]);
+});
+
+test('ráfaga de emoji: A/B se muestran como el emoji del ítem y su etiqueta', () => {
+  const em = new Map<string, StimulusMeta>([['e', { label: 'Stalkeo', labelA: 'SIGO', labelB: 'VISTO', itemLabels: ['Cripto'], itemOptions: [['❤️', '👀']] }]]);
+  assert.equal(answersOf(o('p1', 'e', { choices: ['B'] }), em.get('e'))[0].a.label, '👀 VISTO');
+  const [b] = summarize([o('p1', 'e', { choices: ['A'] })], facts, em, { cut: 'none', groupRafaga: true });
+  if (b.view?.type === 'split') assert.deepEqual([b.view.items[0].a, b.view.items[0].b], ['❤️ SIGO', '👀 VISTO']);
+});
