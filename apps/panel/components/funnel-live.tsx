@@ -43,31 +43,24 @@ export function FunnelLive({ initial }: { initial: FunnelData }) {
       {data.error && <p className="rounded-md border border-border bg-sunken px-3 py-2 text-sm text-warning">No pude leer los datos: {data.error}</p>}
       {!data.error && data.channels.length === 0 && <Card><p className="px-4 py-8 text-center text-sm text-fg-3">Todavía no entró nadie nuevo en esta ventana.</p></Card>}
 
-      <div className="grid gap-4 md:grid-cols-2">
-        {data.channels.map((c) => {
-          const top = c.steps[0]?.n || 1;
-          return (
-            <Card key={c.channel}>
-              <CardHeader title={c.label} description={`${c.steps[0]?.n ?? 0} personas nuevas${c.liveNow ? ` · ${c.liveNow} jugando ahora` : ''}`} />
-              <ol className="flex flex-col gap-2.5 px-4 py-4">
-                {c.steps.map((s, i) => {
-                  const prev = i > 0 ? c.steps[i - 1].n : s.n;
-                  const lost = i > 0 ? prev - s.n : 0;
-                  return (
-                    <li key={s.key}>
-                      <div className="mb-1 flex items-baseline justify-between gap-2 text-sm">
-                        <span className="text-fg-2">{s.label}{s.meta && <span className="ml-2 rounded bg-sunken px-1.5 py-0.5 font-mono text-[11px] text-fg-3" title="Evento del Pixel de Meta">Meta · {s.meta}</span>}</span>
-                        <span className="tabular-nums"><b>{s.n}</b>{i > 0 && <span className="text-fg-3"> · {pct(s.n, prev)}%</span>}{lost > 0 && <span className="text-warning"> · −{lost}</span>}</span>
-                      </div>
-                      <div className="h-2.5 w-full overflow-hidden rounded-full bg-sunken"><div className="h-full rounded-full bg-fg transition-all" style={{ width: `${pct(s.n, top)}%` }} /></div>
-                    </li>
-                  );
-                })}
-              </ol>
-            </Card>
-          );
-        })}
-      </div>
+      {(['ads', 'organic'] as const).map((k) => {
+        const list = data.channels.filter((c) => c.kind === k);
+        if (!list.length) return null;
+        return (
+          <section key={k} className="flex flex-col gap-2">
+            <h2 className="text-sm font-semibold text-fg-2">{k === 'ads' ? 'Tus anuncios' : 'Sin anuncio'}</h2>
+            <Channels list={list} />
+          </section>
+        );
+      })}
+      {data.channels.some((c) => c.kind === 'internal') && (
+        <details className="rounded-md border border-border px-4 py-3">
+          <summary className="cursor-pointer text-sm text-fg-3">
+            Pruebas internas ({data.channels.filter((c) => c.kind === 'internal').reduce((a, c) => a + (c.steps[0]?.n ?? 0), 0)} personas) — no son gente de los anuncios
+          </summary>
+          <div className="mt-3"><Channels list={data.channels.filter((c) => c.kind === 'internal')} /></div>
+        </details>
+      )}
 
       {data.onboardingDrop.length > 0 && (
         <Card>
@@ -98,5 +91,35 @@ function Rows({ rows }: { rows: { key: string; label: string; reached: number; l
         </li>
       ))}
     </ol>
+  );
+}
+
+function Channels({ list }: { list: FunnelData['channels'] }) {
+  return (
+        <div className="grid gap-4 md:grid-cols-2">
+          {list.map((c) => {
+            const top = c.steps[0]?.n || 1;
+            return (
+              <Card key={c.channel}>
+                <CardHeader title={c.label} description={`${c.steps[0]?.n ?? 0} personas nuevas${c.liveNow ? ` · ${c.liveNow} jugando ahora` : ''}`} />
+                <ol className="flex flex-col gap-2.5 px-4 py-4">
+                  {c.steps.map((s, i) => {
+                    const prev = i > 0 ? c.steps[i - 1].n : s.n;
+                    const lost = i > 0 ? prev - s.n : 0;
+                    return (
+                      <li key={s.key}>
+                        <div className="mb-1 flex items-baseline justify-between gap-2 text-sm">
+                          <span className="text-fg-2">{s.label}{s.meta && <span className="ml-2 rounded bg-sunken px-1.5 py-0.5 font-mono text-[11px] text-fg-3" title="Evento del Pixel de Meta">Meta · {s.meta}</span>}</span>
+                          <span className="tabular-nums"><b>{s.n}</b>{i > 0 && <span className="text-fg-3"> · {pct(s.n, prev)}%</span>}{lost > 0 && <span className="text-warning"> · −{lost}</span>}</span>
+                        </div>
+                        <div className="h-2.5 w-full overflow-hidden rounded-full bg-sunken"><div className="h-full rounded-full bg-fg transition-all" style={{ width: `${pct(s.n, top)}%` }} /></div>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </Card>
+            );
+          })}
+        </div>
   );
 }
