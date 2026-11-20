@@ -19,6 +19,7 @@ export default async function InstrumentResults({ params, searchParams }: { para
   const id = decodeURIComponent(raw);
   const sp = await searchParams;
   const cut = (CUTS.some((c) => c.value === sp.corte) ? sp.corte : 'none') as Cut;
+  const query = new URLSearchParams({ ...(sp.trampas === '1' ? { trampas: '1' } : {}), ...(sp.archivados === '1' ? { archivados: '1' } : {}), ...(sp.mentiras === '1' ? { mentiras: '1' } : {}) }).toString();
   const opt = { cut, includeTrapFailed: sp.trampas === '1', includeArchived: sp.archivados === '1', includeLies: sp.mentiras === '1' };
 
   let data: Awaited<ReturnType<typeof loadInstrument>>;
@@ -48,7 +49,7 @@ export default async function InstrumentResults({ params, searchParams }: { para
         crumbs={[{ href: '/resultados', label: 'Resultados' }]}
         title={name}
         meta={<><Badge dot={false}>{appLabel(app)}</Badge>{study && <Link href={`/estudios/${encodeURIComponent(study.slug)}`} className="text-sm text-fg-3 hover:underline">{study.name}</Link>}</>}
-        actions={<a href={`/resultados/${app}/${encodeURIComponent(id)}/csv${opt.includeArchived ? '?archivados=1' : ''}`} className="inline-flex h-8 items-center gap-1.5 rounded border border-border-strong bg-surface px-3 text-sm hover:bg-sunken"><Download className="size-4" /> Descargar planilla</a>}
+        actions={<a href={`/resultados/${app}/${encodeURIComponent(id)}/bajar?${query}&formato=excel`} className="inline-flex h-8 items-center gap-1.5 rounded border border-border-strong bg-surface px-3 text-sm hover:bg-sunken" download><Download className="size-4" /> Bajar Excel</a>}
       />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -58,7 +59,7 @@ export default async function InstrumentResults({ params, searchParams }: { para
         <Stat label="Mentiras declaradas" value={fmt.n(lies)} hint={app === 'pressure' ? 'En binarias se cuenta la verdad' : undefined} />
       </div>
 
-      <ReportsPanel app={app} instrumentId={id} hasStudy={Boolean(study)} hasData={counted.length > 0} reports={reports} />
+      <ReportsPanel app={app} instrumentId={id} hasData={counted.length > 0} query={query} reports={reports} />
 
       <div className="mt-6 flex flex-wrap items-center gap-2">
         <span className="mr-1 text-sm text-fg-3">Cortar por</span>
