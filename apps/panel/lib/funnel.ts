@@ -10,8 +10,11 @@
 import { from } from './db';
 
 export type FunnelWindow = '1h' | 'hoy' | '7d';
-export type FunnelStep = { key: string; label: string; n: number };
-export type FunnelChannel = { channel: string; label: string; steps: FunnelStep[]; liveNow: number };
+/** meta: el evento del Pixel de Meta que corresponde a este paso, para comparar con el Administrador de eventos. */
+export type FunnelStep = { key: string; label: string; n: number; meta?: string };
+/** ads = anuncios reales; organic = sin anuncio (WhatsApp, web, amigos); internal = pruebas del equipo. */
+export type ChannelKind = 'ads' | 'organic' | 'internal';
+export type FunnelChannel = { channel: string; label: string; kind: ChannelKind; steps: FunnelStep[]; liveNow: number };
 export type FunnelData = {
   at: string;
   window: FunnelWindow;
@@ -26,9 +29,17 @@ export type FunnelData = {
 };
 
 const ONB_LABELS: Record<string, string> = { intro: 'Entrá a Brutal', nickname: 'Apodo', age: 'Edad', gender: 'Género', location: 'Dónde vivís', closing: 'Cierre' };
+// Campañas del equipo para probar (no son gente de los anuncios): van aparte, plegadas.
+const INTERNAL = new Set(['bauti', 'brutal', 'test', 'prueba']);
+const channelKind = (c: string): ChannelKind => {
+  if (!c.startsWith('ads:') || c === 'ads:amigo') return 'organic';
+  const name = c.slice(4).toLowerCase();
+  return INTERNAL.has(name) || name.startsWith('qa') || name.startsWith('test') ? 'internal' : 'ads';
+};
 const channelLabel = (c: string) =>
-  c === 'ads:whatsapp-jugar' ? 'Anuncio → WhatsApp (JUGAR)' : c === 'whatsapp' ? 'WhatsApp (sin anuncio)' : c === 'ads:amigo' ? 'Link de un amigo' : c === 'web' ? 'Web sin campaña'
-    : c.startsWith('ads:') ? `Anuncio → Drop (${c.slice(4)})` : c;
+  c === 'ads:whatsapp-jugar' ? 'Anuncio → WhatsApp (JUGAR)' : c === 'ads:ig-ab-drop' ? 'Anuncio de Instagram → Drop' : c === 'whatsapp' ? 'Escribieron al WhatsApp sin anuncio'
+    : c === 'ads:amigo' ? 'Link de un amigo' : c === 'web' ? 'Web sin campaña'
+    : channelKind(c) === 'internal' ? `Prueba: ${c.slice(4)}` : c.startsWith('ads:') ? `Anuncio → Drop (campaña "${c.slice(4)}")` : c;
 
 function sinceOf(w: FunnelWindow) {
   const now = Date.now();
@@ -64,10 +75,10 @@ export async function funnelData(win: FunnelWindow = 'hoy'): Promise<FunnelData>
     const events = await chunked(ids, 200, async (part) => ((await from('drops', 'funnel_events').select('node_id, step, detail, created_at').in('node_id', part)).data ?? []) as any[]);
     const pseus = await chunked(ids, 200, async (part) => ((await from('core', 'node_pseudonyms').select('node_id, pseudonym_id').in('node_id', part)).data ?? []) as any[]);
     const nodeOfPs = new Map(pseus.map((p) => [p.pseudonym_id, p.node_id]));
-    const sessions = drop ? await chunked(pseus.map((p) => p.pseudonym_id), 200, async (part) => ((await from('drops', 'sessions').select('id, pseudonym_id, status, position, started_at, completed_at').eq('drop_id', drop.id).in('pseudonym_id', part)).data ?? []) as any[]) : [];
-    const sessByNode = new Map(sessions.map((s) => [nodeOfPs.get(s.pseudonym_id), s]));
+    const sessionsAll = drop ? await chunked(pseus.map((p) => p.pseudonym_id), 200, async (part) => ((await from('drops', 'sessions').select('id, pseudonym_id, status, position, started_at, completed_at').eq('drop_id', drop.id).in('pseudonym_id', part)).data ?? []) as any[]) : [];
+    const sessByNode = new Map(sessionsAll.map((s) => [nodeOfPs.get(s.pseudonym_id), s]));
     const lastAnswer = new Map<string, string>();
-    const answers = await chunked(sessions.filter((s) => s.status !== 'completed').map((s) => s.id), 200, async (part) => ((await from('drops', 'answers').select('session_id, created_at').in('session_id', part)).data ?? []) as any[]);
+    const answers = await chunked(sessionsAll.filter((s) => s.status !== 'completed').map((s) => s.id), 200, async (part) => ((await from('drops', 'answers').select('session_id, created_at').in('session_id', part)).data ?? []) as any[]);
     for (const a of answers) if (!lastAnswer.has(a.session_id) || a.created_at > lastAnswer.get(a.session_id)!) lastAnswer.set(a.session_id, a.created_at);
     const claimers = new Set((await chunked(ids, 200, async (part) => ((await from('messaging', 'messages').select('node_id').eq('direction', 'out').eq('purpose', 'web_claim').in('node_id', part)).data ?? []) as any[])).map((m) => m.node_id));
 
@@ -98,14 +109,14 @@ export async function funnelData(win: FunnelWindow = 'hoy'): Promise<FunnelData>
       const count = (f: (n: (typeof nodes)[number]) => boolean) => list.filter(f).length;
       const first = channel === 'ads:whatsapp-jugar' || channel === 'whatsapp' ? 'Escribieron al bot' : 'Abrieron el link';
       return {
-        channel, label: channelLabel(channel), liveNow: count(isLive),
+        channel, label: channelLabel(channel), kind: channelKind(channel), liveNow: count(isLive),
         steps: [
           { key: 'in', label: first, n: list.length },
-          { key: 'intro', label: 'Vieron la placa', n: count((n) => has(n, 'intro_view') || has(n, 'intro_enter') || onboarded(n)) },
+          { key: 'intro', label: 'Vieron la placa', meta: 'ViewContent', n: count((n) => has(n, 'intro_view') || has(n, 'intro_enter') || onboarded(n)) },
           { key: 'enter', label: 'Tocaron ENTRO', n: count((n) => has(n, 'intro_enter') || onboarded(n)) },
-          { key: 'onb', label: 'Terminaron el onboarding', n: count(onboarded) },
+          { key: 'onb', label: 'Terminaron el onboarding', meta: 'CompleteRegistration', n: count(onboarded) },
           { key: 'start', label: 'Empezaron el Drop', n: count(started) },
-          { key: 'done', label: 'Terminaron el Drop', n: count(done) },
+          { key: 'done', label: 'Terminaron el Drop', meta: 'Lead', n: count(done) },
           { key: 'claim', label: 'Reclamaron por WhatsApp', n: count((n) => claimers.has(n.id)) },
         ],
       };
@@ -114,7 +125,10 @@ export async function funnelData(win: FunnelWindow = 'hoy'): Promise<FunnelData>
     // Onboarding: dónde se fueron los que no lo terminaron.
     const order = ['intro', 'nickname', 'age', 'gender', 'location', 'closing'];
     const reachedOnb = new Map<string, number>(), leftOnb = new Map<string, number>();
-    for (const n of nodes) {
+    // Las pruebas internas no cuentan en el detalle del onboarding ni carta por carta.
+    const real = nodes.filter((n) => channelKind(n.acquisition_channel ?? '') !== 'internal');
+    const realIds = new Set(real.map((n) => n.id));
+    for (const n of real) {
       const last = lastOnb.get(n.id);
       if (!last) continue;
       const idx = order.indexOf(last.detail);
@@ -128,6 +142,7 @@ export async function funnelData(win: FunnelWindow = 'hoy'): Promise<FunnelData>
     if (drop) {
       const { data: dq } = await from('drops', 'drop_questions').select('position, questions(label, content)').eq('drop_id', drop.id).eq('enabled', true).order('position');
       const list = (dq ?? []) as any[];
+      const sessions = sessionsAll.filter((x) => realIds.has(nodeOfPs.get(x.pseudonym_id)));
       cards = list.map((c, i) => {
         const text = String(c.questions?.content?.text ?? c.questions?.content?.prompt ?? c.questions?.label ?? `Carta ${i + 1}`);
         const reached = sessions.filter((s) => s.status === 'completed' || Number(s.position) >= i).length;
@@ -136,7 +151,7 @@ export async function funnelData(win: FunnelWindow = 'hoy'): Promise<FunnelData>
       });
     }
 
-    return { at, window: win, drop: drop ? { slug: drop.slug, name: drop.name } : null, channels, onboardingDrop, cards, liveNow: channels.reduce((t, c) => t + c.liveNow, 0) };
+    return { at, window: win, drop: drop ? { slug: drop.slug, name: drop.name } : null, channels, onboardingDrop, cards, liveNow: channels.filter((c) => c.kind !== 'internal').reduce((t, c) => t + c.liveNow, 0) };
   } catch (e) {
     return { ...empty, error: e instanceof Error ? e.message : String(e) };
   }
