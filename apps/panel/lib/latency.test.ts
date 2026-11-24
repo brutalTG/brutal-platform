@@ -66,3 +66,13 @@ test('el archivo para Claude trae la duda y avisa que el crudo no se lee', () =>
   assert.equal(madrid.lectura_tiempo, 'duda');
   assert.equal(madrid.palabras_leidas, 8);
 });
+
+test('calentamiento: el primer ítem de una ráfaga no se lee como duda ni mueve el ritmo', () => {
+  const obs = [
+    o('p1', 'r', { choices: ['A', 'A', 'B'], meta: { item_latency_ms: [6000, 1500, 1500] } }, null),
+    o('p2', 'r', { choices: ['B', 'A', 'A'], meta: { item_latency_ms: [6000, 1500, 1500] } }, null),
+  ];
+  const { index } = doubtIndex(latencySamples(obs, facts, meta, {}));
+  assert.equal(index.get('r#0')!.get('*')!.lectura, 'calentamiento');
+  assert.equal(index.get('r#1')!.get('*')!.lectura, 'normal');
+});

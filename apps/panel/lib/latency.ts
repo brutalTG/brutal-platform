@@ -32,6 +32,8 @@ export type LatencySample = {
   baseMs: number;
   /** Las ráfagas se comparan solo con ráfagas: un ítem se contesta en uno o dos segundos, no en cuatro. */
   group: 'carta' | 'rafaga';
+  /** Primer ítem de cada ráfaga y primera carta de cada formato: se está aprendiendo la mecánica, no dudando. */
+  warmup?: boolean;
 };
 
 /** Palabras que hay que leer hasta llegar a la opción elegida (si no se encuentra, todas). */
@@ -46,15 +48,23 @@ const SKIP_KINDS = new Set(['behavior', 'text', 'voice']);
 /** Una muestra por respuesta con tiempo (en las ráfagas, una por ítem). Sin pruebas, sin automáticas, sin tiempos agotados. */
 export function latencySamples(obs: Obs[], facts: Map<string, Facts>, meta: Map<string, StimulusMeta>, opt: Omit<Options, 'cut'>): LatencySample[] {
   const out: LatencySample[] = [];
+  // Primera carta de cada formato que no sea elegir (predicción, por ejemplo): la primera vez se aprende cómo funciona.
+  const firstOfFormat = new Set<string>();
+  const seen = new Set<string>();
+  for (const [id, m] of [...meta].sort((a, b) => (a[1].order ?? 999) - (b[1].order ?? 999))) {
+    const f = m.format ?? '';
+    if (!f || f.startsWith('choice') || seen.has(f)) continue;
+    seen.add(f); firstOfFormat.add(id);
+  }
   for (const o of obs) {
     if (!usable(o, facts.get(o.pseudonym_id), { ...opt, cut: 'none' })) continue;
     if (SKIP_KINDS.has(o.kind) || o.value?.timed_out || 'committed' in (o.value ?? {}) || 'stated' in (o.value ?? {})) continue;
     const key = o.stimulus_id ?? 'sin-id';
     const m = meta.get(key) ?? meta.get(baseStimulus(key));
     const v = o.value ?? {};
-    const push = (k: string, choice: string | null, ms: unknown, w: number, group: LatencySample['group'] = 'carta') => {
+    const push = (k: string, choice: string | null, ms: unknown, w: number, group: LatencySample['group'] = 'carta', warmup = false) => {
       if (typeof ms !== 'number' || !Number.isFinite(ms) || ms < 250) return;
-      out.push({ person: o.pseudonym_id, key: k, choice, ms, words: w, baseMs: READ_BASE_MS + READ_PER_WORD_MS * w, group });
+      out.push({ person: o.pseudonym_id, key: k, choice, ms, words: w, baseMs: READ_BASE_MS + READ_PER_WORD_MS * w, group, ...(warmup ? { warmup } : {}) });
     };
     if (Array.isArray(v.choices)) {
       // Ráfaga: cada ítem se lee solo (el encabezado se leyó una vez al empezar).
@@ -64,7 +74,7 @@ export function latencySamples(obs: Obs[], facts: Map<string, Facts>, meta: Map<
         const ch = clean(c), side = ch === 'A' || ch === oa ? 'A' : ch === 'B' || ch === ob ? 'B' : null;
         if (!side) return;
         const w = words(m?.itemLabels?.[i]) + words(oa) + words(m?.labelA) + (side === 'B' ? words(ob) + words(m?.labelB) : 0);
-        push(`${key}#${i}`, side, lat?.[i], w, 'rafaga');
+        push(`${key}#${i}`, side, lat?.[i], w, 'rafaga', i === 0);
       });
       continue;
     }
@@ -77,13 +87,14 @@ export function latencySamples(obs: Obs[], facts: Map<string, Facts>, meta: Map<
     } else {
       const chosen = answersOf(o, m)[0]?.a.label ?? null;
       const opts = m?.options?.length ? m.options : [m?.optionA, m?.optionB].filter((x): x is string => !!x);
-      push(key, chosen, o.latency_ms, pw + upTo(opts, chosen));
+      push(key, chosen, o.latency_ms, pw + upTo(opts, chosen), 'carta', firstOfFormat.has(key));
     }
   }
   // Ráfagas: la base sale de los datos (mediana de lo que tarda un ítem, sin la lectura), no de las cartas.
   const raf = out.filter((x) => x.group === 'rafaga');
+  const rafBase = raf.filter((x) => !x.warmup);
   if (raf.length) {
-    const base = Math.max(300, median(raf.map((x) => x.ms - READ_PER_WORD_MS * x.words))!);
+    const base = Math.max(300, median((rafBase.length ? rafBase : raf).map((x) => x.ms - READ_PER_WORD_MS * x.words))!);
     for (const x of raf) x.baseMs = base + READ_PER_WORD_MS * x.words;
   }
   return out;
@@ -92,18 +103,19 @@ export function latencySamples(obs: Obs[], facts: Map<string, Facts>, meta: Map<
 /** Ritmo de cada persona (por separado en cartas y en ráfagas): con menos de 3 respuestas con tiempo, se asume 1. */
 export function rhythms(samples: LatencySample[]) {
   const by = new Map<string, number[]>();
-  for (const s of samples) { const k = `${s.person}|${s.group}`; (by.get(k) ?? by.set(k, []).get(k)!).push(s.ms / s.baseMs); }
+  for (const s of samples) { if (s.warmup) continue; const k = `${s.person}|${s.group}`; (by.get(k) ?? by.set(k, []).get(k)!).push(s.ms / s.baseMs); }
   return new Map([...by].map(([p, xs]) => [p, xs.length >= 3 ? median(xs)! : 1]));
 }
 
 export const readingOf = (d: number | null) => (d == null ? null : d > DUDA ? 'duda' : d < REFLEJO ? 'reflejo' : 'normal');
 
-export type DoubtStat = { duda_mediana: number; lectura: 'duda' | 'normal' | 'reflejo'; palabras_leidas: number; n_con_tiempo: number };
+export type DoubtStat = { duda_mediana: number; lectura: 'duda' | 'normal' | 'reflejo' | 'calentamiento'; palabras_leidas: number; n_con_tiempo: number };
 
 /** Duda mediana por pregunta y por respuesta: key → (choice | '*') → resumen. */
 export function doubtIndex(samples: LatencySample[]) {
   const k = rhythms(samples);
   const acc = new Map<string, Map<string, { d: number[]; w: number[] }>>();
+  const warm = new Set(samples.filter((s) => s.warmup).map((s) => s.key));
   for (const s of samples) {
     const d = s.ms / (s.baseMs * (k.get(`${s.person}|${s.group}`) ?? 1));
     const byChoice = acc.get(s.key) ?? acc.set(s.key, new Map()).get(s.key)!;
@@ -116,7 +128,7 @@ export function doubtIndex(samples: LatencySample[]) {
   for (const [key, byChoice] of acc) {
     out.set(key, new Map([...byChoice].map(([c, x]) => {
       const dm = r2(median(x.d)!);
-      return [c, { duda_mediana: dm, lectura: readingOf(dm)!, palabras_leidas: Math.round(median(x.w)!), n_con_tiempo: x.d.length } as DoubtStat];
+      return [c, { duda_mediana: dm, lectura: warm.has(key) ? 'calentamiento' : readingOf(dm)!, palabras_leidas: Math.round(median(x.w)!), n_con_tiempo: x.d.length } as DoubtStat];
     })));
   }
   const ritmos = [...k.entries()].filter(([p]) => p.endsWith('|carta')).map(([, x]) => x);
