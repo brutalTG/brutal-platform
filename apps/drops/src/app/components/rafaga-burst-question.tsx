@@ -5,7 +5,7 @@ import { hapticLight, hapticRigid, hapticSelection } from "./haptics";
 import type { RafagaBurstQuestion as RafagaBurstQuestionType, RafagaBurstItem } from "./drop-types";
 
 interface RafagaBurstQuestionProps extends RafagaBurstQuestionType {
-  onComplete: (answers: (string | number | null)[]) => void;
+  onComplete: (answers: (string | number | null)[], itemLatencyMs: (number | null)[]) => void;
 }
 
 const BLINK_STEPS = [1, 0, 1, 0, 1, 0, 1];
@@ -35,6 +35,9 @@ export function RafagaBurstQuestion({
 
   const currentIdxRef = useRef(0);
   const answersRef = useRef<(string | number | null)[]>(new Array(items.length).fill(null));
+  // Latencia de cada ítem: desde que el ítem queda quieto en pantalla hasta el toque.
+  const latRef = useRef<(number | null)[]>(new Array(items.length).fill(null));
+  const shownAtRef = useRef<number | null>(null);
   const completedRef = useRef(false);
   const transitioningRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -44,6 +47,8 @@ export function RafagaBurstQuestion({
   useEffect(() => {
     currentIdxRef.current = 0;
     answersRef.current = new Array(items.length).fill(null);
+    latRef.current = new Array(items.length).fill(null);
+    shownAtRef.current = null;
     completedRef.current = false;
     transitioningRef.current = false;
     setPhase("pre");
@@ -92,7 +97,7 @@ export function RafagaBurstQuestion({
     if (completedRef.current) return;
     completedRef.current = true;
     setTimeout(() => {
-      onCompleteRef.current([...answersRef.current]);
+      onCompleteRef.current([...answersRef.current], [...latRef.current]);
     }, 300);
   }, []);
 
@@ -148,6 +153,7 @@ export function RafagaBurstQuestion({
       if (transitioningRef.current || completedRef.current) return;
       clearTimer();
       hapticLight();
+      if (shownAtRef.current !== null && latRef.current[currentIdxRef.current] == null) latRef.current[currentIdxRef.current] = Math.round(performance.now() - shownAtRef.current);
       answersRef.current[currentIdxRef.current] = value;
       setSelectedValue(value);
       const idx = currentIdxRef.current;
@@ -161,7 +167,9 @@ export function RafagaBurstQuestion({
   );
 
   useEffect(() => {
-    if (phase !== "playing" || completedRef.current || transitioning || isSlider) return;
+    if (phase !== "playing" || completedRef.current || transitioning) return;
+    shownAtRef.current = performance.now();
+    if (isSlider) return;
     setSubProgress(100);
     const start = Date.now();
     const durationMs = secondsPerItem * 1000;
