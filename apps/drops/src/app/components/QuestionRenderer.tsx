@@ -466,7 +466,7 @@ export function QuestionRenderer({
           prompt={q.prompt}
           items={rafagaItems}
           secondsPerItem={q.secondsPerItem}
-          onComplete={(answers) => {
+          onComplete={(answers, itemLatencyMs) => {
             if (!pipeline.acquireLock()) return;
             pipeline.markFirstAnswered();
             const latencyMs = pipeline.captureLatency();
@@ -474,7 +474,7 @@ export function QuestionRenderer({
               if (a === null) return null;
               return String(a);
             });
-            pipeline.submitStandard({ type: "rafaga_burst", answers: mixedAnswers, latencyMs });
+            pipeline.submitStandard({ type: "rafaga_burst", answers: mixedAnswers, latencyMs, meta: { item_latency_ms: itemLatencyMs } });
           }}
         />
       )}
